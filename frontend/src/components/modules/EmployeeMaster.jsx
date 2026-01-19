@@ -1,5 +1,5 @@
 //sujitha
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Download, Edit, Trash2, Users, 
   X, Check, ChevronUp, ChevronDown,
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 
 const EmployeeMaster = () => {
+  
   // Initial columns configuration
   const initialColumns = [
     { id: 'name', label: 'Name', visible: true, sortable: true, type: 'text', required: true },
@@ -16,11 +17,15 @@ const EmployeeMaster = () => {
     { id: 'status', label: 'Status', visible: true, sortable: true, type: 'select', required: true },
   ];
 
-  const [employees, setEmployees] = useState([
-    { id: 1, name: 'John Doe', email: 'john@example.com', department: 'Engineering', status: 'Active', role: 'Developer' },
-    { id: 2, name: 'Jane Smith', email: 'jane@example.com', department: 'HR', status: 'Active', role: 'Recruiter' },
-    { id: 3, name: 'Bob Johnson', email: 'bob@example.com', department: 'Sales', status: 'Inactive', role: 'Sales Executive' },
-  ]);
+  // Load employees from localStorage on component mount
+  const [employees, setEmployees] = useState(() => {
+    const savedEmployees = localStorage.getItem('employees');
+    return savedEmployees ? JSON.parse(savedEmployees) : [
+      { id: 1, name: 'John Doe', email: 'john@example.com', department: 'Engineering', status: 'Active', role: 'Developer' },
+      { id: 2, name: 'Jane Smith', email: 'jane@example.com', department: 'HR', status: 'Active', role: 'Recruiter' },
+      { id: 3, name: 'Bob Johnson', email: 'bob@example.com', department: 'Sales', status: 'Inactive', role: 'Sales Executive' },
+    ];
+  });
   
   const [newEmployee, setNewEmployee] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
@@ -30,7 +35,13 @@ const EmployeeMaster = () => {
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [newColumnName, setNewColumnName] = useState('');
   const [newColumnType, setNewColumnType] = useState('text');
-  const [columns, setColumns] = useState(initialColumns);
+  
+  // Load columns from localStorage
+  const [columns, setColumns] = useState(() => {
+    const savedColumns = localStorage.getItem('employee_columns');
+    return savedColumns ? JSON.parse(savedColumns) : initialColumns;
+  });
+  
   const [editingColumn, setEditingColumn] = useState(null);
   const [tempColumnName, setTempColumnName] = useState('');
   const [isAddingNew, setIsAddingNew] = useState(false);
@@ -38,12 +49,45 @@ const EmployeeMaster = () => {
   // Sorting state
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
 
-  // Filter employees
-  const filteredEmployees = employees.filter(emp =>
-    Object.values(emp).some(value => 
+  // Department filter state - Load from localStorage
+  const [departmentFilter, setDepartmentFilter] = useState(() => {
+    const savedFilter = localStorage.getItem('department_filter');
+    return savedFilter || "All Departments";
+  });
+
+  // Save employees and columns to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('employees', JSON.stringify(employees));
+    localStorage.setItem('employee_columns', JSON.stringify(columns));
+  }, [employees, columns]);
+
+  // Save department filter preference
+  useEffect(() => {
+    localStorage.setItem('department_filter', departmentFilter);
+  }, [departmentFilter]);
+
+  // Get unique departments from employee data
+  const uniqueDepartments = ["All Departments", ...new Set(employees.map(emp => emp.department).filter(Boolean))];
+
+  // Handle department filter change
+  const handleDepartmentFilterChange = (dept) => {
+    setDepartmentFilter(dept);
+  };
+
+  // Filter employees based on search and department
+  const filteredEmployees = employees.filter(emp => {
+    // Search filter
+    const matchesSearch = Object.values(emp).some(value => 
       String(value).toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  );
+    );
+    
+    // Department filter
+    const matchesDepartment = 
+      departmentFilter === "All Departments" || 
+      emp.department === departmentFilter;
+    
+    return matchesSearch && matchesDepartment;
+  });
 
   // Sort employees
   const sortedEmployees = React.useMemo(() => {
@@ -571,7 +615,7 @@ const EmployeeMaster = () => {
           <div>
             <p className="text-[10px] sm:text-xs text-gray-500">Departments</p>
             <p className="text-sm sm:text-base font-bold text-gray-900">
-              {[...new Set(employees.map(e => e.department))].length}
+              {uniqueDepartments.length - 1} {/* Subtract "All Departments" */}
             </p>
           </div>
         </div>
@@ -624,13 +668,39 @@ const EmployeeMaster = () => {
             
           </div>
           
+          {/* Department Filter with Blue Icon */}
           <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-            <select className="w-full sm:w-auto px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded">
-              <option>All Departments</option>
-              <option>Engineering</option>
-              <option>HR</option>
-              <option>Sales</option>
-            </select>
+            <div className="relative">
+              <select
+                value={departmentFilter}
+                onChange={(e) => handleDepartmentFilterChange(e.target.value)}
+                className="w-full sm:w-auto pl-8 pr-8 py-2 text-xs sm:text-sm border border-gray-300 rounded appearance-none bg-white"
+              >
+                {uniqueDepartments.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
+              {/* Blue filter icon */}
+              <svg 
+                className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-blue-500 pointer-events-none"
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              {/* Dropdown arrow */}
+              <svg 
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none"
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
           </div>
         </div>
 
@@ -764,6 +834,7 @@ const EmployeeMaster = () => {
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-0 mt-3 pt-3 border-t border-gray-300">
           <div className="text-[10px] sm:text-xs text-gray-600">
             Showing {sortedEmployees.length} of {employees.length} employees
+            {departmentFilter !== "All Departments" && ` (Filtered by ${departmentFilter})`}
           </div>
           <div className="flex space-x-1">
             <button className="px-2 sm:px-3 py-1 text-[10px] sm:text-xs border border-gray-300 rounded bg-gray-100">
