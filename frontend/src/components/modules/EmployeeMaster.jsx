@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 
 const EmployeeMaster = () => {
+  
   // Initial columns configuration
   const initialColumns = [
     { id: 'name', label: 'Name', visible: true, sortable: true, type: 'text', required: true },
@@ -19,7 +20,15 @@ const EmployeeMaster = () => {
   // Load employees from localStorage on component mount
   const [employees, setEmployees] = useState(() => {
     const savedEmployees = localStorage.getItem('employees');
+<<<<<<< HEAD
     return savedEmployees ? JSON.parse(savedEmployees) : [];
+=======
+    return savedEmployees ? JSON.parse(savedEmployees) : [
+      { id: 1, name: 'John Doe', email: 'john@example.com', department: 'Engineering', status: 'Active', role: 'Developer' },
+      { id: 2, name: 'Jane Smith', email: 'jane@example.com', department: 'HR', status: 'Active', role: 'Recruiter' },
+      { id: 3, name: 'Bob Johnson', email: 'bob@example.com', department: 'Sales', status: 'Inactive', role: 'Sales Executive' },
+    ];
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
   });
   
   const [newEmployee, setNewEmployee] = useState({});
@@ -824,6 +833,17 @@ const EmployeeMaster = () => {
           <div className="text-[10px] sm:text-xs text-gray-600">
             Showing {sortedEmployees.length} of {employees.length} employees
             {departmentFilter !== "All Departments" && ` (Filtered by ${departmentFilter})`}
+<<<<<<< HEAD
+=======
+          </div>
+          <div className="flex space-x-1">
+            <button className="px-2 sm:px-3 py-1 text-[10px] sm:text-xs border border-gray-300 rounded bg-gray-100">
+              1
+            </button>
+            <button className="px-2 sm:px-3 py-1 text-[10px] sm:text-xs border border-gray-300 rounded hover:bg-gray-50">
+              2
+            </button>
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
           </div>
         </div>
       </div>

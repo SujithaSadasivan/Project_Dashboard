@@ -3,12 +3,17 @@ import {
   Key, Shield, Plus, Search, Filter, 
   Edit, Trash2, X, Check, 
   ChevronUp, ChevronDown, CheckCircle, XCircle, Download,
+<<<<<<< HEAD
   Columns
+=======
+  Users, Columns
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
 } from 'lucide-react';
 
 const EmployeeAccess = () => {
   // Initial columns configuration
   const initialColumns = [
+<<<<<<< HEAD
     { id: 'employee', label: 'Employee', visible: true, sortable: true, type: 'text', required: true, deletable: false },
     { id: 'department', label: 'Department', visible: true, sortable: true, type: 'text', required: true, deletable: false },
     { id: 'accessLevel', label: 'Access Level', visible: true, sortable: true, type: 'select', required: true, deletable: false },
@@ -20,6 +25,24 @@ const EmployeeAccess = () => {
   const [accessRules, setAccessRules] = useState(() => {
     const savedRules = localStorage.getItem('access_rules');
     return savedRules ? JSON.parse(savedRules) : [];
+=======
+    { id: 'employee', label: 'Employee', visible: true, sortable: true, type: 'text', required: true },
+    { id: 'email', label: 'Email', visible: true, sortable: true, type: 'email', required: true },
+    { id: 'department', label: 'Department', visible: true, sortable: true, type: 'text', required: true },
+    { id: 'accessLevel', label: 'Access Level', visible: true, sortable: true, type: 'select', required: true },
+    { id: 'modules', label: 'Modules', visible: true, sortable: false, type: 'modules', required: false },
+    { id: 'status', label: 'Status', visible: true, sortable: true, type: 'select', required: true },
+  ];
+
+  // Load access rules from localStorage
+  const [accessRules, setAccessRules] = useState(() => {
+    const savedRules = localStorage.getItem('access_rules');
+    return savedRules ? JSON.parse(savedRules) : [
+      { id: 1, employee: 'John Doe', email: 'john@example.com', department: 'Engineering', accessLevel: 'Admin', modules: ['All'], status: 'Active' },
+      { id: 2, employee: 'Jane Smith', email: 'jane@example.com', department: 'HR', accessLevel: 'Manager', modules: ['HR', 'Reports'], status: 'Active' },
+      { id: 3, employee: 'Bob Johnson', email: 'bob@example.com', department: 'Sales', accessLevel: 'User', modules: ['Sales'], status: 'Inactive' },
+    ];
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
   });
   
   const [newRule, setNewRule] = useState({});
@@ -49,6 +72,7 @@ const EmployeeAccess = () => {
     const savedFilter = localStorage.getItem('access_department_filter');
     return savedFilter || "All Departments";
   });
+<<<<<<< HEAD
 
   // Access Level filter state
   const [accessLevelFilter, setAccessLevelFilter] = useState("All Access Levels");
@@ -57,11 +81,36 @@ const EmployeeAccess = () => {
   const modulesList = ['Dashboard', 'Employee Master', 'Project Master', 'Reports', 'Settings', 'Analytics'];
 
   // Save access rules and columns to localStorage whenever they change
+=======
+
+  // Access Level filter state
+  const [accessLevelFilter, setAccessLevelFilter] = useState(() => {
+    const savedFilter = localStorage.getItem('access_level_filter');
+    return savedFilter || "All Access Levels";
+  });
+
+  const accessLevels = ['Admin', 'Manager', 'User', 'Viewer', 'Super Admin'];
+  const modulesList = ['Dashboard', 'Employee Master', 'Project Master', 'Reports', 'Settings', 'Analytics', 'Finance', 'Inventory'];
+
+  // Close module dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showModuleDropdown && !event.target.closest('.module-dropdown')) {
+        setShowModuleDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Save access rules and columns to localStorage
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
   useEffect(() => {
     localStorage.setItem('access_rules', JSON.stringify(accessRules));
     localStorage.setItem('access_columns', JSON.stringify(columns));
   }, [accessRules, columns]);
 
+<<<<<<< HEAD
   // Save department filter preference
   useEffect(() => {
     localStorage.setItem('access_department_filter', departmentFilter);
@@ -69,6 +118,27 @@ const EmployeeAccess = () => {
 
   // Get unique departments from access rules data
   const uniqueDepartments = ["All Departments", ...new Set(accessRules.map(rule => rule.department).filter(Boolean))];
+=======
+  // Save filter preferences
+  useEffect(() => {
+    localStorage.setItem('access_department_filter', departmentFilter);
+    localStorage.setItem('access_level_filter', accessLevelFilter);
+  }, [departmentFilter, accessLevelFilter]);
+
+  // Get unique departments from access rules
+  const uniqueDepartments = ["All Departments", ...new Set(accessRules.map(rule => rule.department).filter(Boolean))];
+  const uniqueAccessLevels = ["All Access Levels", ...accessLevels];
+
+  // Handle department filter change
+  const handleDepartmentFilterChange = (dept) => {
+    setDepartmentFilter(dept);
+  };
+
+  // Handle access level filter change
+  const handleAccessLevelFilterChange = (level) => {
+    setAccessLevelFilter(level);
+  };
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
 
   // Filter access rules based on search, department, and access level
   const filteredRules = accessRules.filter(rule => {
@@ -82,7 +152,11 @@ const EmployeeAccess = () => {
       departmentFilter === "All Departments" || 
       rule.department === departmentFilter;
     
+<<<<<<< HEAD
     // Access Level filter
+=======
+    // Access level filter
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
     const matchesAccessLevel = 
       accessLevelFilter === "All Access Levels" || 
       rule.accessLevel === accessLevelFilter;
@@ -127,7 +201,11 @@ const EmployeeAccess = () => {
       : <ChevronDown className="h-3 w-3 sm:h-4 sm:w-4" />;
   };
 
+<<<<<<< HEAD
   // Validate access rule form
+=======
+  // Validate rule form
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
   const validateRuleForm = (rule) => {
     const requiredColumns = columns.filter(col => col.required && col.visible);
     
@@ -135,6 +213,12 @@ const EmployeeAccess = () => {
       if (!rule[column.id]?.toString().trim()) {
         return `${column.label} is required`;
       }
+<<<<<<< HEAD
+=======
+      if (column.type === 'email' && !rule[column.id].includes('@')) {
+        return 'Please enter a valid email address';
+      }
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
     }
     return '';
   };
@@ -147,10 +231,17 @@ const EmployeeAccess = () => {
     columns.filter(col => col.visible).forEach(col => {
       if (col.id === 'accessLevel') {
         initialRule[col.id] = 'User';
+<<<<<<< HEAD
       } else if (col.id === 'status') {
         initialRule[col.id] = 'Active';
       } else if (col.id === 'modules') {
         initialRule[col.id] = [];
+=======
+      } else if (col.id === 'modules') {
+        initialRule[col.id] = [];
+      } else if (col.id === 'status') {
+        initialRule[col.id] = 'Active';
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
       } else {
         initialRule[col.id] = '';
       }
@@ -177,10 +268,17 @@ const EmployeeAccess = () => {
       if (!ruleToAdd.hasOwnProperty(col.id)) {
         if (col.id === 'accessLevel') {
           ruleToAdd[col.id] = 'User';
+<<<<<<< HEAD
         } else if (col.id === 'status') {
           ruleToAdd[col.id] = 'Active';
         } else if (col.id === 'modules') {
           ruleToAdd[col.id] = [];
+=======
+        } else if (col.id === 'modules') {
+          ruleToAdd[col.id] = [];
+        } else if (col.id === 'status') {
+          ruleToAdd[col.id] = 'Active';
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
         } else {
           ruleToAdd[col.id] = '';
         }
@@ -194,10 +292,17 @@ const EmployeeAccess = () => {
     columns.filter(col => col.visible).forEach(col => {
       if (col.id === 'accessLevel') {
         emptyRule[col.id] = 'User';
+<<<<<<< HEAD
       } else if (col.id === 'status') {
         emptyRule[col.id] = 'Active';
       } else if (col.id === 'modules') {
         emptyRule[col.id] = [];
+=======
+      } else if (col.id === 'modules') {
+        emptyRule[col.id] = [];
+      } else if (col.id === 'status') {
+        emptyRule[col.id] = 'Active';
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
       } else {
         emptyRule[col.id] = '';
       }
@@ -212,6 +317,7 @@ const EmployeeAccess = () => {
   };
 
   // Toggle module selection for new rule
+<<<<<<< HEAD
   const toggleModule = (module) => {
     const currentModules = newRule.modules || [];
     if (currentModules.includes(module)) {
@@ -228,6 +334,40 @@ const EmployeeAccess = () => {
       setEditForm({...editForm, modules: currentModules.filter(m => m !== module)});
     } else {
       setEditForm({...editForm, modules: [...currentModules, module]});
+=======
+  const toggleModule = (module, isEditMode = false, ruleId = null) => {
+    if (isEditMode && editingId) {
+      const currentModules = editForm.modules || [];
+      if (currentModules.includes(module)) {
+        setEditForm({...editForm, modules: currentModules.filter(m => m !== module)});
+      } else {
+        setEditForm({...editForm, modules: [...currentModules, module]});
+      }
+    } else if (isAddingNew) {
+      if (newRule.modules.includes(module)) {
+        setNewRule({...newRule, modules: newRule.modules.filter(m => m !== module)});
+      } else {
+        setNewRule({...newRule, modules: [...newRule.modules, module]});
+      }
+    }
+  };
+
+  // Toggle all modules
+  const toggleAllModules = (isEditMode = false) => {
+    if (isEditMode && editingId) {
+      const currentModules = editForm.modules || [];
+      if (currentModules.length === modulesList.length) {
+        setEditForm({...editForm, modules: []});
+      } else {
+        setEditForm({...editForm, modules: [...modulesList]});
+      }
+    } else if (isAddingNew) {
+      if (newRule.modules.length === modulesList.length) {
+        setNewRule({...newRule, modules: []});
+      } else {
+        setNewRule({...newRule, modules: [...modulesList]});
+      }
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
     }
   };
 
@@ -336,9 +476,15 @@ const EmployeeAccess = () => {
       
       // Remove from newRule if it exists
       if (isAddingNew) {
+<<<<<<< HEAD
         const newEmp = { ...newRule };
         delete newEmp[columnId];
         setNewRule(newEmp);
+=======
+        const newR = { ...newRule };
+        delete newR[columnId];
+        setNewRule(newR);
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
       }
     }
   };
@@ -364,10 +510,17 @@ const EmployeeAccess = () => {
       if (!editData.hasOwnProperty(col.id)) {
         if (col.id === 'accessLevel') {
           editData[col.id] = 'User';
+<<<<<<< HEAD
         } else if (col.id === 'status') {
           editData[col.id] = 'Active';
         } else if (col.id === 'modules') {
           editData[col.id] = [];
+=======
+        } else if (col.id === 'modules') {
+          editData[col.id] = [];
+        } else if (col.id === 'status') {
+          editData[col.id] = 'Active';
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
         } else {
           editData[col.id] = '';
         }
@@ -407,6 +560,7 @@ const EmployeeAccess = () => {
     setEditForm({...editForm, [field]: value});
   };
 
+<<<<<<< HEAD
   // Handle department filter change
   const handleDepartmentFilterChange = (dept) => {
     setDepartmentFilter(dept);
@@ -419,6 +573,13 @@ const EmployeeAccess = () => {
 
   // Render input based on column type
   const renderInput = (column, value, onChange, placeholder = true, isEditMode = false) => {
+=======
+  // Module dropdown state
+  const [showModuleDropdown, setShowModuleDropdown] = useState(null);
+
+  // Render input based on column type
+  const renderInput = (column, value, onChange, isNew = false) => {
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
     if (column.id === 'accessLevel') {
       return (
         <select
@@ -432,27 +593,61 @@ const EmployeeAccess = () => {
         </select>
       );
     } else if (column.id === 'modules') {
-      if (isEditMode) {
-        return (
-          <div className="flex flex-wrap gap-1">
-            {modulesList.map(module => (
-              <button
-                key={module}
-                type="button"
-                onClick={() => toggleEditModule(module)}
-                className={`px-2 py-0.5 rounded text-[10px] sm:text-xs border ${
-                  (editForm.modules || []).includes(module)
-                    ? 'bg-blue-100 text-blue-800 border-blue-300'
-                    : 'bg-gray-100 text-gray-700 border-gray-300'
-                }`}
-              >
-                {module}
-              </button>
-            ))}
-          </div>
-        );
-      }
-      return null;
+      const modules = isNew ? newRule.modules : editForm.modules;
+      const isOpen = showModuleDropdown === (isNew ? 'new' : editingId);
+      
+      return (
+        <div className="relative module-dropdown">
+          <button
+            type="button"
+            onClick={() => setShowModuleDropdown(isNew ? 'new' : editingId)}
+            className="w-full px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded bg-white text-left flex justify-between items-center"
+          >
+            <span className="truncate">
+              {modules?.length === 0 
+                ? 'Select modules...' 
+                : modules?.length === modulesList.length
+                ? 'All modules'
+                : `${modules?.length} selected`}
+            </span>
+            <svg 
+              className={`w-3 h-3 sm:w-4 sm:h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          {isOpen && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded shadow-lg z-10 max-h-48 overflow-y-auto">
+              <div className="p-2 space-y-1">
+                <label className="flex items-center space-x-2 p-2 hover:bg-gray-50 cursor-pointer border-b pb-2">
+                  <input
+                    type="checkbox"
+                    checked={modules?.length === modulesList.length}
+                    onChange={() => toggleAllModules(isNew)}
+                    className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600 rounded"
+                  />
+                  <span className="text-xs sm:text-sm font-medium text-gray-700">Select All</span>
+                </label>
+                {modulesList.map(module => (
+                  <label key={module} className="flex items-center space-x-2 p-2 hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={modules?.includes(module)}
+                      onChange={() => toggleModule(module, !isNew)}
+                      className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600 rounded"
+                    />
+                    <span className="text-xs sm:text-sm text-gray-700">{module}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
     } else if (column.id === 'status') {
       return (
         <select
@@ -463,6 +658,7 @@ const EmployeeAccess = () => {
           <option value="Active">Active</option>
           <option value="Inactive">Inactive</option>
           <option value="Pending">Pending</option>
+<<<<<<< HEAD
         </select>
       );
     } else if (column.type === 'select') {
@@ -475,13 +671,29 @@ const EmployeeAccess = () => {
           <option value="">Select {column.label}</option>
           <option value="Active">Active</option>
           <option value="Inactive">Inactive</option>
+=======
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
         </select>
+      );
+    } else if (column.type === 'email') {
+      return (
+        <input
+          type="email"
+          placeholder={`Enter ${column.label.toLowerCase()}`}
+          value={value || ''}
+          onChange={(e) => onChange(column.id, e.target.value)}
+          className="w-full px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded"
+        />
       );
     } else {
       return (
         <input
           type="text"
+<<<<<<< HEAD
           placeholder={placeholder ? `Enter ${column.label.toLowerCase()}` : ''}
+=======
+          placeholder={`Enter ${column.label.toLowerCase()}`}
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
           value={value || ''}
           onChange={(e) => onChange(column.id, e.target.value)}
           className="w-full px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded"
@@ -496,6 +708,7 @@ const EmployeeAccess = () => {
       return (
         <span className={`px-2 py-1 rounded-full text-[10px] sm:text-xs whitespace-nowrap ${
           value === 'Admin' ? 'bg-red-100 text-red-800' :
+          value === 'Super Admin' ? 'bg-purple-100 text-purple-800' :
           value === 'Manager' ? 'bg-blue-100 text-blue-800' :
           value === 'User' ? 'bg-green-100 text-green-800' :
           'bg-gray-100 text-gray-800'
@@ -508,7 +721,7 @@ const EmployeeAccess = () => {
       return (
         <div className="flex flex-wrap gap-1">
           {modules.slice(0, 2).map(module => (
-            <span key={module} className="px-2 py-0.5 bg-gray-100 rounded text-[10px] sm:text-xs">
+            <span key={module} className="px-2 py-0.5 bg-gray-100 rounded text-[10px] sm:text-xs whitespace-nowrap">
               {module}
             </span>
           ))}
@@ -528,7 +741,7 @@ const EmployeeAccess = () => {
           ) : value === 'Inactive' ? (
             <XCircle className="h-3 w-3 sm:h-4 sm:w-4 text-red-500 mr-1" />
           ) : (
-            <XCircle className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 mr-1" />
+            <div className="h-3 w-3 sm:h-4 sm:w-4 bg-yellow-500 rounded-full mr-1"></div>
           )}
           <span className={`px-2 py-1 rounded-full text-[10px] sm:text-xs ${
             value === 'Active' 
@@ -543,6 +756,75 @@ const EmployeeAccess = () => {
       );
     }
     return value || '-';
+  };
+
+  // Export to CSV
+  const handleExport = () => {
+    const visibleColumns = columns.filter(col => col.visible);
+    const headers = visibleColumns.map(col => col.label);
+    
+    const csvContent = [
+      headers.join(','),
+      ...sortedRules.map(rule => 
+        visibleColumns.map(col => {
+          const value = rule[col.id];
+          if (col.id === 'modules' && Array.isArray(value)) {
+            return `"${value.join(', ')}"`;
+          }
+          return `"${value || ''}"`;
+        }).join(',')
+      )
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'employee_access_rules.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Import from CSV (simplified)
+  const handleImport = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv';
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const text = event.target.result;
+          // Simple CSV parsing (in real app, use a proper CSV parser)
+          const lines = text.split('\n');
+          const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+          
+          const importedRules = lines.slice(1).map((line, index) => {
+            const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+            const rule = { id: accessRules.length + index + 1 };
+            headers.forEach((header, idx) => {
+              const column = columns.find(col => col.label === header);
+              if (column) {
+                if (column.id === 'modules') {
+                  rule[column.id] = values[idx] ? values[idx].split(',').map(m => m.trim()) : [];
+                } else {
+                  rule[column.id] = values[idx] || '';
+                }
+              }
+            });
+            return rule;
+          }).filter(rule => rule.employee); // Filter out empty rows
+            
+          setAccessRules([...accessRules, ...importedRules]);
+          alert(`Successfully imported ${importedRules.length} access rules`);
+        };
+        reader.readAsText(file);
+      }
+    };
+    input.click();
   };
 
   return (
@@ -592,6 +874,7 @@ const EmployeeAccess = () => {
               </button>
             </div>
             
+<<<<<<< HEAD
            {/* Add New Column Form */}
 <div className="mb-4 p-3 border border-gray-300 rounded">
   <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Add New Column</h4>
@@ -691,6 +974,114 @@ const EmployeeAccess = () => {
     ))}
   </div>
 </div>
+=======
+            {/* Add New Column Form */}
+            <div className="mb-4 p-3 border border-gray-300 rounded">
+              <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Add New Column</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                <input
+                  type="text"
+                  placeholder="Column name (e.g., Phone Number)"
+                  value={newColumnName}
+                  onChange={(e) => setNewColumnName(e.target.value)}
+                  className="px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded"
+                />
+                {/* <select
+                  value={newColumnType}
+                  onChange={(e) => setNewColumnType(e.target.value)}
+                  className="px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded"
+                >
+                  <option value="text">Text</option>
+                  <option value="email">Email</option>
+                  <option value="select">Dropdown</option>
+                  <option value="modules">Modules</option>
+                </select> */}
+              </div>
+              <button
+                onClick={handleAddColumn}
+                className="w-full px-3 py-2 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800"
+              >
+                Add Column
+              </button>
+            </div>
+            
+            {/* Existing Columns List */}
+            <div className="mb-4">
+              <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Available Columns</h4>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {columns.map((column) => (
+                  <div key={column.id} className="flex items-center justify-between p-2 border border-gray-200 rounded">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={column.visible}
+                        onChange={() => toggleColumnVisibility(column.id)}
+                        className="h-3 w-3 sm:h-4 sm:w-4"
+                      />
+                      {editingColumn === column.id ? (
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="text"
+                            value={tempColumnName}
+                            onChange={(e) => setTempColumnName(e.target.value)}
+                            className="px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded"
+                          />
+                          <button
+                            onClick={() => saveEditColumn(column.id)}
+                            className="text-green-600 hover:text-green-800"
+                            title="Save"
+                          >
+                            <Check className="h-3 w-3 sm:h-4 sm:w-4" />
+                          </button>
+                          <button
+                            onClick={cancelEditColumn}
+                            className="text-red-600 hover:text-red-800"
+                            title="Cancel"
+                          >
+                            <X className="h-3 w-3 sm:h-4 sm:w-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="text-xs sm:text-sm text-gray-700">{column.label}</span>
+                          {column.required && (
+                            <span className="text-[8px] px-1 py-0.5 bg-red-100 text-red-800 rounded">
+                              Required
+                            </span>
+                          )}
+                          {column.deletable && (
+                            <span className="text-[8px] px-1 py-0.5 bg-gray-100 text-gray-600 rounded">
+                              Custom
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      {!['employee', 'email', 'department', 'accessLevel', 'modules', 'status'].includes(column.id) && (
+                        <>
+                          <button
+                            onClick={() => startEditColumn(column.id, column.label)}
+                            className="text-blue-600 hover:text-blue-800"
+                            title="Edit"
+                          >
+                            <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteColumn(column.id)}
+                            className="text-red-600 hover:text-red-800"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
             
             <div className="flex justify-end">
               <button
@@ -713,10 +1104,33 @@ const EmployeeAccess = () => {
           </h2>
           <p className="text-xs sm:text-sm text-gray-600 mt-0.5 sm:mt-1">Manage employee permissions and access controls</p>
         </div>
+<<<<<<< HEAD
         <button className="flex items-center justify-center sm:justify-start space-x-1 px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50 w-full sm:w-auto">
           <Download className="h-3 w-3 sm:h-4 sm:w-4" />
           <span>Export</span>
         </button>
+=======
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <button 
+            onClick={handleExport}
+            className="flex items-center justify-center sm:justify-start space-x-1 px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50 w-full sm:w-auto"
+          >
+            <Download className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span>Export</span>
+          </button>
+          {/* <button 
+            onClick={handleImport}
+            className="flex items-center justify-center sm:justify-start space-x-1 px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50 w-full sm:w-auto"
+          >
+            <Download className="h-3 w-3 sm:h-4 sm:w-4 rotate-180" />
+            <span>Import</span>
+          </button> */}
+          {/* <button className="flex items-center justify-center sm:justify-start space-x-1 px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50 w-full sm:w-auto">
+            <Shield className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span>Audit Log</span>
+          </button> */}
+        </div>
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
       </div>
 
       {/* Compact Stats - Responsive */}
@@ -743,7 +1157,11 @@ const EmployeeAccess = () => {
         </div>
         <div className="bg-white border border-gray-300 rounded p-3 sm:p-4 flex items-center">
           <div className="bg-blue-100 p-1.5 sm:p-2 rounded mr-2 sm:mr-3">
+<<<<<<< HEAD
             <Shield className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600" />
+=======
+            <Users className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600" />
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
           </div>
           <div>
             <p className="text-[10px] sm:text-xs text-gray-500">Admin Users</p>
@@ -757,9 +1175,15 @@ const EmployeeAccess = () => {
             <Key className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-600" />
           </div>
           <div>
+<<<<<<< HEAD
             <p className="text-[10px] sm:text-xs text-gray-500">Departments</p>
             <p className="text-sm sm:text-base font-bold text-gray-900">
               {uniqueDepartments.length - 1} {/* Subtract "All Departments" */}
+=======
+            <p className="text-[10px] sm:text-xs text-gray-500">Pending Review</p>
+            <p className="text-sm sm:text-base font-bold text-yellow-600">
+              {accessRules.filter(r => r.status === 'Pending').length}
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
             </p>
           </div>
         </div>
@@ -767,7 +1191,11 @@ const EmployeeAccess = () => {
 
       {/* Table Container with Toolbar */}
       <div className="bg-white border border-gray-300 rounded p-3 sm:p-4">
+<<<<<<< HEAD
         {/* Toolbar with Search, Add Rule, Add Columns */}
+=======
+        {/* Toolbar with Search, Add Rule, Add Columns, and Filters */}
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 mb-3">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <div className="relative w-full sm:w-48">
@@ -798,6 +1226,7 @@ const EmployeeAccess = () => {
               <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
               <span>Add Column</span>
             </button>
+<<<<<<< HEAD
             
           </div>
           
@@ -808,6 +1237,17 @@ const EmployeeAccess = () => {
                 value={departmentFilter}
                 onChange={(e) => handleDepartmentFilterChange(e.target.value)}
                 className="w-full pl-8 pr-8 py-2 text-xs sm:text-sm border border-gray-300 rounded appearance-none bg-white"
+=======
+          </div>
+          
+          {/* Department Filter with Blue Icon */}
+          <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+            <div className="relative w-full sm:w-auto">
+              <select
+                value={departmentFilter}
+                onChange={(e) => handleDepartmentFilterChange(e.target.value)}
+                className="w-full sm:w-auto pl-8 pr-8 py-2 text-xs sm:text-sm border border-gray-300 rounded appearance-none bg-white"
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
               >
                 {uniqueDepartments.map((dept) => (
                   <option key={dept} value={dept}>
@@ -834,6 +1274,7 @@ const EmployeeAccess = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </div>
+<<<<<<< HEAD
 
             {/* Access Level Filter */}
             <div className="relative w-full sm:w-48">
@@ -847,6 +1288,24 @@ const EmployeeAccess = () => {
                   <option key={level} value={level}>{level}</option>
                 ))}
               </select>
+=======
+            
+            {/* Access Level Filter */}
+            <div className="relative w-full sm:w-auto">
+              <select
+                value={accessLevelFilter}
+                onChange={(e) => handleAccessLevelFilterChange(e.target.value)}
+                className="w-full sm:w-auto pl-8 pr-8 py-2 text-xs sm:text-sm border border-gray-300 rounded appearance-none bg-white"
+              >
+                {uniqueAccessLevels.map((level) => (
+                  <option key={level} value={level}>
+                    {level}
+                  </option>
+                ))}
+              </select>
+              {/* Filter icon */}
+              <Filter className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
               {/* Dropdown arrow */}
               <svg 
                 className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none"
@@ -897,7 +1356,11 @@ const EmployeeAccess = () => {
                         .filter(col => col.visible)
                         .map((column) => (
                           <td key={column.id} className="py-2 px-2 sm:px-3">
+<<<<<<< HEAD
                             {renderInput(column, editForm[column.id], handleEditFormChange, false, true)}
+=======
+                            {renderInput(column, editForm[column.id], handleEditFormChange, false)}
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
                           </td>
                         ))}
                       <td className="py-2 px-2 sm:px-3">
@@ -959,6 +1422,7 @@ const EmployeeAccess = () => {
                     .filter(col => col.visible)
                     .map((column) => (
                       <td key={column.id} className="py-2 px-2 sm:px-3">
+<<<<<<< HEAD
                         {column.id === 'modules' ? (
                           <div className="flex flex-wrap gap-1">
                             {modulesList.slice(0, 2).map(module => (
@@ -975,6 +1439,9 @@ const EmployeeAccess = () => {
                         ) : (
                           renderInput(column, newRule[column.id], handleNewRuleChange)
                         )}
+=======
+                        {renderInput(column, newRule[column.id], handleNewRuleChange, true)}
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
                       </td>
                     ))}
                   <td className="py-2 px-2 sm:px-3">
@@ -1006,7 +1473,19 @@ const EmployeeAccess = () => {
           <div className="text-[10px] sm:text-xs text-gray-600">
             Showing {sortedRules.length} of {accessRules.length} access rules
             {departmentFilter !== "All Departments" && ` (Filtered by ${departmentFilter})`}
+<<<<<<< HEAD
             {accessLevelFilter !== "All Access Levels" && ` and ${accessLevelFilter}`}
+=======
+            {accessLevelFilter !== "All Access Levels" && `, ${accessLevelFilter}`}
+          </div>
+          <div className="flex space-x-1">
+            <button className="px-2 sm:px-3 py-1 text-[10px] sm:text-xs border border-gray-300 rounded bg-gray-100">
+              1
+            </button>
+            <button className="px-2 sm:px-3 py-1 text-[10px] sm:text-xs border border-gray-300 rounded hover:bg-gray-50">
+              2
+            </button>
+>>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
           </div>
         </div>
       </div>
