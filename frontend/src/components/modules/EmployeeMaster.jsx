@@ -1,5 +1,5 @@
 //sujitha
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Download, Edit, Trash2, Users, 
   X, Check, ChevronUp, ChevronDown,
@@ -16,11 +16,11 @@ const EmployeeMaster = () => {
     { id: 'status', label: 'Status', visible: true, sortable: true, type: 'select', required: true },
   ];
 
-  const [employees, setEmployees] = useState([
-    { id: 1, name: 'John Doe', email: 'john@example.com', department: 'Engineering', status: 'Active', role: 'Developer' },
-    { id: 2, name: 'Jane Smith', email: 'jane@example.com', department: 'HR', status: 'Active', role: 'Recruiter' },
-    { id: 3, name: 'Bob Johnson', email: 'bob@example.com', department: 'Sales', status: 'Inactive', role: 'Sales Executive' },
-  ]);
+  // Load employees from localStorage on component mount
+  const [employees, setEmployees] = useState(() => {
+    const savedEmployees = localStorage.getItem('employees');
+    return savedEmployees ? JSON.parse(savedEmployees) : [];
+  });
   
   const [newEmployee, setNewEmployee] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
@@ -30,7 +30,13 @@ const EmployeeMaster = () => {
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [newColumnName, setNewColumnName] = useState('');
   const [newColumnType, setNewColumnType] = useState('text');
-  const [columns, setColumns] = useState(initialColumns);
+  
+  // Load columns from localStorage
+  const [columns, setColumns] = useState(() => {
+    const savedColumns = localStorage.getItem('employee_columns');
+    return savedColumns ? JSON.parse(savedColumns) : initialColumns;
+  });
+  
   const [editingColumn, setEditingColumn] = useState(null);
   const [tempColumnName, setTempColumnName] = useState('');
   const [isAddingNew, setIsAddingNew] = useState(false);
@@ -38,12 +44,45 @@ const EmployeeMaster = () => {
   // Sorting state
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
 
-  // Filter employees
-  const filteredEmployees = employees.filter(emp =>
-    Object.values(emp).some(value => 
+  // Department filter state - Load from localStorage
+  const [departmentFilter, setDepartmentFilter] = useState(() => {
+    const savedFilter = localStorage.getItem('department_filter');
+    return savedFilter || "All Departments";
+  });
+
+  // Save employees and columns to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('employees', JSON.stringify(employees));
+    localStorage.setItem('employee_columns', JSON.stringify(columns));
+  }, [employees, columns]);
+
+  // Save department filter preference
+  useEffect(() => {
+    localStorage.setItem('department_filter', departmentFilter);
+  }, [departmentFilter]);
+
+  // Get unique departments from employee data
+  const uniqueDepartments = ["All Departments", ...new Set(employees.map(emp => emp.department).filter(Boolean))];
+
+  // Handle department filter change
+  const handleDepartmentFilterChange = (dept) => {
+    setDepartmentFilter(dept);
+  };
+
+  // Filter employees based on search and department
+  const filteredEmployees = employees.filter(emp => {
+    // Search filter
+    const matchesSearch = Object.values(emp).some(value => 
       String(value).toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  );
+    );
+    
+    // Department filter
+    const matchesDepartment = 
+      departmentFilter === "All Departments" || 
+      emp.department === departmentFilter;
+    
+    return matchesSearch && matchesDepartment;
+  });
 
   // Sort employees
   const sortedEmployees = React.useMemo(() => {
@@ -363,7 +402,7 @@ const EmployeeMaster = () => {
   };
 
   return (
-    <div className="space-y-3 sm:space-y-4">
+    <div className="space-y-3 sm:space-y-4 employee-master-container">
       {/* Delete Employee Prompt Modal */}
       {showDeletePrompt && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -409,111 +448,105 @@ const EmployeeMaster = () => {
               </button>
             </div>
             
-            {/* Add New Column Form */}
-            <div className="mb-4 p-3 border border-gray-300 rounded">
-              <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Add New Column</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
-                <input
-                  type="text"
-                  placeholder="Column name (e.g., Phone Number)"
-                  value={newColumnName}
-                  onChange={(e) => setNewColumnName(e.target.value)}
-                  className="px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded"
-                />
-                {/* <select
-                  value={newColumnType}
-                  onChange={(e) => setNewColumnType(e.target.value)}
-                  className="px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded"
-                >
-                  <option value="text">Text</option>
-                  <option value="email">Email</option>
-                  <option value="select">Dropdown</option>
-                </select> */}
-              </div>
+           {/* Add New Column Form */}
+<div className="mb-4 p-3 border border-gray-300 rounded">
+  <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Add New Column</h4>
+  <div className="flex flex-col sm:flex-row gap-2 mb-3">
+    <input
+      type="text"
+      placeholder="Column name (e.g., Phone Number)"
+      value={newColumnName}
+      onChange={(e) => setNewColumnName(e.target.value)}
+      className="flex-grow px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded"
+    />
+    <button
+      onClick={handleAddColumn}
+      className="px-3 py-2 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800 whitespace-nowrap"
+    >
+      Add Column
+    </button>
+  </div>
+</div>
+
+{/* Existing Columns List */}
+<div className="mb-4">
+  <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Available Columns</h4>
+  <div className="space-y-2 max-h-60 overflow-y-auto">
+    {columns.map((column) => (
+      <div key={column.id} className="flex items-center justify-between p-2 border border-gray-200 rounded">
+        <div className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            checked={column.visible}
+            onChange={() => toggleColumnVisibility(column.id)}
+            className="h-3 w-3 sm:h-4 sm:w-4"
+          />
+          {editingColumn === column.id ? (
+            <div className="flex items-center space-x-2">
+              <input
+                type="text"
+                value={tempColumnName}
+                onChange={(e) => setTempColumnName(e.target.value)}
+                className="px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded"
+              />
               <button
-                onClick={handleAddColumn}
-                className="w-full px-3 py-2 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800"
+                onClick={() => saveEditColumn(column.id)}
+                className="text-green-600 hover:text-green-800"
+                title="Save"
               >
-                Add Column
+                <Check className="h-3 w-3 sm:h-4 sm:w-4" />
+              </button>
+              <button
+                onClick={cancelEditColumn}
+                className="text-red-600 hover:text-red-800"
+                title="Cancel"
+              >
+                <X className="h-3 w-3 sm:h-4 sm:w-4" />
               </button>
             </div>
-            
-            {/* Existing Columns List */}
-            <div className="mb-4">
-              <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Available Columns</h4>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {columns.map((column) => (
-                  <div key={column.id} className="flex items-center justify-between p-2 border border-gray-200 rounded">
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        checked={column.visible}
-                        onChange={() => toggleColumnVisibility(column.id)}
-                        className="h-3 w-3 sm:h-4 sm:w-4"
-                      />
-                      {editingColumn === column.id ? (
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="text"
-                            value={tempColumnName}
-                            onChange={(e) => setTempColumnName(e.target.value)}
-                            className="px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded"
-                          />
-                          <button
-                            onClick={() => saveEditColumn(column.id)}
-                            className="text-green-600 hover:text-green-800"
-                            title="Save"
-                          >
-                            <Check className="h-3 w-3 sm:h-4 sm:w-4" />
-                          </button>
-                          <button
-                            onClick={cancelEditColumn}
-                            className="text-red-600 hover:text-red-800"
-                            title="Cancel"
-                          >
-                            <X className="h-3 w-3 sm:h-4 sm:w-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <span className="text-xs sm:text-sm text-gray-700">{column.label}</span>
-                          {column.required && (
-                            <span className="text-[8px] px-1 py-0.5 bg-red-100 text-red-800 rounded">
-                              Required
-                            </span>
-                          )}
-                          {column.deletable && (
-                            <span className="text-[8px] px-1 py-0.5 bg-gray-100 text-gray-600 rounded">
-                              Custom
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      {!['name', 'email', 'department', 'role', 'status'].includes(column.id) && (
-                        <>
-                          <button
-                            onClick={() => startEditColumn(column.id, column.label)}
-                            className="text-blue-600 hover:text-blue-800"
-                            title="Edit"
-                          >
-                            <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteColumn(column.id)}
-                            className="text-red-600 hover:text-red-800"
-                            title="Delete"
-                          >
-                            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+          ) : (
+            <>
+              <span className="text-xs sm:text-sm text-gray-700">{column.label}</span>
+              {column.required && (
+                <span className="text-[8px] px-1 py-0.5 bg-red-100 text-red-800 rounded">
+                  Required
+                </span>
+              )}
+              {/* Removed the deletable check so all columns show edit/delete */}
+            </>
+          )}
+        </div>
+        <div className="flex items-center space-x-2">
+          {/* Edit button for all columns */}
+          <button
+            onClick={() => startEditColumn(column.id, column.label)}
+            className="text-blue-600 hover:text-blue-800"
+            title="Edit"
+          >
+            <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
+          </button>
+          
+          {/* Delete button - show warning for required columns */}
+          <button
+            onClick={() => {
+              if (column.required) {
+                if (window.confirm(`Warning: ${column.label} is a required column. Are you sure you want to delete it? This may affect data validation.`)) {
+                  handleDeleteColumn(column.id);
+                }
+              } else {
+                handleDeleteColumn(column.id);
+              }
+            }}
+            className="text-red-600 hover:text-red-800"
+            title="Delete"
+          >
+            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+          </button>
+        </div>
+      </div>
+    ))}
+  </div>
+</div>
             
             <div className="flex justify-end">
               <button
@@ -571,7 +604,7 @@ const EmployeeMaster = () => {
           <div>
             <p className="text-[10px] sm:text-xs text-gray-500">Departments</p>
             <p className="text-sm sm:text-base font-bold text-gray-900">
-              {[...new Set(employees.map(e => e.department))].length}
+              {uniqueDepartments.length - 1} {/* Subtract "All Departments" */}
             </p>
           </div>
         </div>
@@ -624,19 +657,45 @@ const EmployeeMaster = () => {
             
           </div>
           
+          {/* Department Filter with Blue Icon */}
           <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-            <select className="w-full sm:w-auto px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded">
-              <option>All Departments</option>
-              <option>Engineering</option>
-              <option>HR</option>
-              <option>Sales</option>
-            </select>
+            <div className="relative">
+              <select
+                value={departmentFilter}
+                onChange={(e) => handleDepartmentFilterChange(e.target.value)}
+                className="w-full sm:w-auto pl-8 pr-8 py-2 text-xs sm:text-sm border border-gray-300 rounded appearance-none bg-white"
+              >
+                {uniqueDepartments.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
+              {/* Blue filter icon */}
+              <svg 
+                className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-blue-500 pointer-events-none"
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              {/* Dropdown arrow */}
+              <svg 
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none"
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs sm:text-sm">
+        {/* Table Container - Horizontal scroll only here */}
+        <div className="table-scroll-container">
+          <table className="min-w-full text-xs sm:text-sm">
             <thead>
               <tr className="border-b border-gray-300">
                 {/* Render only visible columns */}
@@ -645,7 +704,7 @@ const EmployeeMaster = () => {
                   .map((column) => (
                     <th 
                       key={column.id}
-                      className="text-left py-2 px-2 sm:px-3 font-medium text-gray-700 cursor-pointer hover:bg-gray-50"
+                      className="text-left py-2 px-2 sm:px-3 font-medium text-gray-700 cursor-pointer hover:bg-gray-50 whitespace-nowrap min-w-[150px]"
                       onClick={() => column.sortable && handleSort(column.id)}
                     >
                       <div className="flex items-center justify-between">
@@ -657,7 +716,7 @@ const EmployeeMaster = () => {
                       </div>
                     </th>
                   ))}
-                <th className="text-left py-2 px-2 sm:px-3 font-medium text-gray-700">Actions</th>
+                <th className="text-left py-2 px-2 sm:px-3 font-medium text-gray-700 whitespace-nowrap min-w-[100px]">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -670,11 +729,11 @@ const EmployeeMaster = () => {
                       {columns
                         .filter(col => col.visible)
                         .map((column) => (
-                          <td key={column.id} className="py-2 px-2 sm:px-3">
+                          <td key={column.id} className="py-2 px-2 sm:px-3 whitespace-nowrap min-w-[150px]">
                             {renderInput(column, editForm[column.id], handleEditFormChange, false)}
                           </td>
                         ))}
-                      <td className="py-2 px-2 sm:px-3">
+                      <td className="py-2 px-2 sm:px-3 whitespace-nowrap min-w-[100px]">
                         <div className="flex items-center space-x-2">
                           <button 
                             onClick={saveEdit}
@@ -699,11 +758,11 @@ const EmployeeMaster = () => {
                       {columns
                         .filter(col => col.visible)
                         .map((column) => (
-                          <td key={column.id} className="py-2 px-2 sm:px-3">
+                          <td key={column.id} className="py-2 px-2 sm:px-3 whitespace-nowrap min-w-[150px]">
                             {renderCellContent(column, employee[column.id])}
                           </td>
                         ))}
-                      <td className="py-2 px-2 sm:px-3">
+                      <td className="py-2 px-2 sm:px-3 whitespace-nowrap min-w-[100px]">
                         <div className="flex items-center space-x-2">
                           <button 
                             onClick={() => startEditing(employee)}
@@ -732,11 +791,11 @@ const EmployeeMaster = () => {
                   {columns
                     .filter(col => col.visible)
                     .map((column) => (
-                      <td key={column.id} className="py-2 px-2 sm:px-3">
+                      <td key={column.id} className="py-2 px-2 sm:px-3 whitespace-nowrap min-w-[150px]">
                         {renderInput(column, newEmployee[column.id], handleNewEmployeeChange)}
                       </td>
                     ))}
-                  <td className="py-2 px-2 sm:px-3">
+                  <td className="py-2 px-2 sm:px-3 whitespace-nowrap min-w-[100px]">
                     <div className="flex items-center space-x-2">
                       <button 
                         onClick={saveNewEmployee}
@@ -764,14 +823,7 @@ const EmployeeMaster = () => {
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-0 mt-3 pt-3 border-t border-gray-300">
           <div className="text-[10px] sm:text-xs text-gray-600">
             Showing {sortedEmployees.length} of {employees.length} employees
-          </div>
-          <div className="flex space-x-1">
-            <button className="px-2 sm:px-3 py-1 text-[10px] sm:text-xs border border-gray-300 rounded bg-gray-100">
-              1
-            </button>
-            <button className="px-2 sm:px-3 py-1 text-[10px] sm:text-xs border border-gray-300 rounded hover:bg-gray-50">
-              2
-            </button>
+            {departmentFilter !== "All Departments" && ` (Filtered by ${departmentFilter})`}
           </div>
         </div>
       </div>

@@ -1,52 +1,94 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Key, Shield, Plus, Search, Filter, 
   Edit, Trash2, X, Check, 
-  ChevronUp, ChevronDown, CheckCircle, XCircle, Download
+  ChevronUp, ChevronDown, CheckCircle, XCircle, Download,
+  Columns
 } from 'lucide-react';
 
 const EmployeeAccess = () => {
   // Initial columns configuration
   const initialColumns = [
-    { id: 'employee', label: 'Employee', visible: true, sortable: true, type: 'text', required: true },
-    { id: 'department', label: 'Department', visible: true, sortable: true, type: 'text', required: true },
-    { id: 'accessLevel', label: 'Access Level', visible: true, sortable: true, type: 'select', required: true },
-    { id: 'modules', label: 'Modules', visible: true, sortable: false, type: 'modules', required: false },
-    { id: 'status', label: 'Status', visible: true, sortable: true, type: 'select', required: true },
+    { id: 'employee', label: 'Employee', visible: true, sortable: true, type: 'text', required: true, deletable: false },
+    { id: 'department', label: 'Department', visible: true, sortable: true, type: 'text', required: true, deletable: false },
+    { id: 'accessLevel', label: 'Access Level', visible: true, sortable: true, type: 'select', required: true, deletable: false },
+    { id: 'modules', label: 'Modules', visible: true, sortable: false, type: 'modules', required: false, deletable: false },
+    { id: 'status', label: 'Status', visible: true, sortable: true, type: 'select', required: true, deletable: false },
   ];
 
-  const [accessRules, setAccessRules] = useState([
-    { id: 1, employee: 'John Doe', department: 'Engineering', accessLevel: 'Admin', modules: ['All'], status: 'Active' },
-    { id: 2, employee: 'Jane Smith', department: 'HR', accessLevel: 'Manager', modules: ['HR', 'Reports'], status: 'Active' },
-    { id: 3, employee: 'Bob Johnson', department: 'Sales', accessLevel: 'User', modules: ['Sales'], status: 'Inactive' },
-  ]);
-  
-  const [newRule, setNewRule] = useState({ 
-    employee: '', 
-    department: '', 
-    accessLevel: 'User', 
-    modules: [], 
-    status: 'Active' 
+  // Load access rules from localStorage on component mount
+  const [accessRules, setAccessRules] = useState(() => {
+    const savedRules = localStorage.getItem('access_rules');
+    return savedRules ? JSON.parse(savedRules) : [];
   });
+  
+  const [newRule, setNewRule] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [showDeletePrompt, setShowDeletePrompt] = useState(null);
-  const [columns, setColumns] = useState(initialColumns);
+  const [showColumnModal, setShowColumnModal] = useState(false);
+  const [newColumnName, setNewColumnName] = useState('');
+  const [newColumnType, setNewColumnType] = useState('text');
+  
+  // Load columns from localStorage
+  const [columns, setColumns] = useState(() => {
+    const savedColumns = localStorage.getItem('access_columns');
+    return savedColumns ? JSON.parse(savedColumns) : initialColumns;
+  });
+  
+  const [editingColumn, setEditingColumn] = useState(null);
+  const [tempColumnName, setTempColumnName] = useState('');
   const [isAddingNew, setIsAddingNew] = useState(false);
   
   // Sorting state
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
 
+  // Department filter state - Load from localStorage
+  const [departmentFilter, setDepartmentFilter] = useState(() => {
+    const savedFilter = localStorage.getItem('access_department_filter');
+    return savedFilter || "All Departments";
+  });
+
+  // Access Level filter state
+  const [accessLevelFilter, setAccessLevelFilter] = useState("All Access Levels");
+
   const accessLevels = ['Admin', 'Manager', 'User', 'Viewer'];
   const modulesList = ['Dashboard', 'Employee Master', 'Project Master', 'Reports', 'Settings', 'Analytics'];
 
-  // Filter rules
-  const filteredRules = accessRules.filter(rule =>
-    Object.values(rule).some(value => 
+  // Save access rules and columns to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('access_rules', JSON.stringify(accessRules));
+    localStorage.setItem('access_columns', JSON.stringify(columns));
+  }, [accessRules, columns]);
+
+  // Save department filter preference
+  useEffect(() => {
+    localStorage.setItem('access_department_filter', departmentFilter);
+  }, [departmentFilter]);
+
+  // Get unique departments from access rules data
+  const uniqueDepartments = ["All Departments", ...new Set(accessRules.map(rule => rule.department).filter(Boolean))];
+
+  // Filter access rules based on search, department, and access level
+  const filteredRules = accessRules.filter(rule => {
+    // Search filter
+    const matchesSearch = Object.values(rule).some(value => 
       String(value).toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  );
+    );
+    
+    // Department filter
+    const matchesDepartment = 
+      departmentFilter === "All Departments" || 
+      rule.department === departmentFilter;
+    
+    // Access Level filter
+    const matchesAccessLevel = 
+      accessLevelFilter === "All Access Levels" || 
+      rule.accessLevel === accessLevelFilter;
+    
+    return matchesSearch && matchesDepartment && matchesAccessLevel;
+  });
 
   // Sort rules
   const sortedRules = React.useMemo(() => {
@@ -85,22 +127,42 @@ const EmployeeAccess = () => {
       : <ChevronDown className="h-3 w-3 sm:h-4 sm:w-4" />;
   };
 
+  // Validate access rule form
+  const validateRuleForm = (rule) => {
+    const requiredColumns = columns.filter(col => col.required && col.visible);
+    
+    for (const column of requiredColumns) {
+      if (!rule[column.id]?.toString().trim()) {
+        return `${column.label} is required`;
+      }
+    }
+    return '';
+  };
+
   // Handle Add Rule button click
   const handleAddRuleClick = () => {
     setIsAddingNew(true);
-    setNewRule({ 
-      employee: '', 
-      department: '', 
-      accessLevel: 'User', 
-      modules: [], 
-      status: 'Active' 
+    // Initialize empty new rule with default values for all visible columns
+    const initialRule = {};
+    columns.filter(col => col.visible).forEach(col => {
+      if (col.id === 'accessLevel') {
+        initialRule[col.id] = 'User';
+      } else if (col.id === 'status') {
+        initialRule[col.id] = 'Active';
+      } else if (col.id === 'modules') {
+        initialRule[col.id] = [];
+      } else {
+        initialRule[col.id] = '';
+      }
     });
+    setNewRule(initialRule);
   };
 
   // Save new rule from bottom row
   const saveNewRule = () => {
-    if (!newRule.employee.trim() || !newRule.department.trim()) {
-      alert('Employee name and department are required');
+    const error = validateRuleForm(newRule);
+    if (error) {
+      alert(error);
       return;
     }
 
@@ -110,23 +172,62 @@ const EmployeeAccess = () => {
       id: newId 
     };
     
+    // Ensure all columns have values
+    columns.forEach(col => {
+      if (!ruleToAdd.hasOwnProperty(col.id)) {
+        if (col.id === 'accessLevel') {
+          ruleToAdd[col.id] = 'User';
+        } else if (col.id === 'status') {
+          ruleToAdd[col.id] = 'Active';
+        } else if (col.id === 'modules') {
+          ruleToAdd[col.id] = [];
+        } else {
+          ruleToAdd[col.id] = '';
+        }
+      }
+    });
+    
     setAccessRules([...accessRules, ruleToAdd]);
-    setNewRule({ employee: '', department: '', accessLevel: 'User', modules: [], status: 'Active' });
-    setIsAddingNew(false);
+    
+    // Reset new rule form
+    const emptyRule = {};
+    columns.filter(col => col.visible).forEach(col => {
+      if (col.id === 'accessLevel') {
+        emptyRule[col.id] = 'User';
+      } else if (col.id === 'status') {
+        emptyRule[col.id] = 'Active';
+      } else if (col.id === 'modules') {
+        emptyRule[col.id] = [];
+      } else {
+        emptyRule[col.id] = '';
+      }
+    });
+    setNewRule(emptyRule);
   };
 
   // Cancel adding new rule
   const cancelNewRule = () => {
     setIsAddingNew(false);
-    setNewRule({ employee: '', department: '', accessLevel: 'User', modules: [], status: 'Active' });
+    setNewRule({});
   };
 
-  // Toggle module selection
+  // Toggle module selection for new rule
   const toggleModule = (module) => {
-    if (newRule.modules.includes(module)) {
-      setNewRule({...newRule, modules: newRule.modules.filter(m => m !== module)});
+    const currentModules = newRule.modules || [];
+    if (currentModules.includes(module)) {
+      setNewRule({...newRule, modules: currentModules.filter(m => m !== module)});
     } else {
-      setNewRule({...newRule, modules: [...newRule.modules, module]});
+      setNewRule({...newRule, modules: [...currentModules, module]});
+    }
+  };
+
+  // Toggle module in edit form
+  const toggleEditModule = (module) => {
+    const currentModules = editForm.modules || [];
+    if (currentModules.includes(module)) {
+      setEditForm({...editForm, modules: currentModules.filter(m => m !== module)});
+    } else {
+      setEditForm({...editForm, modules: [...currentModules, module]});
     }
   };
 
@@ -148,22 +249,138 @@ const EmployeeAccess = () => {
     setShowDeletePrompt(null);
   };
 
+  // Add new column
+  const handleAddColumn = () => {
+    if (newColumnName.trim()) {
+      const newColumnId = newColumnName.toLowerCase().replace(/\s+/g, '_');
+      
+      // Check if column already exists
+      if (columns.find(col => col.id === newColumnId)) {
+        alert('Column with this name already exists');
+        return;
+      }
+      
+      const newColumn = {
+        id: newColumnId,
+        label: newColumnName,
+        visible: true,
+        sortable: true,
+        type: newColumnType,
+        editable: true,
+        deletable: true,
+        required: false
+      };
+      
+      setColumns([...columns, newColumn]);
+      
+      // Add default value for this column to all existing rules
+      let defaultValue = '';
+      if (newColumnType === 'select') {
+        defaultValue = 'Active';
+      } else if (newColumnType === 'modules') {
+        defaultValue = [];
+      }
+      
+      setAccessRules(accessRules.map(rule => ({
+        ...rule,
+        [newColumnId]: defaultValue
+      })));
+      
+      // Also add to newRule if it exists
+      if (isAddingNew) {
+        setNewRule(prev => ({
+          ...prev,
+          [newColumnId]: defaultValue
+        }));
+      }
+      
+      setNewColumnName('');
+      setNewColumnType('text');
+    }
+  };
+
+  // Edit column name
+  const startEditColumn = (columnId, currentLabel) => {
+    setEditingColumn(columnId);
+    setTempColumnName(currentLabel);
+  };
+
+  // Save column edit
+  const saveEditColumn = (columnId) => {
+    if (tempColumnName.trim()) {
+      setColumns(columns.map(col => 
+        col.id === columnId ? { ...col, label: tempColumnName } : col
+      ));
+      setEditingColumn(null);
+      setTempColumnName('');
+    }
+  };
+
+  // Cancel column edit
+  const cancelEditColumn = () => {
+    setEditingColumn(null);
+    setTempColumnName('');
+  };
+
+  // Delete column
+  const handleDeleteColumn = (columnId) => {
+    if (window.confirm('Are you sure you want to delete this column? This will remove this column from all access rules.')) {
+      setColumns(columns.filter(col => col.id !== columnId));
+      
+      // Remove this column from all rules
+      setAccessRules(accessRules.map(rule => {
+        const newRule = { ...rule };
+        delete newRule[columnId];
+        return newRule;
+      }));
+      
+      // Remove from newRule if it exists
+      if (isAddingNew) {
+        const newEmp = { ...newRule };
+        delete newEmp[columnId];
+        setNewRule(newEmp);
+      }
+    }
+  };
+
+  // Toggle column visibility
+  const toggleColumnVisibility = (columnId) => {
+    setColumns(columns.map(col => 
+      col.id === columnId ? { ...col, visible: !col.visible } : col
+    ));
+  };
+
   // Start editing rule
   const startEditing = (rule) => {
     // Cancel any current add operation
     if (isAddingNew) {
       setIsAddingNew(false);
-      setNewRule({ employee: '', department: '', accessLevel: 'User', modules: [], status: 'Active' });
+      setNewRule({});
     }
     
     setEditingId(rule.id);
-    setEditForm({ ...rule });
+    const editData = { ...rule };
+    columns.forEach(col => {
+      if (!editData.hasOwnProperty(col.id)) {
+        if (col.id === 'accessLevel') {
+          editData[col.id] = 'User';
+        } else if (col.id === 'status') {
+          editData[col.id] = 'Active';
+        } else if (col.id === 'modules') {
+          editData[col.id] = [];
+        } else {
+          editData[col.id] = '';
+        }
+      }
+    });
+    setEditForm(editData);
   };
 
   // Save rule edit
   const saveEdit = () => {
-    if (!editForm.employee.trim() || !editForm.department.trim()) {
-      alert('Employee name and department are required');
+    const error = validateRuleForm(editForm);
+    if (error) {
+      alert(error);
       return;
     }
     
@@ -190,18 +407,18 @@ const EmployeeAccess = () => {
     setEditForm({...editForm, [field]: value});
   };
 
-  // Toggle module in edit form
-  const toggleEditModule = (module) => {
-    const currentModules = editForm.modules || [];
-    if (currentModules.includes(module)) {
-      setEditForm({...editForm, modules: currentModules.filter(m => m !== module)});
-    } else {
-      setEditForm({...editForm, modules: [...currentModules, module]});
-    }
+  // Handle department filter change
+  const handleDepartmentFilterChange = (dept) => {
+    setDepartmentFilter(dept);
+  };
+
+  // Handle access level filter change
+  const handleAccessLevelFilterChange = (level) => {
+    setAccessLevelFilter(level);
   };
 
   // Render input based on column type
-  const renderInput = (column, value, onChange, isEditMode = false) => {
+  const renderInput = (column, value, onChange, placeholder = true, isEditMode = false) => {
     if (column.id === 'accessLevel') {
       return (
         <select
@@ -245,13 +462,26 @@ const EmployeeAccess = () => {
         >
           <option value="Active">Active</option>
           <option value="Inactive">Inactive</option>
+          <option value="Pending">Pending</option>
+        </select>
+      );
+    } else if (column.type === 'select') {
+      return (
+        <select
+          value={value || ''}
+          onChange={(e) => onChange(column.id, e.target.value)}
+          className="w-full px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded"
+        >
+          <option value="">Select {column.label}</option>
+          <option value="Active">Active</option>
+          <option value="Inactive">Inactive</option>
         </select>
       );
     } else {
       return (
         <input
           type="text"
-          placeholder={!isEditMode ? `Enter ${column.label.toLowerCase()}` : ''}
+          placeholder={placeholder ? `Enter ${column.label.toLowerCase()}` : ''}
           value={value || ''}
           onChange={(e) => onChange(column.id, e.target.value)}
           className="w-full px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded"
@@ -270,7 +500,7 @@ const EmployeeAccess = () => {
           value === 'User' ? 'bg-green-100 text-green-800' :
           'bg-gray-100 text-gray-800'
         }`}>
-          {value}
+          {value || '-'}
         </span>
       );
     } else if (column.id === 'modules') {
@@ -287,21 +517,32 @@ const EmployeeAccess = () => {
               +{modules.length - 2}
             </span>
           )}
+          {modules.length === 0 && <span>-</span>}
         </div>
       );
-    } else if (column.id === 'status') {
+    } else if (column.id === 'status' || column.type === 'select') {
       return (
         <div className="flex items-center">
           {value === 'Active' ? (
             <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 text-green-500 mr-1" />
+          ) : value === 'Inactive' ? (
+            <XCircle className="h-3 w-3 sm:h-4 sm:w-4 text-red-500 mr-1" />
           ) : (
             <XCircle className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 mr-1" />
           )}
-          <span className="text-xs sm:text-sm">{value}</span>
+          <span className={`px-2 py-1 rounded-full text-[10px] sm:text-xs ${
+            value === 'Active' 
+              ? 'bg-green-100 text-green-800' 
+              : value === 'Inactive'
+              ? 'bg-red-100 text-red-800'
+              : 'bg-gray-100 text-gray-800'
+          }`}>
+            {value || '-'}
+          </span>
         </div>
       );
     }
-    return <span className="whitespace-nowrap truncate max-w-[150px]">{value || '-'}</span>;
+    return value || '-';
   };
 
   return (
@@ -340,6 +581,129 @@ const EmployeeAccess = () => {
         </div>
       )}
 
+      {/* Column Management Modal */}
+      {showColumnModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-medium text-gray-900 text-sm sm:text-base">Manage Columns</h3>
+              <button onClick={() => setShowColumnModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-4 w-4 sm:h-5 sm:w-5" />
+              </button>
+            </div>
+            
+           {/* Add New Column Form */}
+<div className="mb-4 p-3 border border-gray-300 rounded">
+  <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Add New Column</h4>
+  <div className="flex flex-col sm:flex-row gap-2 mb-3">
+    <input
+      type="text"
+      placeholder="Column name (e.g., Phone Number)"
+      value={newColumnName}
+      onChange={(e) => setNewColumnName(e.target.value)}
+      className="flex-grow px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded"
+    />
+    <button
+      onClick={handleAddColumn}
+      className="px-3 py-2 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800 whitespace-nowrap"
+    >
+      Add Column
+    </button>
+  </div>
+</div>
+
+{/* Existing Columns List */}
+<div className="mb-4">
+  <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Available Columns</h4>
+  <div className="space-y-2 max-h-60 overflow-y-auto">
+    {columns.map((column) => (
+      <div key={column.id} className="flex items-center justify-between p-2 border border-gray-200 rounded">
+        <div className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            checked={column.visible}
+            onChange={() => toggleColumnVisibility(column.id)}
+            className="h-3 w-3 sm:h-4 sm:w-4"
+          />
+          {editingColumn === column.id ? (
+            <div className="flex items-center space-x-2">
+              <input
+                type="text"
+                value={tempColumnName}
+                onChange={(e) => setTempColumnName(e.target.value)}
+                className="px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded"
+              />
+              <button
+                onClick={() => saveEditColumn(column.id)}
+                className="text-green-600 hover:text-green-800"
+                title="Save"
+              >
+                <Check className="h-3 w-3 sm:h-4 sm:w-4" />
+              </button>
+              <button
+                onClick={cancelEditColumn}
+                className="text-red-600 hover:text-red-800"
+                title="Cancel"
+              >
+                <X className="h-3 w-3 sm:h-4 sm:w-4" />
+              </button>
+            </div>
+          ) : (
+            <>
+              <span className="text-xs sm:text-sm text-gray-700">{column.label}</span>
+              {column.required && (
+                <span className="text-[8px] px-1 py-0.5 bg-red-100 text-red-800 rounded">
+                  Required
+                </span>
+              )}
+              {/* Removed the deletable check so all columns show edit/delete */}
+            </>
+          )}
+        </div>
+        <div className="flex items-center space-x-2">
+          {/* Edit button for all columns */}
+          <button
+            onClick={() => startEditColumn(column.id, column.label)}
+            className="text-blue-600 hover:text-blue-800"
+            title="Edit"
+          >
+            <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
+          </button>
+          
+          {/* Delete button - show warning for required columns */}
+          <button
+            onClick={() => {
+              if (column.required) {
+                if (window.confirm(`Warning: ${column.label} is a required column. Are you sure you want to delete it? This may affect data validation.`)) {
+                  handleDeleteColumn(column.id);
+                }
+              } else {
+                handleDeleteColumn(column.id);
+              }
+            }}
+            className="text-red-600 hover:text-red-800"
+            title="Delete"
+          >
+            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+          </button>
+        </div>
+      </div>
+    ))}
+  </div>
+</div>
+            
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowColumnModal(false)}
+                className="px-3 py-1.5 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header - Responsive */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0">
         <div>
@@ -350,8 +714,8 @@ const EmployeeAccess = () => {
           <p className="text-xs sm:text-sm text-gray-600 mt-0.5 sm:mt-1">Manage employee permissions and access controls</p>
         </div>
         <button className="flex items-center justify-center sm:justify-start space-x-1 px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50 w-full sm:w-auto">
-          <Shield className="h-3 w-3 sm:h-4 sm:w-4" />
-          <span>Audit Log</span>
+          <Download className="h-3 w-3 sm:h-4 sm:w-4" />
+          <span>Export</span>
         </button>
       </div>
 
@@ -379,7 +743,7 @@ const EmployeeAccess = () => {
         </div>
         <div className="bg-white border border-gray-300 rounded p-3 sm:p-4 flex items-center">
           <div className="bg-blue-100 p-1.5 sm:p-2 rounded mr-2 sm:mr-3">
-            <Key className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600" />
+            <Shield className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600" />
           </div>
           <div>
             <p className="text-[10px] sm:text-xs text-gray-500">Admin Users</p>
@@ -393,73 +757,17 @@ const EmployeeAccess = () => {
             <Key className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-600" />
           </div>
           <div>
-            <p className="text-[10px] sm:text-xs text-gray-500">Pending Review</p>
-            <p className="text-sm sm:text-base font-bold text-yellow-600">2</p>
+            <p className="text-[10px] sm:text-xs text-gray-500">Departments</p>
+            <p className="text-sm sm:text-base font-bold text-gray-900">
+              {uniqueDepartments.length - 1} {/* Subtract "All Departments" */}
+            </p>
           </div>
         </div>
-      </div>
-
-      {/* Add Access Rule Form */}
-      <div className="bg-white border border-gray-300 rounded p-3 sm:p-4">
-        <h3 className="text-sm sm:text-base font-semibold text-gray-900 mb-3 sm:mb-4">Add Access Rule</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-3 mb-3 sm:mb-4">
-          <input
-            type="text"
-            placeholder="Employee Name"
-            value={newRule.employee}
-            onChange={(e) => handleNewRuleChange('employee', e.target.value)}
-            className="px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded"
-          />
-          <input
-            type="text"
-            placeholder="Department"
-            value={newRule.department}
-            onChange={(e) => handleNewRuleChange('department', e.target.value)}
-            className="px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded"
-          />
-          <select
-            value={newRule.accessLevel}
-            onChange={(e) => handleNewRuleChange('accessLevel', e.target.value)}
-            className="px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded"
-          >
-            {accessLevels.map(level => (
-              <option key={level} value={level}>{level}</option>
-            ))}
-          </select>
-        </div>
-        
-        <div className="mb-3 sm:mb-4">
-          <p className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Allowed Modules</p>
-          <div className="flex flex-wrap gap-1 sm:gap-2">
-            {modulesList.map(module => (
-              <button
-                key={module}
-                type="button"
-                onClick={() => toggleModule(module)}
-                className={`px-2 py-1 rounded text-[10px] sm:text-xs border ${
-                  newRule.modules.includes(module)
-                    ? 'bg-blue-100 text-blue-800 border-blue-300'
-                    : 'bg-gray-100 text-gray-700 border-gray-300'
-                }`}
-              >
-                {module}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <button
-          onClick={handleAddRuleClick}
-          className="flex items-center justify-center space-x-1 px-3 py-2 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800 w-full"
-        >
-          <Key className="h-3 w-3 sm:h-4 sm:w-4" />
-          <span>Add Access Rule</span>
-        </button>
       </div>
 
       {/* Table Container with Toolbar */}
       <div className="bg-white border border-gray-300 rounded p-3 sm:p-4">
-        {/* Toolbar with Search and Add Rule */}
+        {/* Toolbar with Search, Add Rule, Add Columns */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 mb-3">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <div className="relative w-full sm:w-48">
@@ -473,22 +781,83 @@ const EmployeeAccess = () => {
               />
             </div>
             
-            <div className="relative w-full sm:w-48">
-              <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-3 w-3 sm:h-4 sm:w-4 text-gray-400" />
-              <select className="w-full pl-9 pr-4 py-2 text-xs sm:text-sm border border-gray-300 rounded">
-                <option>All Access Levels</option>
-                <option>Admin</option>
-                <option>Manager</option>
-                <option>User</option>
-              </select>
-            </div>
+            {/* Add Rule Button - Black */}
+            <button
+              onClick={handleAddRuleClick}
+              className="flex items-center justify-center space-x-1 px-3 py-2 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800 w-full sm:w-auto"
+            >
+              <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span>Add Access Rule</span>
+            </button>
+
+            {/* Add Columns Button */}
+            <button 
+              onClick={() => setShowColumnModal(true)}
+              className="flex items-center justify-center space-x-1 px-3 py-2 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800 w-full sm:w-auto"
+            >
+              <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span>Add Column</span>
+            </button>
             
           </div>
           
-          <button className="flex items-center justify-center sm:justify-start space-x-1 px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50 w-full sm:w-auto mt-2 sm:mt-0">
-            <Download className="h-3 w-3 sm:h-4 sm:w-4" />
-            <span>Export</span>
-          </button>
+          {/* Department Filter with Blue Icon */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+            <div className="relative w-full sm:w-48">
+              <select
+                value={departmentFilter}
+                onChange={(e) => handleDepartmentFilterChange(e.target.value)}
+                className="w-full pl-8 pr-8 py-2 text-xs sm:text-sm border border-gray-300 rounded appearance-none bg-white"
+              >
+                {uniqueDepartments.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
+              {/* Blue filter icon */}
+              <svg 
+                className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-blue-500 pointer-events-none"
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              {/* Dropdown arrow */}
+              <svg 
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none"
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+
+            {/* Access Level Filter */}
+            <div className="relative w-full sm:w-48">
+              <select
+                value={accessLevelFilter}
+                onChange={(e) => handleAccessLevelFilterChange(e.target.value)}
+                className="w-full pl-3 pr-8 py-2 text-xs sm:text-sm border border-gray-300 rounded appearance-none bg-white"
+              >
+                <option value="All Access Levels">All Access Levels</option>
+                {accessLevels.map(level => (
+                  <option key={level} value={level}>{level}</option>
+                ))}
+              </select>
+              {/* Dropdown arrow */}
+              <svg 
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none"
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
         </div>
 
         {/* Table */}
@@ -528,7 +897,7 @@ const EmployeeAccess = () => {
                         .filter(col => col.visible)
                         .map((column) => (
                           <td key={column.id} className="py-2 px-2 sm:px-3">
-                            {renderInput(column, editForm[column.id], handleEditFormChange, true)}
+                            {renderInput(column, editForm[column.id], handleEditFormChange, false, true)}
                           </td>
                         ))}
                       <td className="py-2 px-2 sm:px-3">
@@ -586,57 +955,28 @@ const EmployeeAccess = () => {
               {/* Add new rule row at the bottom */}
               {isAddingNew && (
                 <tr className="border-b border-gray-200 bg-blue-50">
-                  <td className="py-2 px-2 sm:px-3">
-                    <input
-                      type="text"
-                      placeholder="Enter employee"
-                      value={newRule.employee}
-                      onChange={(e) => handleNewRuleChange('employee', e.target.value)}
-                      className="w-full px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded"
-                    />
-                  </td>
-                  <td className="py-2 px-2 sm:px-3">
-                    <input
-                      type="text"
-                      placeholder="Enter department"
-                      value={newRule.department}
-                      onChange={(e) => handleNewRuleChange('department', e.target.value)}
-                      className="w-full px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded"
-                    />
-                  </td>
-                  <td className="py-2 px-2 sm:px-3">
-                    <select
-                      value={newRule.accessLevel}
-                      onChange={(e) => handleNewRuleChange('accessLevel', e.target.value)}
-                      className="w-full px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded"
-                    >
-                      {accessLevels.map(level => (
-                        <option key={level} value={level}>{level}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="py-2 px-2 sm:px-3">
-                    <div className="flex flex-wrap gap-1">
-                      {modulesList.slice(0, 2).map(module => (
-                        <span key={module} className="px-2 py-0.5 bg-gray-100 rounded text-[10px] sm:text-xs">
-                          {module}
-                        </span>
-                      ))}
-                      <span className="px-2 py-0.5 bg-gray-100 rounded text-[10px] sm:text-xs">
-                        +{newRule.modules.length - 2}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="py-2 px-2 sm:px-3">
-                    <select
-                      value={newRule.status}
-                      onChange={(e) => handleNewRuleChange('status', e.target.value)}
-                      className="w-full px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded"
-                    >
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                    </select>
-                  </td>
+                  {columns
+                    .filter(col => col.visible)
+                    .map((column) => (
+                      <td key={column.id} className="py-2 px-2 sm:px-3">
+                        {column.id === 'modules' ? (
+                          <div className="flex flex-wrap gap-1">
+                            {modulesList.slice(0, 2).map(module => (
+                              <span key={module} className="px-2 py-0.5 bg-gray-100 rounded text-[10px] sm:text-xs">
+                                {module}
+                              </span>
+                            ))}
+                            {newRule.modules && newRule.modules.length > 2 && (
+                              <span className="px-2 py-0.5 bg-gray-100 rounded text-[10px] sm:text-xs">
+                                +{newRule.modules.length - 2}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          renderInput(column, newRule[column.id], handleNewRuleChange)
+                        )}
+                      </td>
+                    ))}
                   <td className="py-2 px-2 sm:px-3">
                     <div className="flex items-center space-x-2">
                       <button 
@@ -665,14 +1005,8 @@ const EmployeeAccess = () => {
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-0 mt-3 pt-3 border-t border-gray-300">
           <div className="text-[10px] sm:text-xs text-gray-600">
             Showing {sortedRules.length} of {accessRules.length} access rules
-          </div>
-          <div className="flex space-x-1">
-            <button className="px-2 sm:px-3 py-1 text-[10px] sm:text-xs border border-gray-300 rounded bg-gray-100">
-              1
-            </button>
-            <button className="px-2 sm:px-3 py-1 text-[10px] sm:text-xs border border-gray-300 rounded hover:bg-gray-50">
-              2
-            </button>
+            {departmentFilter !== "All Departments" && ` (Filtered by ${departmentFilter})`}
+            {accessLevelFilter !== "All Access Levels" && ` and ${accessLevelFilter}`}
           </div>
         </div>
       </div>

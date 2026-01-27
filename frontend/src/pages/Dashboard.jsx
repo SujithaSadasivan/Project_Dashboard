@@ -8,6 +8,7 @@ import {
   Folder,
   Building,
   Upload,
+  Settings,
   Menu,
   X
 } from 'lucide-react';
@@ -19,7 +20,7 @@ import ProjectMaster from '../components/modules/ProjectMaster';
 import PartMaster from '../components/modules/PartMaster';
 import DepartmentMaster from '../components/modules/DepartmentMaster';
 import UploadTrackers from '../components/modules/UploadTrackers';
-
+import SYSTEMSETTINGS from '../components/modules/SYSTEMSETTINGS';
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const [activeModule, setActiveModule] = useState('employee-master');
@@ -79,6 +80,12 @@ const Dashboard = () => {
       name: 'Build & Upload Trackers',
       icon: Upload,
       component: <UploadTrackers />
+    },
+    {
+      id: 'SYSTEMSETTINGS',
+      name: 'System Settings',
+      icon: Settings,
+      component: <SYSTEMSETTINGS />
     },
   ];
 
@@ -161,30 +168,6 @@ const Dashboard = () => {
               ))}
             </div>
 
-            {/* User Info & Logout - Hidden on mobile, shown on desktop */}
-            <div className="hidden lg:block p-4 border-t border-white/20 bg-white/95 flex-shrink-0">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-full border border-white/30 bg-white/50 flex items-center justify-center">
-                    <span className="font-medium text-gray-700">
-                      {user?.full_name?.charAt(0) || 'U'}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm text-gray-900">{user?.full_name || 'User'}</p>
-                    <p className="text-xs text-gray-600 capitalize">{user?.role || 'User'}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={logout}
-                  className="p-2 text-gray-500 hover:text-red-600 hover:bg-white/30 rounded-lg border border-white/30"
-                  title="Logout"
-                >
-                  <LogOut className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
             {/* Close sidebar on mobile when clicking outside */}
             {sidebarOpen && isMobile && (
               <div 
@@ -201,11 +184,8 @@ const Dashboard = () => {
               <div className="px-6 py-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900">
-                      {activeModuleData.name}
-                    </h2>
                     <p className="text-sm text-gray-600">
-                      Complete the setup to enable full functionality
+                      {/* Complete the setup to enable full functionality */}
                     </p>
                   </div>
                   <div className="flex items-center space-x-4">
@@ -213,6 +193,14 @@ const Dashboard = () => {
                       <p className="font-medium text-gray-900">{user?.full_name || 'User'}</p>
                       <p className="text-sm text-gray-600 capitalize">{user?.role || 'User'}</p>
                     </div>
+                    {/* Logout button in desktop header */}
+                    <button
+                      onClick={logout}
+                      className="p-2 text-gray-500 hover:text-red-600 hover:bg-white/30 rounded-lg border border-white/30"
+                      title="Logout"
+                    >
+                      <LogOut className="h-5 w-5" />
+                    </button>
                   </div>
                 </div>
               </div>
