@@ -1,6 +1,6 @@
 # backend/app/api/datasets.py
 
-from fastapi import APIRouter, UploadFile, File, Depends
+from fastapi import APIRouter, UploadFile, HTTPException, File, Depends
 from sqlalchemy.orm import Session
 import pandas as pd
 from io import BytesIO
@@ -16,7 +16,7 @@ import json
 
 router = APIRouter(prefix="/datasets", tags=["Datasets"])
 
-@router.get("")
+@router.get("/")
 def list_datasets(db: Session = Depends(get_db)):
     datasets = db.query(Dataset).order_by(Dataset.id.desc()).all()
     return [
@@ -33,15 +33,51 @@ def list_datasets(db: Session = Depends(get_db)):
     ]
 
 # 🔹 PREVIEW DATA (EYE BUTTON)
-@router.get("/{dataset_id}/preview")
-def preview_dataset(dataset_id: int, db: Session = Depends(get_db)):
-    rows = (
-        db.query(DatasetRow)
-        .filter_by(dataset_id=dataset_id)
-        .limit(50)
+@router.get("/{dataset_id}/excel-view")
+def get_excel_view(dataset_id: int, db: Session = Depends(get_db)):
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    columns = (
+        db.query(DatasetColumn)
+        .filter(DatasetColumn.dataset_id == dataset_id)
+        .order_by(DatasetColumn.id)
         .all()
     )
-    return [r.row_data for r in rows]
+
+    rows = (
+        db.query(DatasetRow)
+        .filter(DatasetRow.dataset_id == dataset_id)
+        .all()
+    )
+
+    headers = [c.column_name for c in columns]
+
+    data = []
+    for r in rows:
+        data.append([r.row_data.get(h, "") for h in headers])
+
+    return {
+        "id": dataset.id,
+        "name": dataset.name,
+        "type": dataset.file_type,
+        "size": dataset.row_count,
+        "date": dataset.created_at.strftime("%Y-%m-%d"),
+        "uploadedBy": "System",
+        "fileData": {
+            "sheets": [
+                {
+                    "name": "Sheet1",
+                    "headers": headers,
+                    "data": data
+                }
+            ]
+        }
+    }
+
+
+
 
 
 # 🔹 DOWNLOAD DATA AGAIN
