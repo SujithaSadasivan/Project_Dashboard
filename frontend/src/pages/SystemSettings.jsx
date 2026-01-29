@@ -1,5 +1,3 @@
-//sujitha - Fixed SYSTEMSETTINGS Module
-//sjuitha
 import React, { useState, useEffect } from 'react';
 import { 
   Settings, Bell, Shield, Database, 
@@ -19,7 +17,7 @@ import {
   CheckCircle, XCircle
 } from 'lucide-react';
 
-const SYSTEMSETTINGS = () => {
+const SystemSettings = () => {
   
   // Simplified system settings configuration
   const initialSettings = [
@@ -966,4 +964,5 @@ const SYSTEMSETTINGS = () => {
     </div>
   );
 };
-export default SYSTEMSETTINGS;
+export default SystemSettings;
+

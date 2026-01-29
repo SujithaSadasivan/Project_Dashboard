@@ -1,37 +1,28 @@
-//sujitha
 import React, { useState, useEffect } from 'react';
 import { 
-  Plus, Search, Download, Edit, Trash2, Users, 
-  X, Check, ChevronUp, ChevronDown,
+  Key, Shield, Plus, Search, Filter, 
+  Edit, Trash2, X, Check, 
+  ChevronUp, ChevronDown, CheckCircle, XCircle, Download,
   Columns
 } from 'lucide-react';
 
-const EmployeeMaster = () => {
-  
+const EmployeeAccess = () => {
   // Initial columns configuration
   const initialColumns = [
-    { id: 'name', label: 'Name', visible: true, sortable: true, type: 'text', required: true },
-    { id: 'email', label: 'Email', visible: true, sortable: true, type: 'email', required: true },
-    { id: 'department', label: 'Department', visible: true, sortable: true, type: 'text', required: false },
-    { id: 'role', label: 'Role', visible: true, sortable: true, type: 'text', required: false },
-    { id: 'status', label: 'Status', visible: true, sortable: true, type: 'select', required: true },
+    { id: 'employee', label: 'Employee', visible: true, sortable: true, type: 'text', required: true, deletable: false },
+    { id: 'department', label: 'Department', visible: true, sortable: true, type: 'text', required: true, deletable: false },
+    { id: 'accessLevel', label: 'Access Level', visible: true, sortable: true, type: 'select', required: true, deletable: false },
+    { id: 'modules', label: 'Modules', visible: true, sortable: false, type: 'modules', required: false, deletable: false },
+    { id: 'status', label: 'Status', visible: true, sortable: true, type: 'select', required: true, deletable: false },
   ];
 
-  // Load employees from localStorage on component mount
-  const [employees, setEmployees] = useState(() => {
-    const savedEmployees = localStorage.getItem('employees');
-<<<<<<< HEAD
-    return savedEmployees ? JSON.parse(savedEmployees) : [];
-=======
-    return savedEmployees ? JSON.parse(savedEmployees) : [
-      { id: 1, name: 'John Doe', email: 'john@example.com', department: 'Engineering', status: 'Active', role: 'Developer' },
-      { id: 2, name: 'Jane Smith', email: 'jane@example.com', department: 'HR', status: 'Active', role: 'Recruiter' },
-      { id: 3, name: 'Bob Johnson', email: 'bob@example.com', department: 'Sales', status: 'Inactive', role: 'Sales Executive' },
-    ];
->>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
+  // Load access rules from localStorage on component mount
+  const [accessRules, setAccessRules] = useState(() => {
+    const savedRules = localStorage.getItem('access_rules');
+    return savedRules ? JSON.parse(savedRules) : [];
   });
   
-  const [newEmployee, setNewEmployee] = useState({});
+  const [newRule, setNewRule] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -42,7 +33,7 @@ const EmployeeMaster = () => {
   
   // Load columns from localStorage
   const [columns, setColumns] = useState(() => {
-    const savedColumns = localStorage.getItem('employee_columns');
+    const savedColumns = localStorage.getItem('access_columns');
     return savedColumns ? JSON.parse(savedColumns) : initialColumns;
   });
   
@@ -55,49 +46,55 @@ const EmployeeMaster = () => {
 
   // Department filter state - Load from localStorage
   const [departmentFilter, setDepartmentFilter] = useState(() => {
-    const savedFilter = localStorage.getItem('department_filter');
+    const savedFilter = localStorage.getItem('access_department_filter');
     return savedFilter || "All Departments";
   });
 
-  // Save employees and columns to localStorage whenever they change
+  // Access Level filter state
+  const [accessLevelFilter, setAccessLevelFilter] = useState("All Access Levels");
+
+  const accessLevels = ['Admin', 'Manager', 'User', 'Viewer'];
+  const modulesList = ['Dashboard', 'Employee Master', 'Project Master', 'Reports', 'Settings', 'Analytics'];
+
+  // Save access rules and columns to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem('employees', JSON.stringify(employees));
-    localStorage.setItem('employee_columns', JSON.stringify(columns));
-  }, [employees, columns]);
+    localStorage.setItem('access_rules', JSON.stringify(accessRules));
+    localStorage.setItem('access_columns', JSON.stringify(columns));
+  }, [accessRules, columns]);
 
   // Save department filter preference
   useEffect(() => {
-    localStorage.setItem('department_filter', departmentFilter);
+    localStorage.setItem('access_department_filter', departmentFilter);
   }, [departmentFilter]);
 
-  // Get unique departments from employee data
-  const uniqueDepartments = ["All Departments", ...new Set(employees.map(emp => emp.department).filter(Boolean))];
+  // Get unique departments from access rules data
+  const uniqueDepartments = ["All Departments", ...new Set(accessRules.map(rule => rule.department).filter(Boolean))];
 
-  // Handle department filter change
-  const handleDepartmentFilterChange = (dept) => {
-    setDepartmentFilter(dept);
-  };
-
-  // Filter employees based on search and department
-  const filteredEmployees = employees.filter(emp => {
+  // Filter access rules based on search, department, and access level
+  const filteredRules = accessRules.filter(rule => {
     // Search filter
-    const matchesSearch = Object.values(emp).some(value => 
+    const matchesSearch = Object.values(rule).some(value => 
       String(value).toLowerCase().includes(searchTerm.toLowerCase())
     );
     
     // Department filter
     const matchesDepartment = 
       departmentFilter === "All Departments" || 
-      emp.department === departmentFilter;
+      rule.department === departmentFilter;
     
-    return matchesSearch && matchesDepartment;
+    // Access Level filter
+    const matchesAccessLevel = 
+      accessLevelFilter === "All Access Levels" || 
+      rule.accessLevel === accessLevelFilter;
+    
+    return matchesSearch && matchesDepartment && matchesAccessLevel;
   });
 
-  // Sort employees
-  const sortedEmployees = React.useMemo(() => {
-    if (!sortConfig.key) return filteredEmployees;
+  // Sort rules
+  const sortedRules = React.useMemo(() => {
+    if (!sortConfig.key) return filteredRules;
 
-    return [...filteredEmployees].sort((a, b) => {
+    return [...filteredRules].sort((a, b) => {
       const aVal = a[sortConfig.key] || '';
       const bVal = b[sortConfig.key] || '';
       
@@ -109,7 +106,7 @@ const EmployeeMaster = () => {
       }
       return 0;
     });
-  }, [filteredEmployees, sortConfig]);
+  }, [filteredRules, sortConfig]);
 
   // Handle sorting
   const handleSort = (key) => {
@@ -130,78 +127,119 @@ const EmployeeMaster = () => {
       : <ChevronDown className="h-3 w-3 sm:h-4 sm:w-4" />;
   };
 
-  // Validate employee form
-  const validateEmployeeForm = (employee) => {
+  // Validate access rule form
+  const validateRuleForm = (rule) => {
     const requiredColumns = columns.filter(col => col.required && col.visible);
     
     for (const column of requiredColumns) {
-      if (!employee[column.id]?.toString().trim()) {
+      if (!rule[column.id]?.toString().trim()) {
         return `${column.label} is required`;
-      }
-      if (column.type === 'email' && !employee[column.id].includes('@')) {
-        return 'Please enter a valid email address';
       }
     }
     return '';
   };
 
-  // Handle Add Employee button click
-  const handleAddEmployeeClick = () => {
+  // Handle Add Rule button click
+  const handleAddRuleClick = () => {
     setIsAddingNew(true);
-    // Initialize empty new employee with default values for all visible columns
-    const initialEmployee = {};
+    // Initialize empty new rule with default values for all visible columns
+    const initialRule = {};
     columns.filter(col => col.visible).forEach(col => {
-      initialEmployee[col.id] = col.type === 'select' ? 'Active' : '';
+      if (col.id === 'accessLevel') {
+        initialRule[col.id] = 'User';
+      } else if (col.id === 'status') {
+        initialRule[col.id] = 'Active';
+      } else if (col.id === 'modules') {
+        initialRule[col.id] = [];
+      } else {
+        initialRule[col.id] = '';
+      }
     });
-    setNewEmployee(initialEmployee);
+    setNewRule(initialRule);
   };
 
-  // Save new employee from bottom row
-  const saveNewEmployee = () => {
-    const error = validateEmployeeForm(newEmployee);
+  // Save new rule from bottom row
+  const saveNewRule = () => {
+    const error = validateRuleForm(newRule);
     if (error) {
       alert(error);
       return;
     }
 
-    const newId = Math.max(...employees.map(e => e.id), 0) + 1;
-    const employeeToAdd = { 
-      ...newEmployee, 
+    const newId = Math.max(...accessRules.map(r => r.id), 0) + 1;
+    const ruleToAdd = { 
+      ...newRule, 
       id: newId 
     };
     
     // Ensure all columns have values
     columns.forEach(col => {
-      if (!employeeToAdd.hasOwnProperty(col.id)) {
-        employeeToAdd[col.id] = col.type === 'select' ? 'Active' : '';
+      if (!ruleToAdd.hasOwnProperty(col.id)) {
+        if (col.id === 'accessLevel') {
+          ruleToAdd[col.id] = 'User';
+        } else if (col.id === 'status') {
+          ruleToAdd[col.id] = 'Active';
+        } else if (col.id === 'modules') {
+          ruleToAdd[col.id] = [];
+        } else {
+          ruleToAdd[col.id] = '';
+        }
       }
     });
     
-    setEmployees([...employees, employeeToAdd]);
+    setAccessRules([...accessRules, ruleToAdd]);
     
-    // Reset new employee form
-    const emptyEmployee = {};
+    // Reset new rule form
+    const emptyRule = {};
     columns.filter(col => col.visible).forEach(col => {
-      emptyEmployee[col.id] = col.type === 'select' ? 'Active' : '';
+      if (col.id === 'accessLevel') {
+        emptyRule[col.id] = 'User';
+      } else if (col.id === 'status') {
+        emptyRule[col.id] = 'Active';
+      } else if (col.id === 'modules') {
+        emptyRule[col.id] = [];
+      } else {
+        emptyRule[col.id] = '';
+      }
     });
-    setNewEmployee(emptyEmployee);
+    setNewRule(emptyRule);
   };
 
-  // Cancel adding new employee
-  const cancelNewEmployee = () => {
+  // Cancel adding new rule
+  const cancelNewRule = () => {
     setIsAddingNew(false);
-    setNewEmployee({});
+    setNewRule({});
+  };
+
+  // Toggle module selection for new rule
+  const toggleModule = (module) => {
+    const currentModules = newRule.modules || [];
+    if (currentModules.includes(module)) {
+      setNewRule({...newRule, modules: currentModules.filter(m => m !== module)});
+    } else {
+      setNewRule({...newRule, modules: [...currentModules, module]});
+    }
+  };
+
+  // Toggle module in edit form
+  const toggleEditModule = (module) => {
+    const currentModules = editForm.modules || [];
+    if (currentModules.includes(module)) {
+      setEditForm({...editForm, modules: currentModules.filter(m => m !== module)});
+    } else {
+      setEditForm({...editForm, modules: [...currentModules, module]});
+    }
   };
 
   // Show delete prompt
-  const showDeleteConfirmation = (id, name) => {
-    setShowDeletePrompt({ id, name });
+  const showDeleteConfirmation = (id, employee) => {
+    setShowDeletePrompt({ id, employee });
   };
 
-  // Confirm delete employee
-  const confirmDeleteEmployee = () => {
+  // Confirm delete rule
+  const confirmDeleteRule = () => {
     if (showDeletePrompt) {
-      setEmployees(employees.filter(emp => emp.id !== showDeletePrompt.id));
+      setAccessRules(accessRules.filter(rule => rule.id !== showDeletePrompt.id));
       setShowDeletePrompt(null);
     }
   };
@@ -235,16 +273,22 @@ const EmployeeMaster = () => {
       
       setColumns([...columns, newColumn]);
       
-      // Add default value for this column to all existing employees
-      const defaultValue = newColumnType === 'select' ? 'Active' : '';
-      setEmployees(employees.map(emp => ({
-        ...emp,
+      // Add default value for this column to all existing rules
+      let defaultValue = '';
+      if (newColumnType === 'select') {
+        defaultValue = 'Active';
+      } else if (newColumnType === 'modules') {
+        defaultValue = [];
+      }
+      
+      setAccessRules(accessRules.map(rule => ({
+        ...rule,
         [newColumnId]: defaultValue
       })));
       
-      // Also add to newEmployee if it exists
+      // Also add to newRule if it exists
       if (isAddingNew) {
-        setNewEmployee(prev => ({
+        setNewRule(prev => ({
           ...prev,
           [newColumnId]: defaultValue
         }));
@@ -280,21 +324,21 @@ const EmployeeMaster = () => {
 
   // Delete column
   const handleDeleteColumn = (columnId) => {
-    if (window.confirm('Are you sure you want to delete this column? This will remove this column from all employees.')) {
+    if (window.confirm('Are you sure you want to delete this column? This will remove this column from all access rules.')) {
       setColumns(columns.filter(col => col.id !== columnId));
       
-      // Remove this column from all employees
-      setEmployees(employees.map(emp => {
-        const newEmp = { ...emp };
-        delete newEmp[columnId];
-        return newEmp;
+      // Remove this column from all rules
+      setAccessRules(accessRules.map(rule => {
+        const newRule = { ...rule };
+        delete newRule[columnId];
+        return newRule;
       }));
       
-      // Remove from newEmployee if it exists
+      // Remove from newRule if it exists
       if (isAddingNew) {
-        const newEmp = { ...newEmployee };
+        const newEmp = { ...newRule };
         delete newEmp[columnId];
-        setNewEmployee(newEmp);
+        setNewRule(newEmp);
       }
     }
   };
@@ -306,48 +350,56 @@ const EmployeeMaster = () => {
     ));
   };
 
-  // Start editing employee
-  const startEditing = (employee) => {
+  // Start editing rule
+  const startEditing = (rule) => {
     // Cancel any current add operation
     if (isAddingNew) {
       setIsAddingNew(false);
-      setNewEmployee({});
+      setNewRule({});
     }
     
-    setEditingId(employee.id);
-    const editData = { ...employee };
+    setEditingId(rule.id);
+    const editData = { ...rule };
     columns.forEach(col => {
       if (!editData.hasOwnProperty(col.id)) {
-        editData[col.id] = col.type === 'select' ? 'Active' : '';
+        if (col.id === 'accessLevel') {
+          editData[col.id] = 'User';
+        } else if (col.id === 'status') {
+          editData[col.id] = 'Active';
+        } else if (col.id === 'modules') {
+          editData[col.id] = [];
+        } else {
+          editData[col.id] = '';
+        }
       }
     });
     setEditForm(editData);
   };
 
-  // Save employee edit
+  // Save rule edit
   const saveEdit = () => {
-    const error = validateEmployeeForm(editForm);
+    const error = validateRuleForm(editForm);
     if (error) {
       alert(error);
       return;
     }
     
-    setEmployees(employees.map(emp => 
-      emp.id === editingId ? { ...emp, ...editForm } : emp
+    setAccessRules(accessRules.map(rule => 
+      rule.id === editingId ? { ...rule, ...editForm } : rule
     ));
     setEditingId(null);
     setEditForm({});
   };
 
-  // Cancel employee edit
+  // Cancel rule edit
   const cancelEdit = () => {
     setEditingId(null);
     setEditForm({});
   };
 
-  // Handle new employee input change
-  const handleNewEmployeeChange = (field, value) => {
-    setNewEmployee({...newEmployee, [field]: value});
+  // Handle new rule input change
+  const handleNewRuleChange = (field, value) => {
+    setNewRule({...newRule, [field]: value});
   };
 
   // Handle edit form change
@@ -355,9 +407,53 @@ const EmployeeMaster = () => {
     setEditForm({...editForm, [field]: value});
   };
 
+  // Handle department filter change
+  const handleDepartmentFilterChange = (dept) => {
+    setDepartmentFilter(dept);
+  };
+
+  // Handle access level filter change
+  const handleAccessLevelFilterChange = (level) => {
+    setAccessLevelFilter(level);
+  };
+
   // Render input based on column type
-  const renderInput = (column, value, onChange, placeholder = true) => {
-    if (column.type === 'select') {
+  const renderInput = (column, value, onChange, placeholder = true, isEditMode = false) => {
+    if (column.id === 'accessLevel') {
+      return (
+        <select
+          value={value || 'User'}
+          onChange={(e) => onChange(column.id, e.target.value)}
+          className="w-full px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded"
+        >
+          {accessLevels.map(level => (
+            <option key={level} value={level}>{level}</option>
+          ))}
+        </select>
+      );
+    } else if (column.id === 'modules') {
+      if (isEditMode) {
+        return (
+          <div className="flex flex-wrap gap-1">
+            {modulesList.map(module => (
+              <button
+                key={module}
+                type="button"
+                onClick={() => toggleEditModule(module)}
+                className={`px-2 py-0.5 rounded text-[10px] sm:text-xs border ${
+                  (editForm.modules || []).includes(module)
+                    ? 'bg-blue-100 text-blue-800 border-blue-300'
+                    : 'bg-gray-100 text-gray-700 border-gray-300'
+                }`}
+              >
+                {module}
+              </button>
+            ))}
+          </div>
+        );
+      }
+      return null;
+    } else if (column.id === 'status') {
       return (
         <select
           value={value || 'Active'}
@@ -369,15 +465,17 @@ const EmployeeMaster = () => {
           <option value="Pending">Pending</option>
         </select>
       );
-    } else if (column.type === 'email') {
+    } else if (column.type === 'select') {
       return (
-        <input
-          type="email"
-          placeholder={placeholder ? `Enter ${column.label.toLowerCase()}` : ''}
+        <select
           value={value || ''}
           onChange={(e) => onChange(column.id, e.target.value)}
           className="w-full px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded"
-        />
+        >
+          <option value="">Select {column.label}</option>
+          <option value="Active">Active</option>
+          <option value="Inactive">Inactive</option>
+        </select>
       );
     } else {
       return (
@@ -393,26 +491,63 @@ const EmployeeMaster = () => {
   };
 
   // Render cell content based on column type
-  const renderCellContent = (column, value) => {
-    if (column.type === 'select' || column.id === 'status') {
+  const renderCellContent = (column, value, rule) => {
+    if (column.id === 'accessLevel') {
       return (
-        <span className={`px-2 py-1 rounded-full text-[10px] sm:text-xs ${
-          value === 'Active' 
-            ? 'bg-green-100 text-green-800' 
-            : value === 'Inactive'
-            ? 'bg-red-100 text-red-800'
-            : 'bg-gray-100 text-gray-800'
+        <span className={`px-2 py-1 rounded-full text-[10px] sm:text-xs whitespace-nowrap ${
+          value === 'Admin' ? 'bg-red-100 text-red-800' :
+          value === 'Manager' ? 'bg-blue-100 text-blue-800' :
+          value === 'User' ? 'bg-green-100 text-green-800' :
+          'bg-gray-100 text-gray-800'
         }`}>
           {value || '-'}
         </span>
+      );
+    } else if (column.id === 'modules') {
+      const modules = rule.modules || [];
+      return (
+        <div className="flex flex-wrap gap-1">
+          {modules.slice(0, 2).map(module => (
+            <span key={module} className="px-2 py-0.5 bg-gray-100 rounded text-[10px] sm:text-xs">
+              {module}
+            </span>
+          ))}
+          {modules.length > 2 && (
+            <span className="px-2 py-0.5 bg-gray-100 rounded text-[10px] sm:text-xs">
+              +{modules.length - 2}
+            </span>
+          )}
+          {modules.length === 0 && <span>-</span>}
+        </div>
+      );
+    } else if (column.id === 'status' || column.type === 'select') {
+      return (
+        <div className="flex items-center">
+          {value === 'Active' ? (
+            <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 text-green-500 mr-1" />
+          ) : value === 'Inactive' ? (
+            <XCircle className="h-3 w-3 sm:h-4 sm:w-4 text-red-500 mr-1" />
+          ) : (
+            <XCircle className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 mr-1" />
+          )}
+          <span className={`px-2 py-1 rounded-full text-[10px] sm:text-xs ${
+            value === 'Active' 
+              ? 'bg-green-100 text-green-800' 
+              : value === 'Inactive'
+              ? 'bg-red-100 text-red-800'
+              : 'bg-gray-100 text-gray-800'
+          }`}>
+            {value || '-'}
+          </span>
+        </div>
       );
     }
     return value || '-';
   };
 
   return (
-    <div className="space-y-3 sm:space-y-4 employee-master-container">
-      {/* Delete Employee Prompt Modal */}
+    <div className="space-y-3 sm:space-y-4">
+      {/* Delete Rule Prompt Modal */}
       {showDeletePrompt && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
@@ -424,7 +559,7 @@ const EmployeeMaster = () => {
             </div>
             <div className="mb-4">
               <p className="text-xs sm:text-sm text-gray-600">
-                Are you sure you want to delete employee <span className="font-medium">{showDeletePrompt.name}</span>?
+                Are you sure you want to delete access rule for <span className="font-medium">{showDeletePrompt.employee}</span>?
               </p>
               <p className="text-xs text-red-600 mt-1">This action cannot be undone.</p>
             </div>
@@ -436,7 +571,7 @@ const EmployeeMaster = () => {
                 Cancel
               </button>
               <button
-                onClick={confirmDeleteEmployee}
+                onClick={confirmDeleteRule}
                 className="px-3 py-1.5 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700"
               >
                 Delete
@@ -573,10 +708,10 @@ const EmployeeMaster = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0">
         <div>
           <h2 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center">
-            <Users className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-            Employee Master
+            <Key className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+            Employee Access
           </h2>
-          <p className="text-xs sm:text-sm text-gray-600 mt-0.5 sm:mt-1">Manage employee records</p>
+          <p className="text-xs sm:text-sm text-gray-600 mt-0.5 sm:mt-1">Manage employee permissions and access controls</p>
         </div>
         <button className="flex items-center justify-center sm:justify-start space-x-1 px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50 w-full sm:w-auto">
           <Download className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -588,27 +723,38 @@ const EmployeeMaster = () => {
       <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         <div className="bg-white border border-gray-300 rounded p-3 sm:p-4 flex items-center">
           <div className="bg-gray-100 p-1.5 sm:p-2 rounded mr-2 sm:mr-3">
-            <Users className="h-3 w-3 sm:h-4 sm:w-4 text-gray-600" />
+            <Key className="h-3 w-3 sm:h-4 sm:w-4 text-gray-600" />
           </div>
           <div>
-            <p className="text-[10px] sm:text-xs text-gray-500">Total</p>
-            <p className="text-sm sm:text-base font-bold text-gray-900">{employees.length}</p>
+            <p className="text-[10px] sm:text-xs text-gray-500">Access Rules</p>
+            <p className="text-sm sm:text-base font-bold text-gray-900">{accessRules.length}</p>
           </div>
         </div>
         <div className="bg-white border border-gray-300 rounded p-3 sm:p-4 flex items-center">
           <div className="bg-green-100 p-1.5 sm:p-2 rounded mr-2 sm:mr-3">
-            <Check className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
+            <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
           </div>
           <div>
-            <p className="text-[10px] sm:text-xs text-gray-500">Active</p>
+            <p className="text-[10px] sm:text-xs text-gray-500">Active Access</p>
             <p className="text-sm sm:text-base font-bold text-green-600">
-              {employees.filter(e => e.status === 'Active').length}
+              {accessRules.filter(r => r.status === 'Active').length}
             </p>
           </div>
         </div>
         <div className="bg-white border border-gray-300 rounded p-3 sm:p-4 flex items-center">
           <div className="bg-blue-100 p-1.5 sm:p-2 rounded mr-2 sm:mr-3">
-            <Users className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600" />
+            <Shield className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600" />
+          </div>
+          <div>
+            <p className="text-[10px] sm:text-xs text-gray-500">Admin Users</p>
+            <p className="text-sm sm:text-base font-bold text-blue-600">
+              {accessRules.filter(r => r.accessLevel === 'Admin').length}
+            </p>
+          </div>
+        </div>
+        <div className="bg-white border border-gray-300 rounded p-3 sm:p-4 flex items-center">
+          <div className="bg-yellow-100 p-1.5 sm:p-2 rounded mr-2 sm:mr-3">
+            <Key className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-600" />
           </div>
           <div>
             <p className="text-[10px] sm:text-xs text-gray-500">Departments</p>
@@ -617,22 +763,11 @@ const EmployeeMaster = () => {
             </p>
           </div>
         </div>
-        <div className="bg-white border border-gray-300 rounded p-3 sm:p-4 flex items-center">
-          <div className="bg-yellow-100 p-1.5 sm:p-2 rounded mr-2 sm:mr-3">
-            <Users className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-600" />
-          </div>
-          <div>
-            <p className="text-[10px] sm:text-xs text-gray-500">Inactive</p>
-            <p className="text-sm sm:text-base font-bold text-yellow-600">
-              {employees.filter(e => e.status === 'Inactive').length}
-            </p>
-          </div>
-        </div>
       </div>
 
       {/* Table Container with Toolbar */}
       <div className="bg-white border border-gray-300 rounded p-3 sm:p-4">
-        {/* Toolbar with Search, Add Employee, Add Columns */}
+        {/* Toolbar with Search, Add Rule, Add Columns */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 mb-3">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <div className="relative w-full sm:w-48">
@@ -646,19 +781,19 @@ const EmployeeMaster = () => {
               />
             </div>
             
-            {/* Add Employee Button - Black */}
+            {/* Add Rule Button - Black */}
             <button
-              onClick={handleAddEmployeeClick}
+              onClick={handleAddRuleClick}
               className="flex items-center justify-center space-x-1 px-3 py-2 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800 w-full sm:w-auto"
             >
               <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-              <span>Add Employee</span>
+              <span>Add Access Rule</span>
             </button>
 
             {/* Add Columns Button */}
             <button 
               onClick={() => setShowColumnModal(true)}
-             className="flex items-center justify-center space-x-1 px-3 py-2 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800 w-full sm:w-auto"
+              className="flex items-center justify-center space-x-1 px-3 py-2 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800 w-full sm:w-auto"
             >
               <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
               <span>Add Column</span>
@@ -667,12 +802,12 @@ const EmployeeMaster = () => {
           </div>
           
           {/* Department Filter with Blue Icon */}
-          <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-            <div className="relative">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+            <div className="relative w-full sm:w-48">
               <select
                 value={departmentFilter}
                 onChange={(e) => handleDepartmentFilterChange(e.target.value)}
-                className="w-full sm:w-auto pl-8 pr-8 py-2 text-xs sm:text-sm border border-gray-300 rounded appearance-none bg-white"
+                className="w-full pl-8 pr-8 py-2 text-xs sm:text-sm border border-gray-300 rounded appearance-none bg-white"
               >
                 {uniqueDepartments.map((dept) => (
                   <option key={dept} value={dept}>
@@ -699,12 +834,35 @@ const EmployeeMaster = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </div>
+
+            {/* Access Level Filter */}
+            <div className="relative w-full sm:w-48">
+              <select
+                value={accessLevelFilter}
+                onChange={(e) => handleAccessLevelFilterChange(e.target.value)}
+                className="w-full pl-3 pr-8 py-2 text-xs sm:text-sm border border-gray-300 rounded appearance-none bg-white"
+              >
+                <option value="All Access Levels">All Access Levels</option>
+                {accessLevels.map(level => (
+                  <option key={level} value={level}>{level}</option>
+                ))}
+              </select>
+              {/* Dropdown arrow */}
+              <svg 
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none"
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
           </div>
         </div>
 
-        {/* Table Container - Horizontal scroll only here */}
-        <div className="table-scroll-container">
-          <table className="min-w-full text-xs sm:text-sm">
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs sm:text-sm">
             <thead>
               <tr className="border-b border-gray-300">
                 {/* Render only visible columns */}
@@ -713,7 +871,7 @@ const EmployeeMaster = () => {
                   .map((column) => (
                     <th 
                       key={column.id}
-                      className="text-left py-2 px-2 sm:px-3 font-medium text-gray-700 cursor-pointer hover:bg-gray-50 whitespace-nowrap min-w-[150px]"
+                      className="text-left py-2 px-2 sm:px-3 font-medium text-gray-700 cursor-pointer hover:bg-gray-50"
                       onClick={() => column.sortable && handleSort(column.id)}
                     >
                       <div className="flex items-center justify-between">
@@ -725,24 +883,24 @@ const EmployeeMaster = () => {
                       </div>
                     </th>
                   ))}
-                <th className="text-left py-2 px-2 sm:px-3 font-medium text-gray-700 whitespace-nowrap min-w-[100px]">Actions</th>
+                <th className="text-left py-2 px-2 sm:px-3 font-medium text-gray-700">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {/* Existing employees */}
-              {sortedEmployees.map((employee) => (
-                <tr key={employee.id} className="border-b border-gray-200 hover:bg-gray-50">
-                  {editingId === employee.id ? (
+              {/* Existing rules */}
+              {sortedRules.map((rule) => (
+                <tr key={rule.id} className="border-b border-gray-200 hover:bg-gray-50">
+                  {editingId === rule.id ? (
                     <>
                       {/* Edit mode for visible columns */}
                       {columns
                         .filter(col => col.visible)
                         .map((column) => (
-                          <td key={column.id} className="py-2 px-2 sm:px-3 whitespace-nowrap min-w-[150px]">
-                            {renderInput(column, editForm[column.id], handleEditFormChange, false)}
+                          <td key={column.id} className="py-2 px-2 sm:px-3">
+                            {renderInput(column, editForm[column.id], handleEditFormChange, false, true)}
                           </td>
                         ))}
-                      <td className="py-2 px-2 sm:px-3 whitespace-nowrap min-w-[100px]">
+                      <td className="py-2 px-2 sm:px-3">
                         <div className="flex items-center space-x-2">
                           <button 
                             onClick={saveEdit}
@@ -767,21 +925,21 @@ const EmployeeMaster = () => {
                       {columns
                         .filter(col => col.visible)
                         .map((column) => (
-                          <td key={column.id} className="py-2 px-2 sm:px-3 whitespace-nowrap min-w-[150px]">
-                            {renderCellContent(column, employee[column.id])}
+                          <td key={column.id} className="py-2 px-2 sm:px-3">
+                            {renderCellContent(column, rule[column.id], rule)}
                           </td>
                         ))}
-                      <td className="py-2 px-2 sm:px-3 whitespace-nowrap min-w-[100px]">
+                      <td className="py-2 px-2 sm:px-3">
                         <div className="flex items-center space-x-2">
                           <button 
-                            onClick={() => startEditing(employee)}
+                            onClick={() => startEditing(rule)}
                             className="p-1 text-blue-600 hover:text-blue-800"
                             title="Edit"
                           >
                             <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
                           </button>
                           <button 
-                            onClick={() => showDeleteConfirmation(employee.id, employee.name)}
+                            onClick={() => showDeleteConfirmation(rule.id, rule.employee)}
                             className="p-1 text-red-600 hover:text-red-800"
                             title="Delete"
                           >
@@ -794,27 +952,42 @@ const EmployeeMaster = () => {
                 </tr>
               ))}
 
-              {/* Add new employee row at the bottom */}
+              {/* Add new rule row at the bottom */}
               {isAddingNew && (
                 <tr className="border-b border-gray-200 bg-blue-50">
                   {columns
                     .filter(col => col.visible)
                     .map((column) => (
-                      <td key={column.id} className="py-2 px-2 sm:px-3 whitespace-nowrap min-w-[150px]">
-                        {renderInput(column, newEmployee[column.id], handleNewEmployeeChange)}
+                      <td key={column.id} className="py-2 px-2 sm:px-3">
+                        {column.id === 'modules' ? (
+                          <div className="flex flex-wrap gap-1">
+                            {modulesList.slice(0, 2).map(module => (
+                              <span key={module} className="px-2 py-0.5 bg-gray-100 rounded text-[10px] sm:text-xs">
+                                {module}
+                              </span>
+                            ))}
+                            {newRule.modules && newRule.modules.length > 2 && (
+                              <span className="px-2 py-0.5 bg-gray-100 rounded text-[10px] sm:text-xs">
+                                +{newRule.modules.length - 2}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          renderInput(column, newRule[column.id], handleNewRuleChange)
+                        )}
                       </td>
                     ))}
-                  <td className="py-2 px-2 sm:px-3 whitespace-nowrap min-w-[100px]">
+                  <td className="py-2 px-2 sm:px-3">
                     <div className="flex items-center space-x-2">
                       <button 
-                        onClick={saveNewEmployee}
+                        onClick={saveNewRule}
                         className="p-1 text-green-600 hover:text-green-800"
                         title="Save"
                       >
                         <Check className="h-3 w-3 sm:h-4 sm:w-4" />
                       </button>
                       <button 
-                        onClick={cancelNewEmployee}
+                        onClick={cancelNewRule}
                         className="p-1 text-red-600 hover:text-red-800"
                         title="Cancel"
                       >
@@ -831,19 +1004,9 @@ const EmployeeMaster = () => {
         {/* Compact Pagination - Responsive */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-0 mt-3 pt-3 border-t border-gray-300">
           <div className="text-[10px] sm:text-xs text-gray-600">
-            Showing {sortedEmployees.length} of {employees.length} employees
+            Showing {sortedRules.length} of {accessRules.length} access rules
             {departmentFilter !== "All Departments" && ` (Filtered by ${departmentFilter})`}
-<<<<<<< HEAD
-=======
-          </div>
-          <div className="flex space-x-1">
-            <button className="px-2 sm:px-3 py-1 text-[10px] sm:text-xs border border-gray-300 rounded bg-gray-100">
-              1
-            </button>
-            <button className="px-2 sm:px-3 py-1 text-[10px] sm:text-xs border border-gray-300 rounded hover:bg-gray-50">
-              2
-            </button>
->>>>>>> 22615f060814f0514356b46be6e56c26f64f21c2
+            {accessLevelFilter !== "All Access Levels" && ` and ${accessLevelFilter}`}
           </div>
         </div>
       </div>
@@ -851,4 +1014,4 @@ const EmployeeMaster = () => {
   );
 };
 
-export default EmployeeMaster;
+export default EmployeeAccess;
