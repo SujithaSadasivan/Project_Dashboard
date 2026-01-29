@@ -31,7 +31,12 @@ app = FastAPI(
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL],
+    allow_origins= [
+    "https://automated-manufacturing.vercel.app",   # production frontend
+    "https://automated-manufact-git-6ff091-gokulakrishnans-projects-78c7d2dd.vercel.app",  # preview
+    "https://automated-manufacturing-kdmeekg5b.vercel.app",  # preview
+    "http://localhost:5173",  # local frontend testing
+],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
