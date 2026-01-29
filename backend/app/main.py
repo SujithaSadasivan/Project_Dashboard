@@ -54,3 +54,7 @@ async def test_db(db: AsyncSession = Depends(get_db)):
     result = await db.execute("SELECT NOW()")
     current_time = result.scalar()
     return {"current_time": str(current_time)}
+
+@app.get("/healthz")
+def health_check():
+    return {"status": "ok"}
