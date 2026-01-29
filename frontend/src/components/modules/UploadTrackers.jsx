@@ -364,7 +364,7 @@ const UploadTrackers = () => {
     }
 
     // 2️⃣ CALL CORRECT ENDPOINT
-    const response = await API.post("/upload", formData, {
+    const response = await API.post("/datasets/upload", formData, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
