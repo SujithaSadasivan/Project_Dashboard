@@ -1,7 +1,8 @@
 # backend/app/api/datasets.py
 
-from fastapi import APIRouter, UploadFile, HTTPException, File, Depends
+from fastapi import APIRouter, UploadFile, Form, HTTPException, File, Depends
 from sqlalchemy.orm import Session
+from typing import Optional
 import pandas as pd
 from io import BytesIO
 
@@ -142,7 +143,7 @@ def get_chart_data(
         "count": len(x_vals)
     }
 
-@app.post("/upload")
+@router.post("/upload")
 async def upload_dataset(
     file: UploadFile = File(...),
     industry: Optional[str] = Form(None),  # matches frontend form data
