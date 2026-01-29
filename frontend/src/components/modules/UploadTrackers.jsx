@@ -347,70 +347,58 @@ const UploadTrackers = () => {
     await handleFileUpload(uploadForm.file);
   };
 
-  // Handle file upload
   const handleFileUpload = async (file) => {
-    if (!file) return;
-    
-    setUploading(true);
-    setProgress(0);
-    setSelectedFile(file);
-    
-    try {
-      // Read and parse the file first
-      const fileData = await readFileData(file);
-      const recordCount = fileData.data.length;
-      
-      // Then simulate upload progress
-      const progressInterval = setInterval(() => {
-        setProgress(prev => {
-          if (prev >= 100) {
-            clearInterval(progressInterval);
-            
-            // Create new tracker after upload completes
-            const newTracker = {
-              id: Math.max(...trackers.map(t => t.id), 0) + 1,
-              name: file.name,
-              type: file.name.split('.').pop().toUpperCase(),
-              date: new Date().toISOString().split('T')[0],
-              uploadedBy: 'Current User',
-              uploadId: uploadForm.id,
-              uploadName: uploadForm.name,
-              uploadDepartment: uploadForm.department
-            };
-            
-            // Store the file data
-            setUploadedFilesData(prev => ({
-              ...prev,
-              [newTracker.id]: fileData
-            }));
-            
-            // Add to trackers
-            setTrackers([newTracker, ...trackers]);
-            
-            // Reset states
-            setUploading(false);
-            setProgress(0);
-            setSelectedFile(null);
-            setUploadForm({
-              id: '',
-              name: '',
-              department: '',
-              file: null
-            });
-            
-            return 100;
-          }
-          return prev + 20;
-        });
-      }, 300);
-      
-    } catch (error) {
-      console.error('Error uploading file:', error);
-      setUploading(false);
-      setProgress(0);
-      alert(`Error reading file: ${error.message}. Please make sure it's a valid file format.`);
+  if (!file) return;
+
+  setUploading(true);
+  setProgress(20);
+
+  try {
+    // 1️⃣ FormData EXACTLY as backend expects
+    const formData = new FormData();
+    formData.append("file", file);
+
+    // industry is optional
+    if (uploadForm.department) {
+      formData.append("industry", uploadForm.department);
     }
-  };
+
+    // 2️⃣ CALL CORRECT ENDPOINT
+    const response = await API.post("/upload", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+
+    setProgress(100);
+
+    // 3️⃣ BACKEND RESPONSE
+    const { dataset_id, rows, columns } = response.data;
+
+    // 4️⃣ USE REAL DATABASE ID (🔥 VERY IMPORTANT 🔥)
+    const newTracker = {
+      id: dataset_id, // ✅ REAL DB ID
+      name: file.name,
+      type: file.name.split('.').pop().toUpperCase(),
+      date: new Date().toISOString().split('T')[0],
+      uploadedBy: 'Current User',
+      rowCount: rows,
+      columns,
+    };
+
+    setTrackers(prev => [newTracker, ...prev]);
+
+  } catch (error) {
+    console.error("Upload failed:", error);
+    alert("Upload failed. Please check backend logs.");
+  } finally {
+    setUploading(false);
+    setProgress(0);
+    setSelectedFile(null);
+  }
+};
+
+
 
   // Show delete prompt
   const showDeleteConfirmation = (id, name) => {
