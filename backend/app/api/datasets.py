@@ -142,57 +142,64 @@ def get_chart_data(
         "count": len(x_vals)
     }
 
-@router.post("/upload")
+@app.post("/upload")
 async def upload_dataset(
     file: UploadFile = File(...),
-    industry: str | None = None,
+    industry: Optional[str] = Form(None),  # matches frontend form data
     db: Session = Depends(get_db)
 ):
-    content = await file.read()
+    """
+    Accepts CSV or Excel file and stores dataset, columns, and rows in DB.
+    Returns dataset metadata compatible with frontend.
+    """
 
-    if file.filename.endswith(".csv"):
-        df = pd.read_csv(BytesIO(content))
-    else:
-        df = pd.read_excel(BytesIO(content))
+    # 1️⃣ Read file into DataFrame
+    try:
+        if file.filename.endswith(".csv"):
+            df = pd.read_csv(file.file)
+        else:
+            df = pd.read_excel(file.file)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read file: {e}")
 
-    df = df.fillna("")
+    df = df.fillna("")  # replace NaN with empty string
 
+    # 2️⃣ Store dataset metadata
     dataset = Dataset(
         name=file.filename,
         industry=industry,
         file_type=file.filename.split(".")[-1].upper(),
         row_count=len(df)
     )
-
     db.add(dataset)
     db.commit()
     db.refresh(dataset)
 
-    # Save column metadata
+    # 3️⃣ Store column metadata
     for col in df.columns:
         db.add(DatasetColumn(
             dataset_id=dataset.id,
             column_name=col,
             data_type=infer_column_type(df[col])
         ))
-
     db.commit()
 
-    # 🚀 BULK INSERT (FIXES 60% STUCK)
+    # 4️⃣ Bulk insert rows
     rows = [
         DatasetRow(dataset_id=dataset.id, row_data=row.to_dict())
         for _, row in df.iterrows()
     ]
-
     db.bulk_save_objects(rows)
     db.commit()
 
+    # 5️⃣ Return metadata for frontend tracker
     return {
         "dataset_id": dataset.id,
         "rows": len(df),
-        "columns": list(df.columns)
+        "columns": list(df.columns),
+        "file_name": file.filename,
+        "file_type": file.filename.split(".")[-1].upper(),
     }
-
 
 # ✅ THIS IS WHERE YOUR QUESTIONED CODE GOES
 @router.get("/{dataset_id}/schema")
