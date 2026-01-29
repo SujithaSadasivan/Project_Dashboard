@@ -19,21 +19,13 @@ from app.api import department as department_router
 from app.api.datasets import router as datasets_router
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Create tables on startup
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    print("Database tables checked/created")
-
-    yield
-    print("Application shutdown")
+Base.metadata.create_all(bind=engine)
 
 
 app = FastAPI(
     title="MyFastAPIApp",
     version="1.0.0",
-    lifespan=lifespan,
+    #lifespan=lifespan,
 )
 
 # CORS
@@ -46,6 +38,7 @@ app.add_middleware(
 )
 
 # Include routers
+
 app.include_router(auth_router, prefix=API_PREFIX)
 app.include_router(employee_router, prefix="/api")
 app.include_router(employee_access_router, prefix=API_PREFIX)
