@@ -6,10 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import engine, Base, get_db
 from app.core.config import FRONTEND_URL, API_PREFIX
 
-# Import your models for table creation
+# Import models for table creation
 from app.models import user  # noqa: F401
 
-# Import your routers
+# Import routers
 from app.api.auth import router as auth_router
 from app.api.employees import router as employee_router
 from app.api.employee_access import router as employee_access_router
@@ -18,10 +18,7 @@ from app.api import project as project_router
 from app.api import department as department_router
 from app.api.datasets import router as datasets_router
 
-
 Base.metadata.create_all(bind=engine)
-
-
 app = FastAPI(
     title="MyFastAPIApp",
     version="1.0.0",
@@ -32,9 +29,9 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins= [
-    "https://automated-manufacturing.vercel.app",   # production frontend
+    "https://automated-manufacturing.vercel.app",   
     "https://automated-manufact-git-6ff091-gokulakrishnans-projects-78c7d2dd.vercel.app",  # preview
-    "https://automated-manufacturing-kdmeekg5b.vercel.app",  # preview
+    "https://automated-manufacturing-kdmeekg5b.vercel.app", 
     "http://localhost:5173",  # local frontend testing
 ],
     allow_credentials=True,
