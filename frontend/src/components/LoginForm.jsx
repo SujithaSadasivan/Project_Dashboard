@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { FcGoogle } from 'react-icons/fc';
 import { FaGithub } from 'react-icons/fa';
 
+//fixed : login UI
 const LoginForm = () => {
   const { login } = useAuth();
   const [formData, setFormData] = useState({ 
