@@ -16,6 +16,7 @@ export const AuthProvider = ({ children }) => {
     if (token && storedUser) {
       try {
         setUser(JSON.parse(storedUser));
+        //authenticate using tokens
         // Don't validate token if /api/auth/me endpoint doesn't exist
         // validateToken(token);
       } catch {
