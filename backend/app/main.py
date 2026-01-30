@@ -49,8 +49,7 @@ app.include_router(project_router.router, prefix=API_PREFIX)
 app.include_router(department_router.router, prefix=API_PREFIX)
 app.include_router(datasets_router, prefix=API_PREFIX)
 
-
-# Test route
+#testing routes
 @app.get("/test-db")
 async def test_db(db: AsyncSession = Depends(get_db)):
     result = await db.execute("SELECT NOW()")
