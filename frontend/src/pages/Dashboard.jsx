@@ -10,7 +10,12 @@ import {
   Package,
   Building,
   Upload,
-  Settings
+  Settings,
+  ClipboardList,
+  MessageSquare,
+  Calendar,
+  FileText,
+  ClipboardCheck
 } from 'lucide-react';
 
 import EmployeeMaster from "../pages/EmployeeMaster";
@@ -24,8 +29,8 @@ import MOMModule from "../pages/MOMModule";
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
-  const [activeModule, setActiveModule] = useState('employee-master');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeModule, setActiveModule] = useState('MOMModule'); // Default to MOM
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
@@ -66,11 +71,15 @@ const Dashboard = () => {
   // Check if mobile on mount and resize
   useEffect(() => {
     const checkIsMobile = () => {
-      setIsMobile(window.innerWidth < 1024); // lg breakpoint
-      if (window.innerWidth >= 1024) {
-        setSidebarOpen(true);
-      } else {
+      const mobile = window.innerWidth < 1024;
+      setIsMobile(mobile);
+      
+      // On mobile, keep sidebar closed initially
+      // On desktop, keep sidebar open
+      if (mobile) {
         setSidebarOpen(false);
+      } else {
+        setSidebarOpen(true);
       }
     };
 
@@ -140,6 +149,7 @@ const Dashboard = () => {
       name: 'Minutes Of Meeting',
       component: <MOMModule />,
       icon: <Users className="h-5 w-5" />
+      
     },
   ];
 
@@ -153,132 +163,187 @@ const Dashboard = () => {
     return 'U';
   };
 
+  // Handle module click
+  const handleModuleClick = (moduleId) => {
+    setActiveModule(moduleId);
+    if (isMobile) {
+      setSidebarOpen(false); // Close sidebar on mobile after selection
+    }
+  };
+
   return (
-    <div 
-      className="min-h-screen"
-      style={{
-        backgroundImage: 'url("https://png.pngtree.com/png-clipart/20221006/original/pngtree-red-gradient-line-combination-geometric-distortion-elements-free-psd-png-image_8658889.png")',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundAttachment: 'fixed',
-        backgroundRepeat: 'no-repeat'
-      }}
-    >
-      <div className="relative">
-        {/* Mobile Header - Always visible on mobile */}
-        <header className="lg:hidden bg-gray-100 sticky top-0 z-40">
-          <div className="flex items-center justify-between px-4 py-3">
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="p-2 rounded-lg hover:bg-gray-200 text-gray-700"
-              >
-                {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-              </button>
-              <div>
-                <h1 className="text-lg font-bold text-gray-900">Dashboard</h1>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3">
-              <div className="text-right">
-                <p className="font-medium text-sm text-gray-900">{user?.full_name || 'User'}</p>
-                <p className="text-xs text-gray-600 capitalize">{user?.role || 'User'}</p>
-              </div>
-              <button
-                onClick={logout}
-                className="p-2 text-gray-500 hover:text-white hover:bg-[#E30613] rounded-lg border border-gray-300 hover:border-[#E30613] transition-colors"
-                title="Logout"
-              >
-                <LogOut className="h-5 w-5" />
-              </button>
+    <div className="min-h-screen bg-gray-50">
+      {/* Mobile Header */}
+      <header className="lg:hidden bg-gray-100 sticky top-0 z-40 border-b border-gray-200">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="p-2 rounded-lg hover:bg-gray-200 text-gray-700"
+            >
+              {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
+            <div>
+              <h1 className="text-lg font-bold text-gray-900 truncate max-w-[150px]">
+                {activeModuleData.name}
+              </h1>
             </div>
           </div>
-        </header>
-
-        <div className="flex">
-          {/* Sidebar - Responsive behavior */}
-          <div className={`
-            fixed lg:relative inset-y-0 left-0 z-30 w-56 lg:w-56 bg-gray-100
-            transform transition-transform duration-300 ease-in-out lg:transform-none
-            ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-            h-screen lg:h-auto flex flex-col
-          `}>
-            {/* Fixed Logo at Top - Made bigger with less padding */}
-            <div className="flex-shrink-0 pt-2 pb-2 px-2">
-              <div className="flex items-center justify-center">
-                <img 
-                  // src="/caldimlogo.png" 
-                  // alt="Company Logo" 
-                  className="h-24 w-auto object-contain max-h-32" // Increased from h-16 to h-24
-                />
-              </div>
+          <div className="flex items-center space-x-3">
+            <div className="text-right hidden sm:block">
+              <p className="font-medium text-sm text-gray-900 truncate max-w-[120px]">
+                {user?.full_name || 'User'}
+              </p>
+              <p className="text-xs text-gray-600 capitalize">
+                {user?.role || 'User'}
+              </p>
             </div>
-
-            {/* Modules List - Scrollable independently with fixed logo at top */}
-            <div className="flex-1 overflow-y-auto px-2 space-y-1">
-              {modules.map((module) => (
-                <button
-                  key={module.id}
-                  onClick={() => {
-                    setActiveModule(module.id);
-                    if (isMobile) setSidebarOpen(false);
-                  }}
-                  className={`w-full flex items-center space-x-3 rounded-lg transition-all ${
-                    activeModule === module.id
-                      ? 'bg-white text-black shadow-lg px-3 py-2'
-                      : 'hover:bg-gray-200 text-gray-900 p-3'
-                  }`}
-                >
-                  {module.icon}
-                  <span className="font-semibold text-base">{module.name}</span>
-                </button>
-              ))}
+            <div className="relative" ref={profileMenuRef}>
+              <button
+                onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+                className="flex items-center justify-center w-10 h-10 rounded-full bg-[#E30613] text-white font-semibold hover:opacity-90 transition-opacity"
+              >
+                {getUserInitial()}
+              </button>
+              
+              {/* Mobile Profile Dropdown */}
+              {profileMenuOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                  <div className="p-4 border-b border-gray-100">
+                    <p className="font-medium text-gray-900 truncate">
+                      {user?.full_name || 'User'}
+                    </p>
+                    <p className="text-sm text-gray-600 capitalize">
+                      {user?.role || 'User'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      logout();
+                      setProfileMenuOpen(false);
+                    }}
+                    className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-100 hover:text-[#E30613] flex items-center space-x-2 transition-colors"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>Logout</span>
+                  </button>
+                </div>
+              )}
             </div>
+          </div>
+        </div>
+        
+        {/* Mobile Time and Date */}
+        <div className="px-4 pb-2">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-gray-900">{currentTime}</p>
+            <p className="text-xs text-gray-600 truncate max-w-[200px]">{currentDate}</p>
+          </div>
+        </div>
+      </header>
 
-            {/* Close sidebar on mobile when clicking outside */}
-            {sidebarOpen && isMobile && (
-              <div 
-                className="fixed inset-0 bg-black/20 z-20 lg:hidden"
-                onClick={() => setSidebarOpen(false)}
+      <div className="flex">
+        {/* Sidebar */}
+        <div className={`
+          fixed lg:relative inset-y-0 left-0 z-30 w-64 lg:w-64 bg-gray-100
+          transform transition-transform duration-300 ease-in-out lg:transform-none
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          h-screen lg:h-screen flex flex-col border-r border-gray-200
+        `}>
+          {/* Logo */}
+          <div className="flex-shrink-0 pt-4 pb-3 px-4">
+            <div className="flex items-center justify-center">
+              <img 
+                // src="/caldimlogo.png" 
+                // alt="Company Logo" 
+                className="h-20 w-auto object-contain max-h-32"
               />
-            )}
+            </div>
           </div>
 
-          {/* Main Content */}
-          <div className="flex-1 flex flex-col min-h-screen lg:h-screen">
-            {/* Desktop Header - Changed to bg-gray-100 */}
-            <header className="hidden lg:block bg-gray-100 flex-shrink-0">
-              <div className="px-6 py-4">
-                <div className="flex items-center justify-between">
-                  {/* Centered Module Name */}
-                  <div className="flex-1 flex justify-center">
-                    <div className="text-center">
-                      <h1 className="text-2xl font-bold text-gray-900">{activeModuleData.name}</h1>
+          {/* Modules List */}
+          <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-3 mb-2">
+              Navigation
+            </p>
+            {modules.map((module) => (
+              <button
+                key={module.id}
+                onClick={() => handleModuleClick(module.id)}
+                className={`w-full flex items-center space-x-3 rounded-lg transition-all duration-200 ${
+                  activeModule === module.id
+                    ? 'bg-white text-black shadow-lg px-3 py-3 border-l-4 border-[#E30613]'
+                    : 'hover:bg-gray-200 text-gray-900 p-3 hover:pl-4'
+                }`}
+              >
+                <div className={`${activeModule === module.id ? 'text-[#E30613]' : 'text-gray-500'}`}>
+                  {module.icon}
+                </div>
+                <span className="font-semibold text-sm truncate">{module.name}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Desktop Logout Button */}
+          <div className="hidden lg:block p-4 border-t border-gray-200">
+            <button
+              onClick={logout}
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="font-medium">Logout</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Overlay for mobile sidebar */}
+        {sidebarOpen && isMobile && (
+          <div 
+            className="fixed inset-0 bg-black/50 z-20 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col min-h-screen lg:h-screen">
+          {/* Desktop Header */}
+          <header className="hidden lg:block bg-gray-100 flex-shrink-0 border-b border-gray-200">
+            <div className="px-8 py-4">
+              <div className="flex items-center justify-between">
+                {/* Module Title */}
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    {activeModuleData.name}
+                  </h1>
+                </div>
+
+                {/* Right side */}
+                <div className="flex items-center space-x-6">
+                  {/* Date and Time */}
+                  <div className="text-right">
+                    <div className="flex items-center space-x-2">
+                      <p className="text-lg font-semibold text-gray-900">{currentTime}</p>
+                    </div>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <p className="text-sm text-gray-600">{currentDate}</p>
                     </div>
                   </div>
 
-                  {/* Right side with DateTime and Profile */}
-                  <div className="flex items-center space-x-6">
-                    {/* Date and Time */}
+                  {/* User Profile */}
+                  <div className="flex items-center space-x-4">
                     <div className="text-right">
-                      <div className="flex items-center justify-end space-x-2">
-                        <p className="text-lg font-semibold text-gray-900">{currentTime}</p>
-                      </div>
-                      <div className="flex items-center justify-end space-x-2 mt-1">
-                        <p className="text-sm text-gray-600">{currentDate}</p>
-                      </div>
+                      <p className="font-medium text-gray-900">{user?.full_name || 'User'}</p>
+                      <p className="text-sm text-gray-600 capitalize">{user?.role || 'User'}</p>
                     </div>
-
-                    {/* Profile Menu */}
                     <div className="relative" ref={profileMenuRef}>
                       <button
                         onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                        className="flex items-center justify-center w-10 h-10 rounded-full bg-[#E30613] text-white font-semibold hover:opacity-90 transition-opacity"
+                        className="flex items-center justify-center w-12 h-12 rounded-full bg-[#E30613] text-white font-semibold text-lg hover:opacity-90 transition-opacity"
                       >
                         {getUserInitial()}
                       </button>
                       
-                      {/* Profile Dropdown Menu */}
+                      {/* Profile Dropdown */}
                       {profileMenuOpen && (
                         <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
                           <div className="p-4 border-b border-gray-100">
@@ -301,25 +366,26 @@ const Dashboard = () => {
                   </div>
                 </div>
               </div>
-            </header>
+            </div>
+          </header>
 
-            {/* Mobile Module Header - Changed to bg-gray-100 */}
-            <header className="lg:hidden bg-gray-100 flex-shrink-0">
-              <div className="px-4 py-3">
-                <h2 className="text-lg font-semibold text-gray-900">
-                  {activeModuleData.name}
-                </h2>
-              </div>
-            </header>
+          {/* Main Content Area */}
+          <main className="flex-1 overflow-y-auto p-3 lg:p-6">
+            <div className="bg-white rounded-lg lg:rounded-lg p-4 lg:p-6 h-full">
+              {activeModuleData.component}
+            </div>
+          </main>
 
-            {/* Main Content Area - Scrollable independently */}
-            <main className="flex-1 overflow-y-auto p-3 lg:p-6">
-              {/* Content Area with clean white background */}
-              <div className="bg-white rounded-lg lg:rounded-lg p-4 lg:p-6">
-                {activeModuleData.component}
-              </div>
-            </main>
-          </div>
+          {/* Mobile Footer with Logout */}
+          <footer className="lg:hidden bg-gray-100 border-t border-gray-200 p-4">
+            <button
+              onClick={logout}
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="font-medium">Logout</span>
+            </button>
+          </footer>
         </div>
       </div>
     </div>
