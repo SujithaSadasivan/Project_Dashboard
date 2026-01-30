@@ -42,7 +42,7 @@ app.add_middleware(
 # Include routers
 
 app.include_router(auth_router, prefix=API_PREFIX)
-app.include_router(employee_router, prefix="API_PREFIX")
+app.include_router(employee_router, prefix=API_PREFIX)
 app.include_router(employee_access_router, prefix=API_PREFIX)
 app.include_router(part_router.router, prefix=API_PREFIX)
 app.include_router(project_router.router, prefix=API_PREFIX)
