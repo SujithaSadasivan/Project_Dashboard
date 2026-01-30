@@ -20,6 +20,7 @@ import PartMaster from "../pages/PartMaster";
 import DepartmentMaster from "../pages/DepartmentMaster";
 import UploadTrackers from "../pages/UploadTrackers";
 import SystemSettings from "../pages/SystemSettings";
+import MOMModule from "../pages/MOMModule";
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
@@ -133,6 +134,12 @@ const Dashboard = () => {
       name: 'Settings',
       component: <SystemSettings />,
       icon: <Settings className="h-5 w-5" />
+    },
+    {
+      id: 'MOMModule',
+      name: 'Minutes Of Meeting',
+      component: <MOMModule />,
+      icon: <MOMModule className="h-5 w-5" />
     },
   ];
 
