@@ -26,25 +26,22 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
-  try {
-    const response = await API.post('/auth/login', { email, password });
-    const { access_token, user } = response.data;
-
-    if (!access_token || !user) return { success: false, error: "Invalid response" };
-
-    localStorage.setItem('token', access_token);
-    localStorage.setItem('user', JSON.stringify(user));
-    setUser(user);  // <-- triggers PrivateRoute redirect
-
-    return { success: true };
-  } catch (err) {
-    return {
-      success: false,
-      error: err.response?.data?.detail || "Login failed",
-    };
-  }
-};
-
+    try {
+      const response = await API.post('/api/auth/login', { email, password });
+      const { access_token, user } = response.data;
+      
+      localStorage.setItem('token', access_token);
+      localStorage.setItem('user', JSON.stringify(user));
+      setUser(user);
+      
+      return { success: true };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error.response?.data?.detail || 'Login failed' 
+      };
+    }
+  };
 
   const logout = () => {
     localStorage.removeItem('token');
