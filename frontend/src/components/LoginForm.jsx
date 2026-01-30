@@ -1,81 +1,49 @@
 import React, { useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import { FcGoogle } from 'react-icons/fc';
 import { FaGithub } from 'react-icons/fa';
 
 const LoginForm = () => {
+  const { login } = useAuth();
   const [formData, setFormData] = useState({ 
-    email: 'demo@ghostlamp.io', 
-    password: '**********' 
+    email: '', 
+    password: '' 
   });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setError('');
+  setLoading(true);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
+  // Use the actual values from formData, not the placeholder
+  const email = formData.email;
+  const password = formData.password === '**********' ? '' : formData.password;
 
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Accept ANY email and password for dummy login
-    const email = formData.email || 'demo@ghostlamp.io';
-    const password = formData.password === '**********' ? 'demo123' : formData.password;
-
-    console.log('✅ Dummy Login Successful!');
-    console.log('Email:', email);
-    console.log('Password:', password);
-
-    // Create dummy user data
-    const dummyUser = {
-      id: 'user_' + Date.now(),
-      email: email,
-      name: email.split('@')[0] || 'Demo User',
-      role: 'admin',
-      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(email.split('@')[0])}&background=dc2626&color=fff`,
-      token: 'dummy_token_' + Math.random().toString(36).substr(2, 9),
-      isAuthenticated: true
-    };
-
-    // Store in localStorage (simulating backend session)
-    localStorage.setItem('auth_token', dummyUser.token);
-    localStorage.setItem('user_email', dummyUser.email);
-    localStorage.setItem('user_name', dummyUser.name);
-    localStorage.setItem('user_role', dummyUser.role);
-    localStorage.setItem('user_avatar', dummyUser.avatar);
-    localStorage.setItem('isAuthenticated', 'true');
-    
-    if (rememberMe) {
-      localStorage.setItem('remember_me', 'true');
-    }
-
-    // Set a dummy flag to indicate dummy login
-    localStorage.setItem('is_dummy_login', 'true');
-
-    console.log('Stored user data:', dummyUser);
+  console.log('Logging in with:', email);
+  
+  const result = await login(email, password);
+  console.log('Login result:', result);
+  
+  if (result.success) {
     console.log('Redirecting to dashboard...');
-
-    // Redirect to dashboard
+    // Force redirect after a small delay to ensure state updates
     setTimeout(() => {
       window.location.href = '/dashboard';
-    }, 500);
-    
-    setLoading(false);
-  };
+    }, 100);
+  } else {
+    setError(result.error || 'Login failed. Please check your credentials.');
+  }
+  
+  setLoading(false);
+};
 
   const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
-    });
-  };
-
-  const handleQuickDemo = () => {
-    setFormData({
-      email: 'demo@ghostlamp.io',
-      password: '**********'
     });
   };
 
@@ -86,21 +54,7 @@ const LoginForm = () => {
         <h1 className="text-3xl font-bold text-red-600 mb-1 tracking-tight">HAI</h1>
         <h2 className="text-xl font-semibold text-gray-800 mb-2">Welcome Back :)</h2>
         <p className="text-gray-600 text-sm leading-relaxed">
-          Frontend-only demo. Any credentials will work!
-        </p>
-      </div>
-
-      {/* Quick Demo Button */}
-      <div className="mb-4">
-        <button
-          type="button"
-          onClick={handleQuickDemo}
-          className="w-full bg-gradient-to-r from-red-500 to-orange-500 text-white py-2.5 px-4 rounded-lg hover:from-red-600 hover:to-orange-600 focus:ring-4 focus:ring-red-100 transition-all duration-300 font-medium"
-        >
-          🚀 Quick Demo Login
-        </button>
-        <p className="text-xs text-gray-500 mt-2 text-center">
-          Click above for demo credentials, or type any email/password
+   
         </p>
       </div>
 
@@ -121,8 +75,9 @@ const LoginForm = () => {
             name="email"
             value={formData.email}
             onChange={handleChange}
+            required
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all duration-200 text-gray-800"
-            placeholder="Enter any email (e.g., demo@ghostlamp.io)"
+            placeholder="Justin@ghostlamp.io"
           />
         </div>
 
@@ -137,8 +92,9 @@ const LoginForm = () => {
               name="password"
               value={formData.password}
               onChange={handleChange}
+              required
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all duration-200 tracking-wider pr-10"
-              placeholder="Enter any password"
+              placeholder="**********"
             />
             <button
               type="button"
@@ -169,18 +125,18 @@ const LoginForm = () => {
           </button>
         </div>
 
-        {/* Success Message (for demo) */}
-        <div className="p-2 bg-green-50 border border-green-200 rounded-lg">
-          <p className="text-xs text-green-700 text-center">
-            ✅ Demo Mode: Any email/password will work!
-          </p>
-        </div>
+        {/* Error Message */}
+        {error && (
+          <div className="p-2 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-xs text-red-700 text-center">{error}</p>
+          </div>
+        )}
 
         {/* Login Button */}
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-red-600 text-white py-2.5 px-4 rounded-lg hover:bg-red-700 focus:ring-4 focus:ring-red-100 disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-300 font-medium mt-2"
+          className="w-full bg-red-600 text-white py-2.5 px-4 rounded-lg hover:bg-red-700 focus:ring-4 focus:ring-red-100 disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-300 font-medium mt-4"
         >
           {loading ? (
             <span className="flex items-center justify-center">
@@ -191,34 +147,17 @@ const LoginForm = () => {
               Logging in...
             </span>
           ) : (
-            'Login Now (Any Credentials)'
+            'Login Now'
           )}
         </button>
-
-        {/* Demo Instructions */}
-        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex items-start gap-2">
-            <div className="text-blue-600">💡</div>
-            <div>
-              <p className="text-xs font-medium text-blue-800 mb-1">How to use:</p>
-              <ul className="text-xs text-blue-700 space-y-1">
-                <li>• Click "Quick Demo Login" for prefilled credentials</li>
-                <li>• Or type <strong>any email</strong> and <strong>any password</strong></li>
-                <li>• All logins will work in demo mode</li>
-                <li>• You'll be redirected to dashboard automatically</li>
-              </ul>
-            </div>
-          </div>
-        </div>
 
         {/* Create Account Link */}
         <div className="text-center">
           <button
             type="button"
-            onClick={() => alert('Demo mode - Account creation disabled')}
             className="text-red-600 hover:text-red-800 font-medium text-sm"
           >
-            Create Account (Demo Disabled)
+            Create Account
           </button>
         </div>
       </form>
@@ -226,20 +165,18 @@ const LoginForm = () => {
       {/* Social Login Section */}
       <div className="mt-6 pt-4 border-t border-gray-300">
         <div className="text-center mb-4">
-          <span className="text-gray-600 text-sm font-medium">Demo Social Logins</span>
+          <span className="text-gray-600 text-sm font-medium">Or you can join with</span>
         </div>
 
         <div className="flex justify-center space-x-4">
           <button
             type="button"
-            onClick={() => alert('Google login would connect in production')}
             className="flex items-center justify-center w-10 h-10 border-2 border-gray-300 rounded-full hover:border-red-300 hover:bg-red-50 transition-all duration-200"
           >
             <FcGoogle className="text-xl" />
           </button>
           <button
             type="button"
-            onClick={() => alert('GitHub login would connect in production')}
             className="flex items-center justify-center w-10 h-10 border-2 border-gray-300 rounded-full hover:border-red-300 hover:bg-red-50 transition-all duration-200"
           >
             <FaGithub className="text-xl text-gray-800" />

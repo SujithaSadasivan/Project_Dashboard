@@ -11,11 +11,7 @@ import {
   Building,
   Upload,
   Settings,
-  ClipboardList,
-  MessageSquare,
-  Calendar,
-  FileText,
-  ClipboardCheck
+ 
 } from 'lucide-react';
 
 import EmployeeMaster from "../pages/EmployeeMaster";
