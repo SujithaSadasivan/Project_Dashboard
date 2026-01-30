@@ -4,7 +4,13 @@ import {
   LogOut, 
   Menu,
   X,
-  
+  Users,
+  Shield,
+  FolderKanban,
+  Package,
+  Building,
+  Upload,
+  Settings
 } from 'lucide-react';
 
 import EmployeeMaster from "../pages/EmployeeMaster";
@@ -89,37 +95,44 @@ const Dashboard = () => {
     {
       id: 'employee-master',
       name: 'Employee Master',
-      component: <EmployeeMaster />
+      component: <EmployeeMaster />,
+      icon: <Users className="h-5 w-5" />
     },
     {
       id: 'employee-access',
       name: 'Employee Access',
-      component: <EmployeeAccess />
+      component: <EmployeeAccess />,
+      icon: <Shield className="h-5 w-5" />
     },
     {
       id: 'project-master',
       name: 'Project Master',
-      component: <ProjectMaster />
+      component: <ProjectMaster />,
+      icon: <FolderKanban className="h-5 w-5" />
     },
     {
       id: 'part-master',
       name: 'Part Master',
-      component: <PartMaster />
+      component: <PartMaster />,
+      icon: <Package className="h-5 w-5" />
     },
     {
       id: 'department-master',
       name: 'Department Master',
-      component: <DepartmentMaster />
+      component: <DepartmentMaster />,
+      icon: <Building className="h-5 w-5" />
     },
     {
       id: 'upload-trackers',
-      name: 'Build & Upload Trackers',
-      component: <UploadTrackers />
+      name: 'Upload Trackers',
+      component: <UploadTrackers />,
+      icon: <Upload className="h-5 w-5" />
     },
     {
       id: 'SystemSettings',
-      name: 'System Settings',
-      component: <SystemSettings />
+      name: 'Settings',
+      component: <SystemSettings />,
+      icon: <Settings className="h-5 w-5" />
     },
   ];
 
@@ -183,19 +196,19 @@ const Dashboard = () => {
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
             h-screen lg:h-auto flex flex-col
           `}>
-            {/* Sidebar Header with Logo */}
-            <div className="hidden lg:block flex-shrink-0">
-              <div className="flex items-center justify-center py-6">
+            {/* Fixed Logo at Top - Made bigger with less padding */}
+            <div className="flex-shrink-0 pt-2 pb-2 px-2">
+              <div className="flex items-center justify-center">
                 <img 
-                  src="/caldimlogo.png" 
-                  alt="Company Logo" 
-                  className="h-20 w-auto object-contain"
+                  // src="/caldimlogo.png" 
+                  // alt="Company Logo" 
+                  className="h-24 w-auto object-contain max-h-32" // Increased from h-16 to h-24
                 />
               </div>
             </div>
 
-            {/* Modules List - Scrollable independently */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-1">
+            {/* Modules List - Scrollable independently with fixed logo at top */}
+            <div className="flex-1 overflow-y-auto px-2 space-y-1">
               {modules.map((module) => (
                 <button
                   key={module.id}
@@ -203,15 +216,14 @@ const Dashboard = () => {
                     setActiveModule(module.id);
                     if (isMobile) setSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center rounded-lg transition-all ${
+                  className={`w-full flex items-center space-x-3 rounded-lg transition-all ${
                     activeModule === module.id
                       ? 'bg-white text-black shadow-lg px-3 py-2'
                       : 'hover:bg-gray-200 text-gray-900 p-3'
                   }`}
                 >
-                  <div className="flex items-center space-x-3">
-                    <span className="font-semibold text-base">{module.name}</span>
-                  </div>
+                  {module.icon}
+                  <span className="font-semibold text-base">{module.name}</span>
                 </button>
               ))}
             </div>
@@ -227,7 +239,7 @@ const Dashboard = () => {
 
           {/* Main Content */}
           <div className="flex-1 flex flex-col min-h-screen lg:h-screen">
-            {/* Desktop Header */}
+            {/* Desktop Header - Changed to bg-gray-100 */}
             <header className="hidden lg:block bg-gray-100 flex-shrink-0">
               <div className="px-6 py-4">
                 <div className="flex items-center justify-between">
@@ -243,11 +255,9 @@ const Dashboard = () => {
                     {/* Date and Time */}
                     <div className="text-right">
                       <div className="flex items-center justify-end space-x-2">
-                       
                         <p className="text-lg font-semibold text-gray-900">{currentTime}</p>
                       </div>
                       <div className="flex items-center justify-end space-x-2 mt-1">
-                        
                         <p className="text-sm text-gray-600">{currentDate}</p>
                       </div>
                     </div>
@@ -286,7 +296,7 @@ const Dashboard = () => {
               </div>
             </header>
 
-            {/* Mobile Module Header */}
+            {/* Mobile Module Header - Changed to bg-gray-100 */}
             <header className="lg:hidden bg-gray-100 flex-shrink-0">
               <div className="px-4 py-3">
                 <h2 className="text-lg font-semibold text-gray-900">
