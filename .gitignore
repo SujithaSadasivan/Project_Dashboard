@@ -71,6 +71,10 @@ dist-ssr/
 .DS_Store
 Thumbs.db
 
+*.db
+backend/test.db
+
+
 # =========================
 # Misc
 # =========================
