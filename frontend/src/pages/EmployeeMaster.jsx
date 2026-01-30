@@ -70,15 +70,23 @@ const EmployeeMaster = () => {
     setTempColumnName(currentLabel);
   };
 
+  //saves permanently and connected with backend
   const saveEditColumn = (columnId) => {
-    if (tempColumnName.trim()) {
-      setAvailableColumns(availableColumns.map(col => 
-        col.id === columnId ? { ...col, label: tempColumnName } : col
-      ));
-      setEditingColumn(null);
-      setTempColumnName('');
-    }
-  };
+  if (!tempColumnName.trim()) return;
+
+  axios.patch(`/api/user-custom-columns/${columnId}`, {
+    name: tempColumnName
+  }).then(() => {
+    setAvailableColumns(cols =>
+      cols.map(col =>
+        col.id === columnId ? { ...col, name: tempColumnName } : col
+      )
+    );
+    setEditingColumn(null);
+    setTempColumnName('');
+  });
+};
+
 
   const cancelEditColumn = () => {
     setEditingColumn(null);
@@ -108,21 +116,23 @@ const EmployeeMaster = () => {
     });
   };
 
+  //deletion connected to backend 
   const confirmDeleteColumn = () => {
-    if (!showDeleteColumnPrompt) return;
-    
-    const columnId = showDeleteColumnPrompt.id;
-    setAvailableColumns(availableColumns.filter(col => col.id !== columnId));
-    
-    // Remove this column from newEmployee if it exists
-    if (isAddingNew) {
-      const newEmployeeData = { ...newEmployee };
-      delete newEmployeeData[columnId];
-      setNewEmployee(newEmployeeData);
-    }
-    
-    setShowDeleteColumnPrompt(null);
-  };
+  const columnId = showDeleteColumnPrompt.id;
+
+  axios.delete(`/api/user-custom-columns/${columnId}`)
+    .then(() => {
+      // update UI ONLY after backend succeeds
+      setAvailableColumns(cols =>
+        cols.filter(col => col.id !== columnId)
+      );
+      setShowDeleteColumnPrompt(null);
+    })
+    .catch(err => {
+      console.error('Failed to delete column', err);
+    });
+};
+
 
   // Sorting
   const handleSort = (key) => {
