@@ -19,7 +19,7 @@ import ProjectMaster from "../pages/ProjectMaster";
 import PartMaster from "../pages/PartMaster";
 import DepartmentMaster from "../pages/DepartmentMaster";
 import UploadTrackers from "../pages/UploadTrackers";
-import SystemSettings from "../Pages/SystemSettings";
+import SystemSettings from "../pages/SystemSettings";
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
