@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, X, Check, ChevronUp, ChevronDown, Filter, Download } from 'lucide-react';
 import axios from 'axios';
+import API from '../utils/api';
 
 const EmployeeMaster = () => {
   // Fixed columns matching backend Employee model - Added ID column
@@ -38,12 +39,19 @@ const EmployeeMaster = () => {
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [showDeleteColumnPrompt, setShowDeleteColumnPrompt] = useState(null);
 
-  const API_URL = 'http://localhost:8000/api/employees';
-
-  // Fetch employees from backend
   useEffect(() => {
-    fetchEmployees();
-  }, []);
+  const fetchEmployees = async () => {
+    try {
+      const response = await API.get('/employees');
+      setEmployees(response.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  fetchEmployees();
+}, []);
+
 
   // Save columns to localStorage whenever they change
   useEffect(() => {
