@@ -11,12 +11,10 @@ from app.core.security import (
 from app.models.user import User
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
-
-
-# ---------- LOGIN ----------
+#login
 @router.post("/login")
 def login(data: dict, db: Session = Depends(get_db)):
-    # 1️⃣ Find user by email
+    # 1️ Find user by email
     user = (
         db.query(User)
         .filter(User.email == data["email"])
@@ -26,11 +24,11 @@ def login(data: dict, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    # 2️⃣ Verify password
+    # 2️ Verify password
     if not verify_password(data["password"], user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    # 3️⃣ Create tokens
+    # 3️ Create tokens
     access_token = create_access_token({
         "sub": str(user.id),
         "email": user.email,
@@ -38,7 +36,7 @@ def login(data: dict, db: Session = Depends(get_db)):
 
     refresh_token = create_refresh_token(str(user.id))
 
-    # 4️⃣ Return response frontend expects
+    # 4️ Return response frontend expects
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
