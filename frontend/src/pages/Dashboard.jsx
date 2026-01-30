@@ -139,7 +139,7 @@ const Dashboard = () => {
       id: 'MOMModule',
       name: 'Minutes Of Meeting',
       component: <MOMModule />,
-      icon: <MOMModule className="h-5 w-5" />
+      icon: <Users className="h-5 w-5" />
     },
   ];
 
