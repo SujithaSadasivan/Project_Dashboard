@@ -52,7 +52,7 @@ const EmployeeMaster = () => {
   fetchEmployees();
 }, []);
 
-
+  // employee updated tables
   // Save columns to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem('employee_columns', JSON.stringify(availableColumns));
