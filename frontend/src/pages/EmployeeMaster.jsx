@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, X, Check, ChevronUp, ChevronDown, Filter, Download } from 'lucide-react';
 import axios from 'axios';
-import API from '../utils/api';
+import * as XLSX from 'xlsx';
 
 const EmployeeMaster = () => {
   // Fixed columns matching backend Employee model - Added ID column
@@ -14,11 +14,8 @@ const EmployeeMaster = () => {
     { id: 'status', label: 'Status', sortable: true, type: 'select', required: true },
   ];
 
-  // Load columns from localStorage for column management
-  const [availableColumns, setAvailableColumns] = useState(() => {
-    const savedColumns = localStorage.getItem('employee_columns');
-    return savedColumns ? JSON.parse(savedColumns) : columns;
-  });
+  // Load columns from backend (initial state is fixed columns)
+  const [availableColumns, setAvailableColumns] = useState(columns);
 
   const [employees, setEmployees] = useState([]);
   const [newEmployee, setNewEmployee] = useState({});
@@ -38,30 +35,83 @@ const EmployeeMaster = () => {
   const [validationErrors, setValidationErrors] = useState({});
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [showDeleteColumnPrompt, setShowDeleteColumnPrompt] = useState(null);
+  const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false); // New state for add employee modal
 
-  useEffect(() => {
-  const fetchEmployees = async () => {
-    try {
-      const response = await API.get('/employees');
-      setEmployees(response.data);
-    } catch (err) {
-      console.error(err);
-    }
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+  const API_URL = `${API_BASE_URL}/employees`;
+
+  const fixedColumnIds = ['id', 'name', 'email', 'department', 'role', 'status', 'created_at', 'updated_at'];
+
+  // Helper to flatten API response
+  const transformEmployeeFromApi = (apiEmployee) => {
+    const { custom_fields, ...rest } = apiEmployee;
+    return { ...rest, ...(custom_fields || {}) };
   };
 
-  fetchEmployees();
-}, []);
+  // Helper to nest custom fields for API request
+  const transformEmployeeForSave = (employeeData) => {
+    const payload = {
+      name: employeeData.name,
+      email: employeeData.email,
+      department: employeeData.department,
+      role: employeeData.role,
+      status: employeeData.status || 'Active',
+      custom_fields: {}
+    };
 
-  // employee updated tables
+    Object.keys(employeeData).forEach(key => {
+      if (!fixedColumnIds.includes(key) && key !== 'custom_fields' && key !== 'id') {
+        // Only include fields that are in availableColumns to avoid sending junk
+        // But since availableColumns might change, maybe just send everything else?
+        // Let's check if the key corresponds to a known column or just send it.
+        // Safer to just send it if it's not a fixed column.
+        payload.custom_fields[key] = employeeData[key];
+      }
+    });
+
+    return payload;
+  };
+
+  // Fetch employees from backend
+  useEffect(() => {
+    fetchEmployees();
+    fetchColumns();
+  }, []);
+
   // Save columns to localStorage whenever they change
+  // We can keep this as a backup, but we primarily rely on DB now.
+  // Actually, let's disable this if we are using DB columns to avoid conflicts.
+  /*
   useEffect(() => {
     localStorage.setItem('employee_columns', JSON.stringify(availableColumns));
   }, [availableColumns]);
+  */
 
   const fetchEmployees = () => {
     axios.get(API_URL)
-      .then(res => setEmployees(res.data))
+      .then(res => {
+        const flattenedEmployees = res.data.map(transformEmployeeFromApi);
+        setEmployees(flattenedEmployees);
+      })
       .catch(err => console.error('Error fetching employees:', err));
+  };
+
+  const fetchColumns = () => {
+    axios.get(`${API_URL}/columns/all`)
+      .then(res => {
+        const dbColumns = res.data.map(col => ({
+          id: col.column_name,
+          label: col.column_label,
+          type: col.data_type,
+          required: col.is_required,
+          sortable: true,
+          dbId: col.id // Store DB ID for reference
+        }));
+
+        const fixedCols = columns.filter(c => !dbColumns.some(dc => dc.id === c.id));
+        setAvailableColumns([...fixedCols, ...dbColumns]);
+      })
+      .catch(err => console.error('Error fetching columns:', err));
   };
 
   // Column editing functions
@@ -70,23 +120,33 @@ const EmployeeMaster = () => {
     setTempColumnName(currentLabel);
   };
 
-  //saves permanently and connected with backend
   const saveEditColumn = (columnId) => {
-  if (!tempColumnName.trim()) return;
-
-  axios.patch(`/api/user-custom-columns/${columnId}`, {
-    name: tempColumnName
-  }).then(() => {
-    setAvailableColumns(cols =>
-      cols.map(col =>
-        col.id === columnId ? { ...col, name: tempColumnName } : col
-      )
-    );
-    setEditingColumn(null);
-    setTempColumnName('');
-  });
-};
-
+    if (tempColumnName.trim()) {
+      const column = availableColumns.find(col => col.id === columnId);
+      
+      if (column && column.dbId) {
+        axios.put(`${API_URL}/columns/${column.dbId}`, {
+          column_label: tempColumnName
+        })
+        .then(() => {
+          fetchColumns();
+          setEditingColumn(null);
+          setTempColumnName('');
+        })
+        .catch(err => {
+          console.error(err);
+          const msg = err.response?.data?.detail || err.message;
+          alert('Error updating column: ' + msg);
+        });
+      } else {
+        setAvailableColumns(availableColumns.map(col =>
+          col.id === columnId ? { ...col, label: tempColumnName } : col
+        ));
+        setEditingColumn(null);
+        setTempColumnName('');
+      }
+    }
+  };
 
   const cancelEditColumn = () => {
     setEditingColumn(null);
@@ -96,7 +156,7 @@ const EmployeeMaster = () => {
   const handleDeleteColumn = (columnId) => {
     const column = availableColumns.find(col => col.id === columnId);
     const isFixedColumn = ['id', 'employeeId', 'name', 'email', 'status', 'department', 'role'].includes(columnId);
-    
+   
     if (isFixedColumn) {
       setShowDeleteColumnPrompt({
         id: columnId,
@@ -107,7 +167,7 @@ const EmployeeMaster = () => {
       });
       return;
     }
-    
+   
     setShowDeleteColumnPrompt({
       id: columnId,
       title: 'Delete Column',
@@ -116,23 +176,37 @@ const EmployeeMaster = () => {
     });
   };
 
-  //deletion connected to backend 
   const confirmDeleteColumn = () => {
-  const columnId = showDeleteColumnPrompt.id;
+    if (!showDeleteColumnPrompt) return;
+   
+    const columnId = showDeleteColumnPrompt.id;
+    const column = availableColumns.find(col => col.id === columnId);
 
-  axios.delete(`/api/user-custom-columns/${columnId}`)
-    .then(() => {
-      // update UI ONLY after backend succeeds
-      setAvailableColumns(cols =>
-        cols.filter(col => col.id !== columnId)
-      );
+    const cleanupAndClose = () => {
+      if (isAddingNew) {
+        const newEmployeeData = { ...newEmployee };
+        delete newEmployeeData[columnId];
+        setNewEmployee(newEmployeeData);
+      }
       setShowDeleteColumnPrompt(null);
-    })
-    .catch(err => {
-      console.error('Failed to delete column', err);
-    });
-};
-
+    };
+   
+    if (column && column.dbId) {
+      axios.delete(`${API_URL}/columns/${column.dbId}`)
+        .then(() => {
+          fetchColumns();
+          cleanupAndClose();
+        })
+        .catch(err => {
+          console.error(err);
+          const msg = err.response?.data?.detail || err.message;
+          alert('Error deleting column: ' + msg);
+        });
+    } else {
+      setAvailableColumns(availableColumns.filter(col => col.id !== columnId));
+      cleanupAndClose();
+    }
+  };
 
   // Sorting
   const handleSort = (key) => {
@@ -160,9 +234,9 @@ const EmployeeMaster = () => {
     return errors;
   };
 
-  // Add Employee
+  // Add Employee Modal Functions
   const handleAddEmployeeClick = () => {
-    setIsAddingNew(true);
+    setShowAddEmployeeModal(true);
     setValidationErrors({});
     const initialEmployee = {};
     availableColumns.forEach(col => {
@@ -183,11 +257,15 @@ const EmployeeMaster = () => {
       return; // Don't submit if there are errors
     }
 
-    axios.post(API_URL, newEmployee)
-      .then(() => { 
-        fetchEmployees(); 
-        setIsAddingNew(false); 
+    const payload = transformEmployeeForSave(newEmployee);
+    console.log('Saving employee payload:', payload);
+
+    axios.post(API_URL, payload)
+      .then(() => {
+        fetchEmployees();
+        setShowAddEmployeeModal(false);
         setValidationErrors({});
+        // Reset form
         const initialEmployee = {};
         availableColumns.forEach(col => {
           if (col.id === 'status') {
@@ -198,11 +276,15 @@ const EmployeeMaster = () => {
         });
         setNewEmployee(initialEmployee);
       })
-      .catch(err => alert('Error saving employee: ' + err.message));
+      .catch(err => {
+        console.error(err);
+        const msg = err.response?.data?.detail || err.message;
+        alert('Error saving employee: ' + msg);
+      });
   };
 
-  const cancelNewEmployee = () => { 
-    setIsAddingNew(false); 
+  const cancelNewEmployee = () => {
+    setShowAddEmployeeModal(false);
     setValidationErrors({});
     const initialEmployee = {};
     availableColumns.forEach(col => {
@@ -230,9 +312,16 @@ const EmployeeMaster = () => {
       return;
     }
 
-    axios.put(`${API_URL}/${editingId}`, editForm)
+    const payload = transformEmployeeForSave(editForm);
+    console.log('Updating employee payload:', payload);
+
+    axios.put(`${API_URL}/${editingId}`, payload)
       .then(() => { fetchEmployees(); setEditingId(null); setEditForm({}); setValidationErrors({}); })
-      .catch(err => alert('Error updating employee: ' + err.message));
+      .catch(err => {
+        console.error(err);
+        const msg = err.response?.data?.detail || err.message;
+        alert('Error updating employee: ' + msg);
+      });
   };
 
   const cancelEdit = () => { setEditingId(null); setEditForm({}); setValidationErrors({}); };
@@ -245,7 +334,11 @@ const EmployeeMaster = () => {
 
     axios.delete(`${API_URL}/${showDeletePrompt.id}`)
       .then(() => { fetchEmployees(); setShowDeletePrompt(null); })
-      .catch(err => alert('Error deleting employee: ' + err.message));
+      .catch(err => {
+        console.error(err);
+        const msg = err.response?.data?.detail || err.message;
+        alert('Error deleting employee: ' + msg);
+      });
   };
 
   const cancelDelete = () => setShowDeletePrompt(null);
@@ -261,23 +354,29 @@ const EmployeeMaster = () => {
         return;
       }
       
-      const newColumn = {
-        id: newColumnId,
-        label: newColumnName,
-        sortable: true,
-        type: newColumnType,
-        required: false
+      const columnPayload = {
+        column_name: newColumnId,
+        column_label: newColumnName,
+        data_type: newColumnType,
+        is_required: false
       };
-      
-      setAvailableColumns([...availableColumns, newColumn]);
-      
-      // Reset form
-      setNewColumnName('');
-      setNewColumnType('text');
+
+      axios.post(`${API_URL}/columns/create`, columnPayload)
+        .then(() => {
+          fetchColumns();
+          setNewColumnName('');
+          setNewColumnType('text');
+          setShowColumnModal(false);
+        })
+        .catch(err => {
+          console.error(err);
+          const msg = err.response?.data?.detail || err.message;
+          alert('Error creating column: ' + msg);
+        });
     }
   };
 
-  //Export functions
+  // Export functions
   const handleExport = (format) => {
     const dataToExport = sortedEmployees.map(emp => {
       const row = {};
@@ -286,16 +385,17 @@ const EmployeeMaster = () => {
       });
       return row;
     });
-    
+   
     let content, mimeType, filename;
-    
+   
     switch(format) {
       case 'excel':
-        // For simplicity, creating CSV as Excel can open it
-        content = convertToCSV(dataToExport);
-        mimeType = 'text/csv';
-        filename = 'employees.csv';
-        break;
+        const ws = XLSX.utils.json_to_sheet(dataToExport);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Employees");
+        XLSX.writeFile(wb, "employees.xlsx");
+        setShowExportDropdown(false);
+        return; // Exit function to avoid blob download
       case 'csv':
         content = convertToCSV(dataToExport);
         mimeType = 'text/csv';
@@ -307,7 +407,7 @@ const EmployeeMaster = () => {
         filename = 'employees.json';
         break;
     }
-    
+   
     const blob = new Blob([content], { type: mimeType });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -317,24 +417,24 @@ const EmployeeMaster = () => {
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
-    
+   
     setShowExportDropdown(false);
   };
 
   const convertToCSV = (data) => {
     if (data.length === 0) return '';
-    
+   
     const headers = Object.keys(data[0]);
     const csvRows = [
       headers.join(','),
-      ...data.map(row => 
+      ...data.map(row =>
         headers.map(header => {
           const cell = row[header];
           return typeof cell === 'string' && cell.includes(',') ? `"${cell}"` : cell;
         }).join(',')
       )
     ];
-    
+   
     return csvRows.join('\n');
   };
 
@@ -351,12 +451,17 @@ const EmployeeMaster = () => {
     }
   };
 
-  const renderInput = (col, value, onChange, error) => {
-    const inputClass = `w-full px-2 py-1 text-xs sm:text-sm border ${error ? 'border-red-500' : 'border-gray-300'} rounded`;
-    
+  const renderInput = (col, value, onChange, error, isModal = false) => {
+    const inputClass = `w-full px-3 py-2 text-sm border ${error ? 'border-red-500' : 'border-gray-300'} rounded focus:outline-none focus:ring-1 focus:ring-black`;
+   
     if (col.id === 'status' || col.type === 'select') return (
       <div>
-        <select value={value||'Active'} onChange={e=>onChange(col.id,e.target.value)} className={inputClass}>
+        <label className="block text-xs font-medium text-gray-700 mb-1">{col.label} {col.required && <span className="text-red-500">*</span>}</label>
+        <select
+          value={value||'Active'}
+          onChange={e=>onChange(col.id,e.target.value)}
+          className={inputClass}
+        >
           <option value="Active">Active</option>
           <option value="Inactive">Inactive</option>
           <option value="Pending">Pending</option>
@@ -366,19 +471,41 @@ const EmployeeMaster = () => {
     );
     if (col.type === 'email') return (
       <div>
-        <input type="email" value={value||''} onChange={e=>onChange(col.id,e.target.value)} className={inputClass} />
+        <label className="block text-xs font-medium text-gray-700 mb-1">{col.label} {col.required && <span className="text-red-500">*</span>}</label>
+        <input
+          type="email"
+          value={value||''}
+          onChange={e=>onChange(col.id,e.target.value)}
+          className={inputClass}
+          placeholder={`Enter ${col.label.toLowerCase()}`}
+        />
         {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
       </div>
     );
     if (col.type === 'number') return (
       <div>
-        <input type="number" value={value||''} onChange={e=>onChange(col.id,e.target.value)} className={inputClass} min="0" />
+        <label className="block text-xs font-medium text-gray-700 mb-1">{col.label} {col.required && <span className="text-red-500">*</span>}</label>
+        <input
+          type="number"
+          value={value||''}
+          onChange={e=>onChange(col.id,e.target.value)}
+          className={inputClass}
+          min="0"
+          placeholder={`Enter ${col.label.toLowerCase()}`}
+        />
         {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
       </div>
     );
     return (
       <div>
-        <input type="text" value={value||''} onChange={e=>onChange(col.id,e.target.value)} className={inputClass} />
+        <label className="block text-xs font-medium text-gray-700 mb-1">{col.label} {col.required && <span className="text-red-500">*</span>}</label>
+        <input
+          type="text"
+          value={value||''}
+          onChange={e=>onChange(col.id,e.target.value)}
+          className={inputClass}
+          placeholder={`Enter ${col.label.toLowerCase()}`}
+        />
         {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
       </div>
     );
@@ -456,15 +583,15 @@ const EmployeeMaster = () => {
               )}
             </div>
             <div className="flex justify-end space-x-2">
-              <button 
-                onClick={() => setShowDeleteColumnPrompt(null)} 
+              <button
+                onClick={() => setShowDeleteColumnPrompt(null)}
                 className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
               >
                 {showDeleteColumnPrompt.type === 'warning' ? 'OK' : 'Cancel'}
               </button>
               {showDeleteColumnPrompt.type === 'delete' && (
-                <button 
-                  onClick={confirmDeleteColumn} 
+                <button
+                  onClick={confirmDeleteColumn}
                   className="px-3 py-1.5 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700"
                 >
                   Delete
@@ -476,36 +603,36 @@ const EmployeeMaster = () => {
       )}
 
       {/* Column Management Modal */}
-      {showColumnModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base">Manage Columns</h3>
-              <button onClick={() => setShowColumnModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X className="h-4 w-4 sm:h-5 sm:w-5" />
-              </button>
-            </div>
-            
-            {/* Add New Column Form */}
-            <div className="mb-4 p-3 border border-gray-300 rounded">
-              <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Add New Custom Column</h4>
-              <div className="flex flex-col sm:flex-row gap-2 mb-3">
-                <input
-                  type="text"
-                  placeholder="Column name (e.g., Phone Number)"
-                  value={newColumnName}
-                  onChange={(e) => setNewColumnName(e.target.value)}
-                  className="flex-grow px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded"
-                />
-                <button
-                  onClick={handleAddColumn}
-                  className="px-3 py-2 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800 whitespace-nowrap"
-                >
-                  Add Column
-                </button>
-              </div>
-            </div>
-
+{showColumnModal && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full mx-4">
+      {/* Removed "Manage Columns" header */}
+      <div className="flex items-center justify-between mb-4">
+        <div></div> {/* Empty div to maintain flex spacing */}
+        <button onClick={() => setShowColumnModal(false)} className="text-gray-400 hover:text-gray-600">
+          <X className="h-4 w-4 sm:h-5 sm:w-5" />
+        </button>
+      </div>
+     
+      {/* Add New Column Form - Removed border, added gray background */}
+      <div className="mb-4 p-3 bg-gray-100 rounded"> {/* Changed from border to bg-gray-100 */}
+        <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Add New Custom Column</h4>
+        <div className="flex flex-col sm:flex-row gap-2 mb-3">
+          <input
+            type="text"
+            placeholder="Column name (e.g., Phone Number)"
+            value={newColumnName}
+            onChange={(e) => setNewColumnName(e.target.value)}
+            className="flex-grow px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded"
+          />
+          <button
+            onClick={handleAddColumn}
+            className="px-3 py-2 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800 whitespace-nowrap"
+          >
+            Add Column
+          </button>
+        </div>
+      </div>
             {/* Existing Columns List */}
             <div className="mb-4">
               <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Available Columns</h4>
@@ -513,7 +640,7 @@ const EmployeeMaster = () => {
                 {availableColumns.map((column) => {
                   const isFixedColumn = ['id', 'employeeId', 'name', 'email', 'status', 'department', 'role'].includes(column.id);
                   const isEditing = editingColumn === column.id;
-                  
+                 
                   return (
                     <div key={column.id} className="flex items-center justify-between p-2 border border-gray-200 rounded">
                       <div className="flex items-center space-x-2">
@@ -556,7 +683,7 @@ const EmployeeMaster = () => {
                           </>
                         )}
                       </div>
-                      
+                     
                       <div className="flex items-center space-x-2">
                         {/* Edit button for all columns */}
                         {!isEditing && (
@@ -568,7 +695,7 @@ const EmployeeMaster = () => {
                             <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
                           </button>
                         )}
-                        
+                       
                         {/* Delete button */}
                         <button
                           onClick={() => handleDeleteColumn(column.id)}
@@ -583,7 +710,7 @@ const EmployeeMaster = () => {
                 })}
               </div>
             </div>
-            
+           
             <div className="flex justify-end">
               <button
                 onClick={() => setShowColumnModal(false)}
@@ -596,13 +723,50 @@ const EmployeeMaster = () => {
         </div>
       )}
 
+      {/* Add Employee Modal */}
+      {showAddEmployeeModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-medium text-gray-900 text-sm sm:text-base">Add New Employee</h3>
+              <button onClick={cancelNewEmployee} className="text-gray-400 hover:text-gray-600">
+                <X className="h-4 w-4 sm:h-5 sm:w-5" />
+              </button>
+            </div>
+           
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+              {availableColumns.map((col) => (
+                <div key={col.id} className="col-span-1">
+                  {renderInput(col, newEmployee[col.id], (f, v) => handleInputChange(f, v), validationErrors[col.id], true)}
+                </div>
+              ))}
+            </div>
+           
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={cancelNewEmployee}
+                className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveNewEmployee}
+                className="px-4 py-2 text-sm bg-black text-white rounded hover:bg-gray-800"
+              >
+                Save Employee
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MAIN BORDER CONTAINER - Everything wrapped in one box */}
       <div className="bg-white border border-gray-300 rounded mx-0">
-        
+       
         {/* TOOLBAR SECTION - Top part with buttons and search */}
         <div className="p-4 border-b border-gray-300">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            
+           
             {/* LEFT SIDE - Search, Add Employee, Add Column */}
             <div className="flex flex-1 flex-col sm:flex-row gap-2 sm:gap-2 items-start sm:items-center">
               {/* Search */}
@@ -627,7 +791,7 @@ const EmployeeMaster = () => {
                   Add Employee
                 </button>
 
-                <button 
+                <button
                   onClick={() => setShowColumnModal(true)}
                   className="flex items-center gap-1 h-10 px-3 bg-black text-white rounded text-xs sm:text-sm hover:bg-gray-800"
                 >
@@ -668,12 +832,12 @@ const EmployeeMaster = () => {
                   <Download className="h-4 w-4" />
                   Export
                 </button>
-                
+               
                 {/* Export Dropdown */}
                 {showExportDropdown && (
                   <>
-                    <div 
-                      className="fixed inset-0 z-40" 
+                    <div
+                      className="fixed inset-0 z-40"
                       onClick={() => setShowExportDropdown(false)}
                     />
                     <div className="absolute right-0 mt-1 w-40 bg-white border border-gray-300 rounded shadow-lg z-50">
@@ -709,9 +873,9 @@ const EmployeeMaster = () => {
             <thead>
               <tr className="border-b border-gray-300 bg-gray-100">
                 {availableColumns.map(col => (
-                  <th 
-                    key={col.id} 
-                    className="text-left py-3 px-4 font-medium text-gray-700 cursor-pointer hover:bg-gray-200 whitespace-nowrap border-r border-gray-300 last:border-r-0" 
+                  <th
+                    key={col.id}
+                    className="text-left py-3 px-4 font-medium text-gray-700 cursor-pointer hover:bg-gray-200 whitespace-nowrap border-r border-gray-300 last:border-r-0"
                     onClick={() => col.sortable && handleSort(col.id)}
                   >
                     <div className="flex items-center space-x-1">
@@ -724,19 +888,19 @@ const EmployeeMaster = () => {
                 <th className="text-left py-3 px-4 font-medium text-gray-700 whitespace-nowrap border-r border-gray-300">Actions</th>
               </tr>
             </thead>
-            
+           
             <tbody>
               {sortedEmployees.map((emp) => (
-                <tr 
-                  key={emp.id} 
+                <tr
+                  key={emp.id}
                   className="border-b border-gray-300 hover:bg-gray-50 transition-colors"
                 >
-                  {editingId === emp.id ? 
+                  {editingId === emp.id ?
                     availableColumns.map(col => (
                       <td key={col.id} className="py-3 px-4 whitespace-nowrap border-r border-gray-300 last:border-r-0">
                         {renderInput(col, editForm[col.id], (f,v) => handleInputChange(f,v,true), validationErrors[col.id])}
                       </td>
-                    )) : 
+                    )) :
                     availableColumns.map(col => (
                       <td key={col.id} className="py-3 px-4 whitespace-nowrap border-r border-gray-300 last:border-r-0">
                         {renderCellContent(col, emp[col.id])}
@@ -766,27 +930,6 @@ const EmployeeMaster = () => {
                   </td>
                 </tr>
               ))}
-
-              {/* Add New Employee Row */}
-              {isAddingNew && (
-                <tr className="border-b border-gray-300">
-                  {availableColumns.map(col => (
-                    <td key={col.id} className="py-3 px-4 whitespace-nowrap border-r border-gray-300 last:border-r-0">
-                      {renderInput(col, newEmployee[col.id], (f,v) => handleInputChange(f,v), validationErrors[col.id])}
-                    </td>
-                  ))}
-                  <td className="py-3 px-4 whitespace-nowrap border-r border-gray-300">
-                    <div className="flex items-center space-x-2">
-                      <button onClick={saveNewEmployee} className="p-1 text-green-600 hover:text-green-800">
-                        <Check className="h-4 w-4" />
-                      </button>
-                      <button onClick={cancelNewEmployee} className="p-1 text-red-600 hover:text-red-800">
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
@@ -795,7 +938,7 @@ const EmployeeMaster = () => {
         <div className="px-4 py-3 border-t border-gray-300 text-xs text-gray-600 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div>
             Showing {sortedEmployees.length} of {employees.length} employees
-            {(departmentFilter || statusFilter !== "All Status") && 
+            {(departmentFilter || statusFilter !== "All Status") &&
               ` (Filtered${departmentFilter ? ` by Dept: ${departmentFilter}` : ''}${statusFilter !== "All Status" ? ` by Status: ${statusFilter}` : ''})`
             }
           </div>

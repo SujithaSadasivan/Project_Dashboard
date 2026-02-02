@@ -9,6 +9,8 @@ from app.core.config import FRONTEND_URL, API_PREFIX
 
 # Import models for table creation
 from app.models import user  # noqa: F401
+from app.models import employee  # noqa: F401
+from app.models import employee_column  # noqa: F401
 
 # Import routers
 from app.api.auth import router as auth_router
@@ -27,14 +29,19 @@ app = FastAPI(
 )
 
 # CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins= [
+origins = [
     "https://automated-manufacturing.vercel.app",   
     "https://automated-manufact-git-6ff091-gokulakrishnans-projects-78c7d2dd.vercel.app",  # preview
     "https://automated-manufacturing-kdmeekg5b.vercel.app", 
     "http://localhost:5173",  # local frontend testing
-],
+]
+
+if FRONTEND_URL and FRONTEND_URL not in origins:
+    origins.append(FRONTEND_URL)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

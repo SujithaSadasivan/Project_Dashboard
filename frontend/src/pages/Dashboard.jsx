@@ -25,7 +25,7 @@ import MOMModule from "../pages/MOMModule";
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
-  const [activeModule, setActiveModule] = useState('MOMModule'); // Default to MOM
+  const [activeModule, setActiveModule] = useState('employee-master'); // Default to MOM
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
