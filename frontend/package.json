@@ -14,6 +14,7 @@
     "handsontable": "^16.2.0",
     "icons": "^1.0.0",
     "jspdf": "^4.0.0",
+    "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.562.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

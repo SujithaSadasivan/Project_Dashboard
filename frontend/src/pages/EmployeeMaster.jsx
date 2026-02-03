@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, X, Check, ChevronUp, ChevronDown, Filter, Download, Eye, EyeOff } from 'lucide-react';
-import axios from 'axios';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import API from '../utils/api';
 
 const EmployeeMaster = () => {
   // Fixed columns matching backend Employee model - Added ID column
   const columns = [
-    { id: 'id', label: 'ID', sortable: true, type: 'text', required: true, visible: true },
+    { id: 'employee_id', label: 'ID', sortable: true, type: 'text', required: true, visible: true },
     { id: 'name', label: 'Name', sortable: true, type: 'text', required: true, visible: true },
     { id: 'email', label: 'Email', sortable: true, type: 'email', required: true, visible: true },
     { id: 'department', label: 'Department', sortable: true, type: 'text', required: false, visible: true },
@@ -40,10 +40,7 @@ const EmployeeMaster = () => {
   const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
   const [notification, setNotification] = useState({ show: false, message: '', type: '' });
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
-  const API_URL = `${API_BASE_URL}/employees`;
-
-  const fixedColumnIds = ['id', 'name', 'email', 'department', 'role', 'status', 'created_at', 'updated_at'];
+  const fixedColumnIds = ['id', 'employee_id', 'name', 'email', 'department', 'role', 'status', 'created_at', 'updated_at'];
 
   // Helper to flatten API response
   const transformEmployeeFromApi = (apiEmployee) => {
@@ -59,8 +56,13 @@ const EmployeeMaster = () => {
       department: employeeData.department,
       role: employeeData.role,
       status: employeeData.status || 'Active',
+      employee_id: employeeData.employee_id,
       custom_fields: {}
     };
+
+    if (employeeData.id) {
+      payload.id = employeeData.id;
+    }
 
     Object.keys(employeeData).forEach(key => {
       if (!fixedColumnIds.includes(key) && key !== 'custom_fields' && key !== 'id') {
@@ -86,7 +88,7 @@ const EmployeeMaster = () => {
   }, []);
 
   const fetchEmployees = () => {
-    axios.get(API_URL)
+    API.get('/employees')
       .then(res => {
         const flattenedEmployees = res.data.map(transformEmployeeFromApi);
         setEmployees(flattenedEmployees);
@@ -95,7 +97,7 @@ const EmployeeMaster = () => {
   };
 
   const fetchColumns = () => {
-    axios.get(`${API_URL}/columns/all`)
+    API.get('/employees/columns/all')
       .then(res => {
         const dbColumns = res.data.map(col => ({
           id: col.column_name,
@@ -153,7 +155,7 @@ setAvailableColumns(mergedColumns);
       const column = availableColumns.find(col => col.id === columnId);
       
       if (column && column.dbId) {
-        axios.put(`${API_URL}/columns/${column.dbId}`, {
+        API.put(`/employees/columns/${column.dbId}`, {
           column_label: tempColumnName
         })
         .then(() => {
@@ -224,7 +226,7 @@ setAvailableColumns(mergedColumns);
 
    
     if (column && column.dbId) {
-      axios.delete(`${API_URL}/columns/${column.dbId}`)
+      API.delete(`/employees/columns/${column.dbId}`)
         .then(() => {
           fetchColumns();
           cleanupAndClose();
@@ -294,7 +296,7 @@ setAvailableColumns(mergedColumns);
     const payload = transformEmployeeForSave(newEmployee);
     console.log('Saving employee payload:', payload);
 
-    axios.post(API_URL, payload)
+    API.post('/employees', payload)
       .then(() => {
         fetchEmployees();
         setShowAddEmployeeModal(false);
@@ -350,7 +352,7 @@ setAvailableColumns(mergedColumns);
     const payload = transformEmployeeForSave(editForm);
     console.log('Updating employee payload:', payload);
 
-    axios.put(`${API_URL}/${editingId}`, payload)
+    API.put(`/employees/${editingId}`, payload)
       .then(() => { 
         fetchEmployees(); 
         setEditingId(null); 
@@ -373,7 +375,7 @@ setAvailableColumns(mergedColumns);
   const confirmDeleteEmployee = () => {
     if (!showDeletePrompt) return;
 
-    axios.delete(`${API_URL}/${showDeletePrompt.id}`)
+    API.delete(`/employees/${showDeletePrompt.id}`)
       .then(() => { 
         fetchEmployees(); 
         setShowDeletePrompt(null); 
@@ -406,7 +408,7 @@ setAvailableColumns(mergedColumns);
         is_required: false
       };
 
-      axios.post(`${API_URL}/columns/create`, columnPayload)
+      API.post('/employees/columns/create', columnPayload)
         .then(() => {
           fetchColumns();
           setNewColumnName('');
