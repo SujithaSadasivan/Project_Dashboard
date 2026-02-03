@@ -135,17 +135,17 @@ const Dashboard = () => {
       icon: <Upload className="h-5 w-5" />
     },
     {
-      id: 'SystemSettings',
-      name: 'Settings',
-      component: <SystemSettings />,
-      icon: <Settings className="h-5 w-5" />
-    },
-    {
       id: 'MOMModule',
       name: 'Minutes Of Meeting',
       component: <MOMModule />,
       icon: <Users className="h-5 w-5" />
       
+    },
+    {
+      id: 'SystemSettings',
+      name: 'Settings',
+      component: <SystemSettings />,
+      icon: <Settings className="h-5 w-5" />
     },
   ];
 

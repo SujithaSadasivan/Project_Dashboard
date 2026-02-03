@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, X, Check, ChevronUp, ChevronDown, Filter, Download } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, X, Check, ChevronUp, ChevronDown, Filter, Download, Eye, EyeOff } from 'lucide-react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 const EmployeeMaster = () => {
   // Fixed columns matching backend Employee model - Added ID column
   const columns = [
-    { id: 'id', label: 'ID', sortable: true, type: 'text', required: true },
-    { id: 'name', label: 'Name', sortable: true, type: 'text', required: true },
-    { id: 'email', label: 'Email', sortable: true, type: 'email', required: true },
-    { id: 'department', label: 'Department', sortable: true, type: 'text', required: false },
-    { id: 'role', label: 'Role', sortable: true, type: 'text', required: false },
-    { id: 'status', label: 'Status', sortable: true, type: 'select', required: true },
+    { id: 'id', label: 'ID', sortable: true, type: 'text', required: true, visible: true },
+    { id: 'name', label: 'Name', sortable: true, type: 'text', required: true, visible: true },
+    { id: 'email', label: 'Email', sortable: true, type: 'email', required: true, visible: true },
+    { id: 'department', label: 'Department', sortable: true, type: 'text', required: false, visible: true },
+    { id: 'role', label: 'Role', sortable: true, type: 'text', required: false, visible: true },
+    { id: 'status', label: 'Status', sortable: true, type: 'select', required: true, visible: true },
   ];
 
   // Load columns from backend (initial state is fixed columns)
@@ -35,7 +37,8 @@ const EmployeeMaster = () => {
   const [validationErrors, setValidationErrors] = useState({});
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [showDeleteColumnPrompt, setShowDeleteColumnPrompt] = useState(null);
-  const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false); // New state for add employee modal
+  const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
+  const [notification, setNotification] = useState({ show: false, message: '', type: '' });
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
   const API_URL = `${API_BASE_URL}/employees`;
@@ -61,10 +64,6 @@ const EmployeeMaster = () => {
 
     Object.keys(employeeData).forEach(key => {
       if (!fixedColumnIds.includes(key) && key !== 'custom_fields' && key !== 'id') {
-        // Only include fields that are in availableColumns to avoid sending junk
-        // But since availableColumns might change, maybe just send everything else?
-        // Let's check if the key corresponds to a known column or just send it.
-        // Safer to just send it if it's not a fixed column.
         payload.custom_fields[key] = employeeData[key];
       }
     });
@@ -72,20 +71,19 @@ const EmployeeMaster = () => {
     return payload;
   };
 
+  // Show notification
+  const showNotification = (message, type = 'success') => {
+    setNotification({ show: true, message, type });
+    setTimeout(() => {
+      setNotification({ show: false, message: '', type: '' });
+    }, 3000);
+  };
+
   // Fetch employees from backend
   useEffect(() => {
     fetchEmployees();
     fetchColumns();
   }, []);
-
-  // Save columns to localStorage whenever they change
-  // We can keep this as a backup, but we primarily rely on DB now.
-  // Actually, let's disable this if we are using DB columns to avoid conflicts.
-  /*
-  useEffect(() => {
-    localStorage.setItem('employee_columns', JSON.stringify(availableColumns));
-  }, [availableColumns]);
-  */
 
   const fetchEmployees = () => {
     axios.get(API_URL)
@@ -105,14 +103,44 @@ const EmployeeMaster = () => {
           type: col.data_type,
           required: col.is_required,
           sortable: true,
-          dbId: col.id // Store DB ID for reference
+          visible: true, // Default to visible
+          dbId: col.id
         }));
 
         const fixedCols = columns.filter(c => !dbColumns.some(dc => dc.id === c.id));
-        setAvailableColumns([...fixedCols, ...dbColumns]);
+        const savedVisibility = JSON.parse(localStorage.getItem('columnVisibility')) || {};
+
+const mergedColumns = [...fixedCols, ...dbColumns].map(col => ({
+  ...col,
+  visible: savedVisibility[col.id] ?? true
+}));
+
+setAvailableColumns(mergedColumns);
+
       })
       .catch(err => console.error('Error fetching columns:', err));
   };
+
+  // Toggle column visibility
+ const toggleColumnVisibility = (columnId) => {
+  const updatedColumns = availableColumns.map(col =>
+    col.id === columnId ? { ...col, visible: !col.visible } : col
+  );
+
+  setAvailableColumns(updatedColumns);
+
+  // save to localStorage
+  const visibilityMap = {};
+  updatedColumns.forEach(col => {
+    visibilityMap[col.id] = col.visible;
+  });
+
+  localStorage.setItem('columnVisibility', JSON.stringify(visibilityMap));
+};
+
+
+  // Get visible columns for table
+  const visibleColumns = availableColumns.filter(col => col.visible);
 
   // Column editing functions
   const startEditColumn = (columnId, currentLabel) => {
@@ -132,6 +160,7 @@ const EmployeeMaster = () => {
           fetchColumns();
           setEditingColumn(null);
           setTempColumnName('');
+          showNotification('Column updated successfully');
         })
         .catch(err => {
           console.error(err);
@@ -144,6 +173,7 @@ const EmployeeMaster = () => {
         ));
         setEditingColumn(null);
         setTempColumnName('');
+        showNotification('Column updated successfully');
       }
     }
   };
@@ -182,20 +212,23 @@ const EmployeeMaster = () => {
     const columnId = showDeleteColumnPrompt.id;
     const column = availableColumns.find(col => col.id === columnId);
 
-    const cleanupAndClose = () => {
-      if (isAddingNew) {
-        const newEmployeeData = { ...newEmployee };
-        delete newEmployeeData[columnId];
-        setNewEmployee(newEmployeeData);
-      }
-      setShowDeleteColumnPrompt(null);
-    };
+   const cleanupAndClose = () => {
+  if (isAddingNew) {
+    const newEmployeeData = { ...newEmployee };
+    delete newEmployeeData[columnId];
+    setNewEmployee(newEmployeeData);
+  }
+  setShowDeleteColumnPrompt(null);
+  setShowColumnModal(false);
+};
+
    
     if (column && column.dbId) {
       axios.delete(`${API_URL}/columns/${column.dbId}`)
         .then(() => {
           fetchColumns();
           cleanupAndClose();
+          showNotification('Column deleted successfully');
         })
         .catch(err => {
           console.error(err);
@@ -205,6 +238,7 @@ const EmployeeMaster = () => {
     } else {
       setAvailableColumns(availableColumns.filter(col => col.id !== columnId));
       cleanupAndClose();
+      showNotification('Column deleted successfully');
     }
   };
 
@@ -275,6 +309,7 @@ const EmployeeMaster = () => {
           }
         });
         setNewEmployee(initialEmployee);
+        showNotification('Employee added successfully');
       })
       .catch(err => {
         console.error(err);
@@ -316,7 +351,13 @@ const EmployeeMaster = () => {
     console.log('Updating employee payload:', payload);
 
     axios.put(`${API_URL}/${editingId}`, payload)
-      .then(() => { fetchEmployees(); setEditingId(null); setEditForm({}); setValidationErrors({}); })
+      .then(() => { 
+        fetchEmployees(); 
+        setEditingId(null); 
+        setEditForm({}); 
+        setValidationErrors({}); 
+        showNotification('Employee updated successfully');
+      })
       .catch(err => {
         console.error(err);
         const msg = err.response?.data?.detail || err.message;
@@ -333,7 +374,11 @@ const EmployeeMaster = () => {
     if (!showDeletePrompt) return;
 
     axios.delete(`${API_URL}/${showDeletePrompt.id}`)
-      .then(() => { fetchEmployees(); setShowDeletePrompt(null); })
+      .then(() => { 
+        fetchEmployees(); 
+        setShowDeletePrompt(null); 
+        showNotification('Employee deleted successfully');
+      })
       .catch(err => {
         console.error(err);
         const msg = err.response?.data?.detail || err.message;
@@ -367,6 +412,7 @@ const EmployeeMaster = () => {
           setNewColumnName('');
           setNewColumnType('text');
           setShowColumnModal(false);
+          showNotification('Column added successfully');
         })
         .catch(err => {
           console.error(err);
@@ -395,7 +441,7 @@ const EmployeeMaster = () => {
         XLSX.utils.book_append_sheet(wb, ws, "Employees");
         XLSX.writeFile(wb, "employees.xlsx");
         setShowExportDropdown(false);
-        return; // Exit function to avoid blob download
+        return;
       case 'csv':
         content = convertToCSV(dataToExport);
         mimeType = 'text/csv';
@@ -406,6 +452,10 @@ const EmployeeMaster = () => {
         mimeType = 'application/json';
         filename = 'employees.json';
         break;
+      case 'pdf':
+        exportToPDF(dataToExport);
+        setShowExportDropdown(false);
+        return;
     }
    
     const blob = new Blob([content], { type: mimeType });
@@ -419,6 +469,24 @@ const EmployeeMaster = () => {
     window.URL.revokeObjectURL(url);
    
     setShowExportDropdown(false);
+  };
+
+  const exportToPDF = (data) => {
+    const doc = new jsPDF();
+    const tableColumn = availableColumns.map(col => col.label);
+    const tableRows = data.map(emp => 
+      availableColumns.map(col => emp[col.label] || '')
+    );
+
+    doc.autoTable({
+      head: [tableColumn],
+      body: tableRows,
+      theme: 'grid',
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [41, 128, 185] }
+    });
+
+    doc.save("employees.pdf");
   };
 
   const convertToCSV = (data) => {
@@ -540,6 +608,25 @@ const EmployeeMaster = () => {
 
   return (
     <div className="space-y-3 sm:space-y-4 px-0">
+      {/* Notification Banner */}
+      {notification.show && (
+        <div className={`fixed bottom-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 ${
+          notification.type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' : 
+          notification.type === 'error' ? 'bg-red-100 text-red-800 border border-red-200' : 
+          'bg-blue-100 text-blue-800 border border-blue-200'
+        }`}>
+          <div className="flex items-center">
+            <span className="text-sm font-medium">{notification.message}</span>
+            <button 
+              onClick={() => setNotification({ show: false, message: '', type: '' })} 
+              className="ml-4 text-gray-500 hover:text-gray-700"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Delete Employee Modal */}
       {showDeletePrompt && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -562,26 +649,40 @@ const EmployeeMaster = () => {
 
       {/* Delete Column Prompt */}
       {showDeleteColumnPrompt && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
           <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
             <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base">{showDeleteColumnPrompt.title}</h3>
-              <button onClick={() => setShowDeleteColumnPrompt(null)} className="text-gray-400 hover:text-gray-600">
+              <h3 className="font-medium text-gray-900 text-sm sm:text-base">
+                {showDeleteColumnPrompt.title}
+              </h3>
+              <button
+                onClick={() => setShowDeleteColumnPrompt(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
                 <X className="h-4 w-4 sm:h-5 sm:w-5"/>
               </button>
             </div>
+
             <div className="mb-4">
               {showDeleteColumnPrompt.type === 'warning' ? (
-                <p className="text-xs sm:text-sm text-gray-600">{showDeleteColumnPrompt.message}</p>
+                <p className="text-xs sm:text-sm text-gray-600">
+                  {showDeleteColumnPrompt.message}
+                </p>
               ) : (
                 <>
                   <p className="text-xs sm:text-sm text-gray-600">
-                    Are you sure you want to delete column <span className="font-medium">{showDeleteColumnPrompt.columnLabel}</span>?
+                    Are you sure you want to delete column
+                    <span className="font-medium">
+                      {" "}{showDeleteColumnPrompt.columnLabel}
+                    </span>?
                   </p>
-                  <p className="text-xs text-red-600 mt-1">This action cannot be undone.</p>
+                  <p className="text-xs text-red-600 mt-1">
+                    This action cannot be undone.
+                  </p>
                 </>
               )}
             </div>
+
             <div className="flex justify-end space-x-2">
               <button
                 onClick={() => setShowDeleteColumnPrompt(null)}
@@ -589,6 +690,7 @@ const EmployeeMaster = () => {
               >
                 {showDeleteColumnPrompt.type === 'warning' ? 'OK' : 'Cancel'}
               </button>
+
               {showDeleteColumnPrompt.type === 'delete' && (
                 <button
                   onClick={confirmDeleteColumn}
@@ -603,37 +705,40 @@ const EmployeeMaster = () => {
       )}
 
       {/* Column Management Modal */}
-{showColumnModal && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-    <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full mx-4">
-      {/* Removed "Manage Columns" header */}
-      <div className="flex items-center justify-between mb-4">
-        <div></div> {/* Empty div to maintain flex spacing */}
-        <button onClick={() => setShowColumnModal(false)} className="text-gray-400 hover:text-gray-600">
-          <X className="h-4 w-4 sm:h-5 sm:w-5" />
-        </button>
-      </div>
-     
-      {/* Add New Column Form - Removed border, added gray background */}
-      <div className="mb-4 p-3 bg-gray-100 rounded"> {/* Changed from border to bg-gray-100 */}
-        <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Add New Custom Column</h4>
-        <div className="flex flex-col sm:flex-row gap-2 mb-3">
-          <input
-            type="text"
-            placeholder="Column name (e.g., Phone Number)"
-            value={newColumnName}
-            onChange={(e) => setNewColumnName(e.target.value)}
-            className="flex-grow px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded"
-          />
-          <button
-            onClick={handleAddColumn}
-            className="px-3 py-2 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800 whitespace-nowrap"
-          >
-            Add Column
-          </button>
-        </div>
-      </div>
-            {/* Existing Columns List */}
+      {showColumnModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <div></div>
+              <button onClick={() => setShowColumnModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-4 w-4 sm:h-5 sm:w-5" />
+              </button>
+            </div>
+           
+            <div className="mb-4 p-3 rounded">
+              <h3 className="font-medium text-gray-900 text-sm sm:text-base -mt-5 mb-2">
+                <span className="bg-gray-200 px-2 py-0.5 rounded">
+                  Add New Custom Column
+                </span>
+              </h3>
+
+              <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                <input
+                  type="text"
+                  placeholder="Column name (e.g., Phone Number)"
+                  value={newColumnName}
+                  onChange={(e) => setNewColumnName(e.target.value)}
+                  className="flex-grow px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded"
+                />
+                <button
+                  onClick={handleAddColumn}
+                  className="px-3 py-2 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800 whitespace-nowrap"
+                >
+                  Add Column
+                </button>
+              </div>
+            </div>            
+            
             <div className="mb-4">
               <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Available Columns</h4>
               <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -685,6 +790,15 @@ const EmployeeMaster = () => {
                       </div>
                      
                       <div className="flex items-center space-x-2">
+                        {/* View/Hide button */}
+                        <button
+                          onClick={() => toggleColumnVisibility(column.id)}
+                          className={`${column.visible ? 'text-blue-600 hover:text-blue-800' : 'text-gray-400 hover:text-gray-600'}`}
+                          title={column.visible ? "Hide column" : "Show column"}
+                        >
+                          {column.visible ? <Eye className="h-3 w-3 sm:h-4 sm:w-4" /> : <EyeOff className="h-3 w-3 sm:h-4 sm:w-4" />}
+                        </button>
+
                         {/* Edit button for all columns */}
                         {!isEditing && (
                           <button
@@ -711,14 +825,7 @@ const EmployeeMaster = () => {
               </div>
             </div>
            
-            <div className="flex justify-end">
-              <button
-                onClick={() => setShowColumnModal(false)}
-                className="px-3 py-1.5 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800"
-              >
-                Done
-              </button>
-            </div>
+           
           </div>
         </div>
       )}
@@ -728,11 +835,19 @@ const EmployeeMaster = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-4 sm:p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base">Add New Employee</h3>
-              <button onClick={cancelNewEmployee} className="text-gray-400 hover:text-gray-600">
+              <h3 className="font-medium text-gray-900 text-sm sm:text-base">
+                <span className="bg-gray-200 px-2 py-0.5 rounded">
+                  Add New Employee
+                </span>
+              </h3>
+              <button
+                onClick={cancelNewEmployee}
+                className="text-gray-400 hover:text-gray-600"
+              >
                 <X className="h-4 w-4 sm:h-5 sm:w-5" />
               </button>
             </div>
+
            
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
               {availableColumns.map((col) => (
@@ -760,14 +875,14 @@ const EmployeeMaster = () => {
         </div>
       )}
 
-      {/* MAIN BORDER CONTAINER - Everything wrapped in one box */}
+      {/* MAIN BORDER CONTAINER */}
       <div className="bg-white border border-gray-300 rounded mx-0">
        
-        {/* TOOLBAR SECTION - Top part with buttons and search */}
+        {/* TOOLBAR SECTION */}
         <div className="p-4 border-b border-gray-300">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
            
-            {/* LEFT SIDE - Search, Add Employee, Add Column */}
+            {/* LEFT SIDE */}
             <div className="flex flex-1 flex-col sm:flex-row gap-2 sm:gap-2 items-start sm:items-center">
               {/* Search */}
               <div className="relative w-full sm:w-auto">
@@ -781,7 +896,7 @@ const EmployeeMaster = () => {
                 />
               </div>
 
-              {/* Buttons - Close together */}
+              {/* Buttons */}
               <div className="flex gap-2">
                 <button
                   onClick={handleAddEmployeeClick}
@@ -801,14 +916,14 @@ const EmployeeMaster = () => {
               </div>
             </div>
 
-            {/* RIGHT SIDE - Filter and Export */}
+            {/* RIGHT SIDE */}
             <div className="flex gap-2 mt-2 sm:mt-0">
-              {/* Department Filter as text input */}
+              {/* Department Filter */}
               <div className="relative">
                 <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Filter by department..."
+                  placeholder="Filter..."
                   value={departmentFilter}
                   onChange={(e) => setDepartmentFilter(e.target.value)}
                   className="h-10 pl-9 pr-3 text-xs sm:text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black w-full sm:w-48"
@@ -840,7 +955,7 @@ const EmployeeMaster = () => {
                       className="fixed inset-0 z-40"
                       onClick={() => setShowExportDropdown(false)}
                     />
-                    <div className="absolute right-0 mt-1 w-40 bg-white border border-gray-300 rounded shadow-lg z-50">
+                    <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-300 rounded shadow-lg z-50">
                       <button
                         onClick={() => handleExport('excel')}
                         className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
@@ -859,6 +974,12 @@ const EmployeeMaster = () => {
                       >
                         Export as JSON
                       </button>
+                      <button
+                        onClick={() => handleExport('pdf')}
+                        className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
+                      >
+                        Export as PDF
+                      </button>
                     </div>
                   </>
                 )}
@@ -868,11 +989,11 @@ const EmployeeMaster = () => {
         </div>
 
         {/* TABLE SECTION */}
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[calc(100vh-300px)]">
           <table className="min-w-full text-xs sm:text-sm border-collapse">
-            <thead>
-              <tr className="border-b border-gray-300 bg-gray-100">
-                {availableColumns.map(col => (
+            <thead className="bg-gray-100 sticky top-0 z-10">
+              <tr className="border-b border-gray-300">
+                {visibleColumns.map(col => (
                   <th
                     key={col.id}
                     className="text-left py-3 px-4 font-medium text-gray-700 cursor-pointer hover:bg-gray-200 whitespace-nowrap border-r border-gray-300 last:border-r-0"
@@ -885,23 +1006,25 @@ const EmployeeMaster = () => {
                     </div>
                   </th>
                 ))}
-                <th className="text-left py-3 px-4 font-medium text-gray-700 whitespace-nowrap border-r border-gray-300">Actions</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-700 whitespace-nowrap border-r border-gray-300">
+                  Actions
+                </th>
               </tr>
             </thead>
-           
+
             <tbody>
-              {sortedEmployees.map((emp) => (
+              {sortedEmployees.map(emp => (
                 <tr
                   key={emp.id}
                   className="border-b border-gray-300 hover:bg-gray-50 transition-colors"
                 >
                   {editingId === emp.id ?
-                    availableColumns.map(col => (
+                    visibleColumns.map(col => (
                       <td key={col.id} className="py-3 px-4 whitespace-nowrap border-r border-gray-300 last:border-r-0">
-                        {renderInput(col, editForm[col.id], (f,v) => handleInputChange(f,v,true), validationErrors[col.id])}
+                        {renderInput(col, editForm[col.id], (f, v) => handleInputChange(f, v, true), validationErrors[col.id])}
                       </td>
                     )) :
-                    availableColumns.map(col => (
+                    visibleColumns.map(col => (
                       <td key={col.id} className="py-3 px-4 whitespace-nowrap border-r border-gray-300 last:border-r-0">
                         {renderCellContent(col, emp[col.id])}
                       </td>
@@ -941,6 +1064,9 @@ const EmployeeMaster = () => {
             {(departmentFilter || statusFilter !== "All Status") &&
               ` (Filtered${departmentFilter ? ` by Dept: ${departmentFilter}` : ''}${statusFilter !== "All Status" ? ` by Status: ${statusFilter}` : ''})`
             }
+            <span className="ml-2 text-blue-600">
+              ({visibleColumns.length} of {availableColumns.length} columns visible)
+            </span>
           </div>
         </div>
       </div>
