@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { 
-  LogOut, 
+import {
+  LogOut,
   Menu,
   X,
   Users,
@@ -11,7 +11,7 @@ import {
   Building,
   Upload,
   Settings,
- 
+
 } from 'lucide-react';
 
 import EmployeeMaster from "../pages/EmployeeMaster";
@@ -37,7 +37,7 @@ const Dashboard = () => {
   useEffect(() => {
     const updateDateTime = () => {
       const now = new Date();
-      
+
       // Format time (HH:MM:SS AM/PM)
       const timeString = now.toLocaleTimeString('en-US', {
         hour: '2-digit',
@@ -45,7 +45,7 @@ const Dashboard = () => {
         second: '2-digit',
         hour12: true
       });
-      
+
       // Format date (Day, Date Month Year)
       const dateString = now.toLocaleDateString('en-US', {
         weekday: 'long',
@@ -53,14 +53,14 @@ const Dashboard = () => {
         month: 'long',
         year: 'numeric'
       });
-      
+
       setCurrentTime(timeString);
       setCurrentDate(dateString);
     };
 
     updateDateTime();
     const intervalId = setInterval(updateDateTime, 1000);
-    
+
     return () => clearInterval(intervalId);
   }, []);
 
@@ -69,7 +69,7 @@ const Dashboard = () => {
     const checkIsMobile = () => {
       const mobile = window.innerWidth < 1024;
       setIsMobile(mobile);
-      
+
       // On mobile, keep sidebar closed initially
       // On desktop, keep sidebar open
       if (mobile) {
@@ -81,7 +81,7 @@ const Dashboard = () => {
 
     checkIsMobile();
     window.addEventListener('resize', checkIsMobile);
-    
+
     return () => window.removeEventListener('resize', checkIsMobile);
   }, []);
 
@@ -92,7 +92,7 @@ const Dashboard = () => {
         setProfileMenuOpen(false);
       }
     };
-    
+
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
@@ -139,7 +139,7 @@ const Dashboard = () => {
       name: 'Minutes Of Meeting',
       component: <MOMModule />,
       icon: <Users className="h-5 w-5" />
-      
+
     },
     {
       id: 'SystemSettings',
@@ -201,7 +201,7 @@ const Dashboard = () => {
               >
                 {getUserInitial()}
               </button>
-              
+
               {/* Mobile Profile Dropdown */}
               {profileMenuOpen && (
                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
@@ -228,7 +228,7 @@ const Dashboard = () => {
             </div>
           </div>
         </div>
-        
+
         {/* Mobile Time and Date */}
         <div className="px-4 pb-2">
           <div className="flex items-center justify-between">
@@ -241,7 +241,7 @@ const Dashboard = () => {
       <div className="flex">
         {/* Sidebar */}
         <div className={`
-          fixed lg:relative inset-y-0 left-0 z-30 w-64 lg:w-64 bg-gray-100
+          fixed lg:relative inset-y-0 left-0 z-30 w-64 lg:w-64 bg-gray/70
           transform transition-transform duration-300 ease-in-out lg:transform-none
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
           h-screen lg:h-screen flex flex-col border-r border-gray-200
@@ -249,7 +249,7 @@ const Dashboard = () => {
           {/* Logo */}
           <div className="flex-shrink-0 pt-4 pb-3 px-4">
             <div className="flex items-center justify-center">
-              <img 
+              <img
                 // src="/caldimlogo.png" 
                 // alt="Company Logo" 
                 className="h-20 w-auto object-contain max-h-32"
@@ -266,11 +266,10 @@ const Dashboard = () => {
               <button
                 key={module.id}
                 onClick={() => handleModuleClick(module.id)}
-                className={`w-full flex items-center space-x-3 rounded-lg transition-all duration-200 ${
-                  activeModule === module.id
+                className={`w-full flex items-center space-x-3 rounded-lg transition-all duration-200 ${activeModule === module.id
                     ? 'bg-white text-black shadow-lg px-3 py-3 border-l-4 border-[#E30613]'
                     : 'hover:bg-gray-200 text-gray-900 p-3 hover:pl-4'
-                }`}
+                  }`}
               >
                 <div className={`${activeModule === module.id ? 'text-[#E30613]' : 'text-gray-500'}`}>
                   {module.icon}
@@ -294,7 +293,7 @@ const Dashboard = () => {
 
         {/* Overlay for mobile sidebar */}
         {sidebarOpen && isMobile && (
-          <div 
+          <div
             className="fixed inset-0 bg-black/50 z-20 lg:hidden"
             onClick={() => setSidebarOpen(false)}
           />
@@ -338,7 +337,7 @@ const Dashboard = () => {
                       >
                         {getUserInitial()}
                       </button>
-                      
+
                       {/* Profile Dropdown */}
                       {profileMenuOpen && (
                         <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">

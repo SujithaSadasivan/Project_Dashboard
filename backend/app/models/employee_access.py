@@ -21,5 +21,11 @@ class EmployeeAccess(Base):
     access_level = Column(String, nullable=False)
     status = Column(String, nullable=False)
     modules = Column(ARRAY(String))
+    hashed_password = Column(String, nullable=True)
+
+    # De-normalized fields for easier access and history
+    employee_name = Column(String, nullable=True)
+    employee_email = Column(String, nullable=True)
+    employee_code = Column(String, nullable=True)  # e.g. "CDE100"
 
     employee = relationship("Employee")

@@ -1149,7 +1149,7 @@ const UploadTrackers = () => {
                   className="flex items-center gap-1 h-10 px-3 bg-black text-white rounded text-xs sm:text-sm hover:bg-gray-800"
                 >
                   <Plus className="h-4 w-4" />
-                  Add Employee
+                  Upload Trackers
                 </button>
 
                 <button 

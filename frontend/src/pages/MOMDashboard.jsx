@@ -34,13 +34,24 @@ const MOMDashboard = ({ meetings }) => {
     stats.highPriorityRate = stats.total > 0 ? Math.round(((stats.critical + stats.high) / stats.total) * 100) : 0;
     stats.pendingRate = stats.total > 0 ? Math.round((stats.pending / stats.total) * 100) : 0;
 
-    // Top speakers
-    const speakerCount = {};
+    // Top attendees (instead of speakers)
+    const attendeeCount = {};
     filteredMeetings.forEach(meeting => {
-      const speaker = meeting.speaker || 'Unknown';
-      speakerCount[speaker] = (speakerCount[speaker] || 0) + 1;
+      // Split attendees string by comma, semicolon, or "and"
+      const attendees = meeting.attendees || meeting.speaker || 'Unknown';
+      const attendeeList = attendees.split(/[,;]| and /).map(a => a.trim()).filter(a => a);
+      
+      if (attendeeList.length > 0) {
+        attendeeList.forEach(attendee => {
+          attendeeCount[attendee] = (attendeeCount[attendee] || 0) + 1;
+        });
+      } else {
+        // Fallback to single attendee/speaker
+        attendeeCount[attendees] = (attendeeCount[attendees] || 0) + 1;
+      }
     });
-    const topSpeakers = Object.entries(speakerCount)
+    
+    const topAttendees = Object.entries(attendeeCount)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
@@ -88,7 +99,7 @@ const MOMDashboard = ({ meetings }) => {
 
     return {
       stats,
-      topSpeakers,
+      topAttendees,
       topProjects,
       overdueTasks,
       recentMeetings,
@@ -119,7 +130,10 @@ const MOMDashboard = ({ meetings }) => {
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-       
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">Meeting Analytics Dashboard</h2>
+          <p className="text-sm text-gray-600">Insights from your meeting minutes</p>
+        </div>
         
         <div className="flex flex-wrap items-center gap-2">
           <select
@@ -147,7 +161,7 @@ const MOMDashboard = ({ meetings }) => {
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-blue-700">Total Meetings</p>
+              <p className="text-xs font-medium text-blue-700">Total Meeting Points</p>
               <p className="text-2xl font-bold text-blue-900 mt-1">{analytics.stats.total}</p>
             </div>
             <div className="p-2 bg-blue-200 rounded-full">
@@ -177,7 +191,7 @@ const MOMDashboard = ({ meetings }) => {
         <div className="bg-gradient-to-br from-red-50 to-red-100 border border-red-200 rounded-lg p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-red-700">High Priority</p>
+              <p className="text-xs font-medium text-red-700">High Priority Items</p>
               <p className="text-2xl font-bold text-red-900 mt-1">{analytics.stats.critical + analytics.stats.high}</p>
             </div>
             <div className="p-2 bg-red-200 rounded-full">
@@ -261,40 +275,40 @@ const MOMDashboard = ({ meetings }) => {
         </div>
       </div>
 
-      {/* Top Contributors & Projects */}
+      {/* Top Attendees & Projects */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Top Contributors */}
+        {/* Top Attendees */}
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-gray-900">Top Contributors</h3>
+            <h3 className="font-bold text-gray-900">Top Attendees</h3>
             <Icons.Users className="h-5 w-5 text-gray-400" />
           </div>
           
           <div className="space-y-3">
-            {analytics.topSpeakers.map((speaker, index) => (
-              <div key={speaker.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            {analytics.topAttendees.map((attendee, index) => (
+              <div key={attendee.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                     <span className="text-sm font-bold text-blue-600">
-                      {speaker.name.charAt(0)}
+                      {attendee.name.charAt(0).toUpperCase()}
                     </span>
                   </div>
                   <div>
-                    <div className="font-medium text-gray-900">{speaker.name}</div>
-                    <div className="text-xs text-gray-600">{speaker.count} contributions</div>
+                    <div className="font-medium text-gray-900">{attendee.name}</div>
+                    <div className="text-xs text-gray-600">{attendee.count} meetings attended</div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-lg font-bold text-blue-600">{speaker.count}</div>
-                  <div className="text-xs text-gray-500">meetings</div>
+                  <div className="text-lg font-bold text-blue-600">{attendee.count}</div>
+                  <div className="text-xs text-gray-500">attendances</div>
                 </div>
               </div>
             ))}
             
-            {analytics.topSpeakers.length === 0 && (
+            {analytics.topAttendees.length === 0 && (
               <div className="text-center py-6 text-gray-500">
                 <Icons.Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>No speaker data available</p>
+                <p>No attendee data available</p>
               </div>
             )}
           </div>
@@ -318,12 +332,12 @@ const MOMDashboard = ({ meetings }) => {
                   </div>
                   <div className="max-w-[180px]">
                     <div className="font-medium text-gray-900 truncate">{project.name}</div>
-                    <div className="text-xs text-gray-600">{project.count} meetings</div>
+                    <div className="text-xs text-gray-600">{project.count} meeting points</div>
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="text-lg font-bold text-green-600">{project.count}</div>
-                  <div className="text-xs text-gray-500">discussions</div>
+                  <div className="text-xs text-gray-500">mentions</div>
                 </div>
               </div>
             ))}
@@ -373,7 +387,7 @@ const MOMDashboard = ({ meetings }) => {
                     <div className="grid grid-cols-2 gap-3 text-xs text-gray-600">
                       <div className="flex items-center gap-1">
                         <Icons.User className="h-3 w-3" />
-                        <span>Speaker: {meeting.speaker || 'Unknown'}</span>
+                        <span>Attendees: {meeting.attendees || meeting.speaker || 'Unknown'}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <Icons.Users className="h-3 w-3" />
@@ -428,7 +442,7 @@ const MOMDashboard = ({ meetings }) => {
                 </div>
                 <p className="text-sm text-gray-600 mb-2">{meeting.discussion_point || meeting.point}</p>
                 <div className="flex items-center gap-4 text-xs text-gray-500">
-                  <span>Speaker: {meeting.speaker || 'Unknown'}</span>
+                  <span>Attendees: {meeting.attendees || meeting.speaker || 'Unknown'}</span>
                   <span>Date: {new Date(meeting.created_at || new Date()).toLocaleDateString()}</span>
                 </div>
               </div>

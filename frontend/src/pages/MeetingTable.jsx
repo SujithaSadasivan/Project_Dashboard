@@ -81,7 +81,7 @@ const MeetingTable = ({ meetings, onUpdateMeeting, onDeleteMeeting }) => {
     });
   }, [filteredMeetings, sortConfig]);
 
-  // Calculate meeting statistics
+  // Calculate meeting statistics (keeping for internal use but removing display)
   const meetingStats = React.useMemo(() => {
     const stats = {
       total: meetings.length,
@@ -122,120 +122,6 @@ const MeetingTable = ({ meetings, onUpdateMeeting, onDeleteMeeting }) => {
     
     return stats;
   }, [meetings]);
-
-  // Generate overall meeting summary
-  const overallMeetingSummary = React.useMemo(() => {
-    const currentDate = new Date();
-    const formattedDate = currentDate.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-
-    const totalMeetings = meetingStats.total;
-    const completedMeetings = meetingStats.completed;
-    const pendingMeetings = meetingStats.pending;
-    const overdueMeetings = meetingStats.overdue;
-    const highPriority = meetingStats.highPriority;
-    
-    // Get most frequent function/department
-    const functionCounts = meetings.reduce((acc, meeting) => {
-      const func = meeting.function || 'general';
-      acc[func] = (acc[func] || 0) + 1;
-      return acc;
-    }, {});
-    
-    const mostFrequentFunction = Object.keys(functionCounts).length > 0
-      ? Object.keys(functionCounts).reduce((a, b) => functionCounts[a] > functionCounts[b] ? a : b)
-      : 'None';
-    
-    // Get top responsible person
-    const responsibilityCounts = meetings.reduce((acc, meeting) => {
-      const resp = meeting.responsibility || 'Unassigned';
-      if (resp !== 'Unassigned' && resp !== 'Team') {
-        acc[resp] = (acc[resp] || 0) + 1;
-      }
-      return acc;
-    }, {});
-    
-    const topResponsible = Object.keys(responsibilityCounts).length > 0
-      ? Object.keys(responsibilityCounts).reduce((a, b) => responsibilityCounts[a] > responsibilityCounts[b] ? a : b)
-      : 'Unassigned';
-    
-    // Get upcoming deadlines (next 7 days)
-    const upcomingDeadlines = meetings.filter(meeting => {
-      if (!meeting.target || meeting.status === 'completed') return false;
-      const targetDate = new Date(meeting.target);
-      const today = new Date();
-      const nextWeek = new Date();
-      nextWeek.setDate(today.getDate() + 7);
-      return targetDate >= today && targetDate <= nextWeek;
-    }).length;
-
-    const summary = `
-      # Overall Meeting Summary
-      **Date:** ${formattedDate}
-      
-      ## 📊 Key Statistics
-      • **Total Meeting Points:** ${totalMeetings}
-      • **Completed:** ${completedMeetings} (${meetingStats.completionRate}%)
-      • **Pending:** ${pendingMeetings}
-      • **Overdue:** ${overdueMeetings} (${meetingStats.overduePercentage}%)
-      • **High Priority Items:** ${highPriority}
-      • **Upcoming Deadlines (Next 7 Days):** ${upcomingDeadlines}
-      
-      ## 🎯 Priority Distribution
-      • **High Priority:** ${meetingStats.highPriority}
-      • **Medium Priority:** ${meetingStats.mediumPriority}
-      • **Low Priority:** ${meetingStats.lowPriority}
-      
-      ## 📈 Status Overview
-      • **Completed:** ${meetingStats.completed}
-      • **In Progress:** ${meetingStats.inProgress}
-      • **Pending:** ${meetingStats.pending}
-      
-      ## ✅ Approval Status
-      • **Approved:** ${meetingStats.approved} (${meetingStats.approvalRate}%)
-      • **Pending Approval:** ${meetingStats.pendingApproval}
-      • **Rejected:** ${meetingStats.rejected}
-      
-      ## 🔔 Reminder Settings
-      • **Weekly:** ${meetingStats.weeklyReminder}
-      • **Daily:** ${meetingStats.dailyReminder}
-      • **Monthly:** ${meetingStats.monthlyReminder}
-      
-      ## 👥 Team Insights
-      • **Most Active Department:** ${mostFrequentFunction}
-      • **Top Responsible Person:** ${topResponsible}
-      
-      ## 💡 Recommendations
-      ${overdueMeetings > 0 ? `• ⚠️ **Attention Required:** ${overdueMeetings} items are overdue. Please review immediately.` : '• ✅ **Great Job:** No overdue items!'}
-      ${meetingStats.completionRate < 50 ? `• 📈 **Improvement Needed:** Completion rate is ${meetingStats.completionRate}%. Focus on completing pending tasks.` : '• 🎉 **Excellent Progress:** Good completion rate!'}
-      ${upcomingDeadlines > 0 ? `• ⏰ **Upcoming:** ${upcomingDeadlines} deadlines in the next week. Plan accordingly.` : '• ✅ **Clear Schedule:** No immediate deadlines.'}
-      
-      ---
-      *Summary generated automatically on ${currentDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}*
-    `;
-    
-    return {
-      text: summary,
-      stats: {
-        total: totalMeetings,
-        completed: completedMeetings,
-        pending: pendingMeetings,
-        overdue: overdueMeetings,
-        highPriority: highPriority,
-        upcomingDeadlines: upcomingDeadlines,
-        completionRate: meetingStats.completionRate,
-        overduePercentage: meetingStats.overduePercentage,
-        approvalRate: meetingStats.approvalRate,
-        mostFrequentFunction: mostFrequentFunction,
-        topResponsible: topResponsible,
-        generatedDate: formattedDate
-      }
-    };
-  }, [meetingStats, meetings]);
 
   // Handle sorting
   const handleSort = (key) => {
@@ -498,8 +384,11 @@ const MeetingTable = ({ meetings, onUpdateMeeting, onDeleteMeeting }) => {
   // Get column type icon
   const getColumnTypeIcon = (type) => {
     const typeInfo = COLUMN_TYPES.find(t => t.value === type);
-    const IconComponent = Icons[typeInfo?.icon] || Icons.Type;
-    return <IconComponent className="h-3 w-3" />;
+    if (typeInfo?.icon) {
+      const IconComponent = Icons[typeInfo.icon];
+      return <IconComponent className="h-3 w-3" />;
+    }
+    return null;
   };
 
   // Get formatted data for export
@@ -931,28 +820,45 @@ const MeetingTable = ({ meetings, onUpdateMeeting, onDeleteMeeting }) => {
   const renderCellContent = (meeting, column) => {
     const value = meeting[column.id] || '';
     
-    // Handle action columns (Edit, Delete)
+    // Handle action columns (View, Edit, Delete)
     if (column.type === 'action') {
+      if (column.id === 'view_action') {
+        return (
+          <div className="flex space-x-1">
+            <button 
+              onClick={() => {/* Add view functionality */}}
+              className="p-1 text-blue-600 hover:text-blue-800 bg-blue-50 rounded border border-blue-200"
+              title="View details"
+            >
+              <Icons.Eye className="h-3 w-3" />
+            </button>
+          </div>
+        );
+      }
       if (column.id === 'edit_action') {
         return (
-          <button 
-            onClick={() => startEditing(meeting)}
-            className="p-1.5 text-blue-600 hover:text-blue-800 bg-blue-50 rounded border border-blue-200"
-            title="Edit entire row"
-          >
-            <Icons.Edit2 className="h-3 w-3" />
-          </button>
+          <div className="flex space-x-1">
+            <button 
+              onClick={() => startEditing(meeting)}
+              className="p-1 text-green-600 hover:text-green-800 bg-green-50 rounded border border-green-200"
+              title="Edit entire row"
+            >
+              <Icons.Edit className="h-3 w-3" />
+            </button>
+          </div>
         );
       }
       if (column.id === 'delete_action') {
         return (
-          <button 
-            onClick={() => showDeleteConfirmation(meeting.id, meeting.project_name)}
-            className="p-1.5 text-red-600 hover:text-red-800 bg-red-50 rounded border border-red-200"
-            title="Delete row"
-          >
-            <Icons.Trash2 className="h-3 w-3" />
-          </button>
+          <div className="flex space-x-1">
+            <button 
+              onClick={() => showDeleteConfirmation(meeting.id, meeting.project_name)}
+              className="p-1 text-red-600 hover:text-red-800 bg-red-50 rounded border border-red-200"
+              title="Delete row"
+            >
+              <Icons.Trash2 className="h-3 w-3" />
+            </button>
+          </div>
         );
       }
     }
@@ -1074,7 +980,7 @@ const MeetingTable = ({ meetings, onUpdateMeeting, onDeleteMeeting }) => {
     );
   };
 
-  // Render column header
+  // Render column header - SIMPLIFIED VERSION
   const renderColumnHeader = (column) => {
     // HEADER EDITING MODE
     if (editingColumnHeader === column.id) {
@@ -1110,29 +1016,27 @@ const MeetingTable = ({ meetings, onUpdateMeeting, onDeleteMeeting }) => {
       );
     }
 
-    // NORMAL HEADER VIEW
+    // NORMAL HEADER VIEW - SIMPLIFIED WITHOUT SYMBOLS
     return (
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-1">
-          {getColumnTypeIcon(column.type)}
-          <span 
-            className="cursor-pointer hover:text-blue-600 transition-colors" 
-            onDoubleClick={() => startHeaderEditing(column.id, column.label)}
-          >
-            {column.label}
-          </span>
-          {column.required && <span className="text-red-500">*</span>}
-        </div>
+        <span 
+          className="cursor-pointer hover:text-blue-600 transition-colors font-medium text-gray-700" 
+          onDoubleClick={() => startHeaderEditing(column.id, column.label)}
+          title="Double click to edit column name"
+        >
+          {column.label}
+        </span>
         <div className="flex items-center space-x-1">
           {column.sortable && (
             <button 
               onClick={() => handleSort(column.id)}
               className="text-gray-400 hover:text-gray-600"
+              title="Sort"
             >
               {getSortIcon(column.id)}
             </button>
           )}
-          {column.deletable && (
+          {column.deletable && column.type !== 'action' && (
             <button 
               onClick={() => handleDeleteColumn(column.id)}
               className="text-gray-400 hover:text-red-600"
@@ -1250,7 +1154,8 @@ const MeetingTable = ({ meetings, onUpdateMeeting, onDeleteMeeting }) => {
           </div>
         </div>
       )}
-     {/* Add Meeting Summary Modal */}
+
+      {/* Add Meeting Summary Modal */}
       {showAddSummary && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded p-3 sm:p-4 max-w-sm w-full mx-3">
@@ -1309,7 +1214,7 @@ const MeetingTable = ({ meetings, onUpdateMeeting, onDeleteMeeting }) => {
                   disabled={!summaryTitle.trim() || !meetingSummary.trim()}
                   className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                Add Summary
+                  Add Summary
                 </button>
               </div>
             </div>
@@ -1403,58 +1308,7 @@ const MeetingTable = ({ meetings, onUpdateMeeting, onDeleteMeeting }) => {
         </div>
       )}
 
-      {/* Meeting Statistics Dashboard */}
-      <div className="bg-white border border-gray-300 rounded p-3 sm:p-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 mb-3">
-          <div className="flex items-center gap-2">
-            <Icons.BarChart3 className="h-4 w-4 text-gray-600" />
-            <h3 className="text-sm sm:text-base font-medium text-gray-900">Meeting Statistics</h3>
-          </div>
-          <button
-            onClick={() => setShowAddSummary(true)}
-            className="flex items-center justify-center space-x-1 px-3 py-2 text-xs sm:text-sm bg-purple-600 text-white rounded hover:bg-purple-700 w-full sm:w-auto mt-2 sm:mt-0"
-          >
-            <Icons.Plus className="h-3 w-3" />
-            <span>Add Meeting Summary</span>
-          </button>
-        </div>
-        
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
-          <div className="bg-blue-50 p-2 sm:p-3 rounded border border-blue-100">
-            <div className="text-[10px] sm:text-xs text-blue-600">Total Meetings</div>
-            <div className="text-sm sm:text-lg font-bold text-blue-700">{meetingStats.total}</div>
-          </div>
-          
-          <div className="bg-yellow-50 p-2 sm:p-3 rounded border border-yellow-100">
-            <div className="text-[10px] sm:text-xs text-yellow-600">Pending</div>
-            <div className="text-sm sm:text-lg font-bold text-yellow-700">{meetingStats.pending}</div>
-          </div>
-          
-          <div className="bg-green-50 p-2 sm:p-3 rounded border border-green-100">
-            <div className="text-[10px] sm:text-xs text-green-600">Completed</div>
-            <div className="text-sm sm:text-lg font-bold text-green-700">{meetingStats.completed}</div>
-            <div className="text-[8px] sm:text-xs text-green-500">({meetingStats.completionRate}%)</div>
-          </div>
-          
-          <div className="bg-red-50 p-2 sm:p-3 rounded border border-red-100">
-            <div className="text-[10px] sm:text-xs text-red-600">Overdue</div>
-            <div className="text-sm sm:text-lg font-bold text-red-700">{meetingStats.overdue}</div>
-            <div className="text-[8px] sm:text-xs text-red-500">({meetingStats.overduePercentage}%)</div>
-          </div>
-          
-          <div className="bg-purple-50 p-2 sm:p-3 rounded border border-purple-100">
-            <div className="text-[10px] sm:text-xs text-purple-600">High Priority</div>
-            <div className="text-sm sm:text-lg font-bold text-purple-700">{meetingStats.highPriority}</div>
-          </div>
-          
-          <div className="bg-gray-50 p-2 sm:p-3 rounded border border-gray-100">
-            <div className="text-[10px] sm:text-xs text-gray-600">Approved</div>
-            <div className="text-sm sm:text-lg font-bold text-gray-700">{meetingStats.approved}</div>
-            <div className="text-[8px] sm:text-xs text-gray-500">({meetingStats.approvalRate}%)</div>
-          </div>
-        </div>
-      </div>
-{/* Table Container with Toolbar */}
+      {/* Table Container with Toolbar - REMOVED Meeting Statistics Dashboard */}
       <div className="bg-white border border-gray-300 rounded p-3 sm:p-4">
         {/* Toolbar - UPDATED WITH EXPORT MENU */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 mb-3">
@@ -1507,7 +1361,7 @@ const MeetingTable = ({ meetings, onUpdateMeeting, onDeleteMeeting }) => {
                   .map((column) => (
                     <th 
                       key={column.id}
-                      className="text-left py-2 px-2 sm:px-3 font-medium text-gray-700"
+                      className="text-left py-2 px-2 sm:px-3 font-medium text-gray-700 min-w-[100px]"
                     >
                       {renderColumnHeader(column)}
                     </th>
@@ -1575,127 +1429,6 @@ const MeetingTable = ({ meetings, onUpdateMeeting, onDeleteMeeting }) => {
             </p>
           </div>
         )}
-         {
-         /* Overall Meeting Summary Section - AT THE BOTTOM */}
-        <div className="mt-4 border border-gray-200 rounded p-3 bg-gradient-to-r from-blue-50 to-purple-50">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Icons.FileText className="h-4 w-4 text-blue-600" />
-              <h3 className="text-sm font-medium text-gray-900">Overall Meeting Summary</h3>
-            </div>
-            <span className="text-xs text-gray-500">
-              Generated: {overallMeetingSummary.stats.generatedDate}
-            </span>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Key Statistics */}
-            <div className="bg-white p-3 rounded border border-gray-200">
-              <h4 className="text-xs font-medium text-gray-700 mb-2 flex items-center gap-1">
-                <Icons.BarChart3 className="h-3 w-3" />
-                Key Statistics
-              </h4>
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-600">Total Meeting Points:</span>
-                  <span className="font-medium">{overallMeetingSummary.stats.total}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-600">Completed:</span>
-                  <span className="font-medium text-green-600">
-                    {overallMeetingSummary.stats.completed} ({overallMeetingSummary.stats.completionRate}%)
-                  </span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-600">Pending:</span>
-                  <span className="font-medium text-yellow-600">{overallMeetingSummary.stats.pending}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-600">Overdue:</span>
-                  <span className="font-medium text-red-600">
-                    {overallMeetingSummary.stats.overdue} ({overallMeetingSummary.stats.overduePercentage}%)
-                  </span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-600">High Priority:</span>
-                  <span className="font-medium text-purple-600">{overallMeetingSummary.stats.highPriority}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-600">Upcoming Deadlines:</span>
-                  <span className="font-medium text-blue-600">{overallMeetingSummary.stats.upcomingDeadlines}</span>
-                </div>
-              </div>
-            </div>
-            
-            {/* Team Insights */}
-            <div className="bg-white p-3 rounded border border-gray-200">
-              <h4 className="text-xs font-medium text-gray-700 mb-2 flex items-center gap-1">
-                <Icons.Users className="h-3 w-3" />
-                Team Insights
-              </h4>
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-600">Most Active Department:</span>
-                  <span className="font-medium">{overallMeetingSummary.stats.mostFrequentFunction}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-600">Top Responsible Person:</span>
-                  <span className="font-medium">{overallMeetingSummary.stats.topResponsible}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-600">Approval Rate:</span>
-                  <span className="font-medium text-green-600">{overallMeetingSummary.stats.approvalRate}%</span>
-                </div>
-              </div>
-              
-              <div className="mt-3 pt-2 border-t border-gray-100">
-                <h4 className="text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
-                  <Icons.AlertCircle className="h-3 w-3" />
-                  Recommendations
-                </h4>
-                <ul className="text-xs text-gray-600 space-y-1">
-                  {overallMeetingSummary.stats.overdue > 0 && (
-                    <li className="flex items-start gap-1">
-                      <Icons.AlertTriangle className="h-3 w-3 text-red-500 flex-shrink-0 mt-0.5" />
-                      <span>{overallMeetingSummary.stats.overdue} items are overdue. Please review immediately.</span>
-                    </li>
-                  )}
-                  {overallMeetingSummary.stats.upcomingDeadlines > 0 && (
-                    <li className="flex items-start gap-1">
-                      <Icons.Clock className="h-3 w-3 text-yellow-500 flex-shrink-0 mt-0.5" />
-                      <span>{overallMeetingSummary.stats.upcomingDeadlines} deadlines in the next week. Plan accordingly.</span>
-                    </li>
-                  )}
-                  {overallMeetingSummary.stats.completionRate < 50 && (
-                    <li className="flex items-start gap-1">
-                      <Icons.TrendingUp className="h-3 w-3 text-blue-500 flex-shrink-0 mt-0.5" />
-                      <span>Completion rate is {overallMeetingSummary.stats.completionRate}%. Focus on completing pending tasks.</span>
-                    </li>
-                  )}
-                  {overallMeetingSummary.stats.overdue === 0 && overallMeetingSummary.stats.upcomingDeadlines === 0 && (
-                    <li className="flex items-start gap-1">
-                      <Icons.CheckCircle className="h-3 w-3 text-green-500 flex-shrink-0 mt-0.5" />
-                      <span>Great progress! All tasks are on track.</span>
-                    </li>
-                  )}
-                </ul>
-              </div>
-            </div>
-          </div>
-          
-          {/* Summary Text (Collapsible) */}
-          <details className="mt-3">
-            <summary className="text-xs font-medium text-gray-700 cursor-pointer hover:text-blue-600 flex items-center gap-1">
-              <Icons.ChevronDown className="h-3 w-3" />
-              View Detailed Summary
-            </summary>
-            <div className="mt-2 p-3 bg-white rounded border border-gray-200">
-              <pre className="text-xs text-gray-700 whitespace-pre-wrap font-sans">
-                {overallMeetingSummary.text}
-              </pre>
-            </div>
-          </details>
-        </div>
         
         {/* Pagination/Summary */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-0 mt-3 pt-3 border-t border-gray-300">
@@ -1715,7 +1448,7 @@ const MeetingTable = ({ meetings, onUpdateMeeting, onDeleteMeeting }) => {
               onClick={exportToExcel}
               className="text-[10px] px-2 py-1 border border-gray-300 rounded hover:bg-gray-50"
             >
-            Excel
+              Excel
             </button>
             <button 
               onClick={exportToPDF}
@@ -1735,4 +1468,5 @@ const MeetingTable = ({ meetings, onUpdateMeeting, onDeleteMeeting }) => {
     </div>
   );
 };
+
 export default MeetingTable;

@@ -3,17 +3,16 @@ import LoginForm from '../components/LoginForm';
 
 const Login = () => {
   return (
-    <div className="h-screen flex items-center justify-center bg-cover bg-center" 
-         style={{backgroundImage: 'url(https://png.pngtree.com/png-clipart/20221006/original/pngtree-red-gradient-line-combination-geometric-distortion-elements-free-psd-png-image_8658889.png)'}}>
-      {/* Semi-transparent overlay */}
-      <div className="absolute inset-0 bg-black/5"></div>
-      
-      {/* Main Container */}
-      <div className="relative w-full max-w-2xl bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl overflow-hidden border border-white/20">
+    <div className="min-h-screen flex items-center justify-center relative">
+      {/* Overlay for better text readability contrast if needed */}
+      <div className="absolute inset-0 bg-black/10 pointer-events-none"></div>
+
+      {/* Main Container - Glassmorphism */}
+      <div className="relative w-full max-w-4xl mx-4 bg-white/90 rounded-3xl shadow-2xl overflow-hidden border border-white/20">
         <div className="flex flex-col lg:flex-row">
-          
+
           {/* Left side - Login Form */}
-          <div className="w-full lg:w-1/2 p-4 md:p-6">
+          <div className="w-full lg:w-1/2 p-8 md:p-10">
             <div className="h-full flex items-center">
               <div className="w-full">
                 <LoginForm />
@@ -21,16 +20,15 @@ const Login = () => {
             </div>
           </div>
 
-          {/* Right side - Image Container with same background */}
-          <div className="w-full lg:w-1/2 h-40 lg:h-auto bg-cover bg-center" 
-               style={{backgroundImage: 'url(https://png.pngtree.com/png-clipart/20221006/original/pngtree-red-gradient-line-combination-geometric-distortion-elements-free-psd-png-image_8658889.png)'}}>
-            <div className="h-full w-full flex items-center justify-center bg-white/30 backdrop-blur-[1px]">
-              {/* Optional: You can add an overlay image on top of the gradient */}
-              {/* <img 
-                src="https://tse3.mm.bing.net/th/id/OIP.CgPeJOKLZ8-E1A42glh80AHaEK?pid=Api&h=220&P=0" 
-                alt="Dashboard Illustration"
-                className="w-4/5 h-4/5 object-contain"
-              /> */}
+          {/* Right side - Decorative Glass Panel */}
+          <div className="hidden lg:flex w-full lg:w-1/2 items-center justify-center bg-transparent relative overflow-hidden">
+            {/* Decorative circles or elements to make 'adapt' feel more real if needed, 
+                 but keeping it clean as per user request to fit background. 
+                 The background shows through this pane. */}
+            <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
+            <div className="relative z-10 text-white p-8 text-center">
+              <h2 className="text-3xl font-bold mb-4 drop-shadow-lg">Welcome Back</h2>
+              <p className="text-white/90 drop-shadow-md">Enter your credentials to access the dashboard.</p>
             </div>
           </div>
 
