@@ -1,8 +1,14 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 from app.core.database import engine, Base, get_db
 from app.core.config import FRONTEND_URL, API_PREFIX
@@ -11,6 +17,9 @@ from app.core.config import FRONTEND_URL, API_PREFIX
 from app.models import user  # noqa: F401
 from app.models import employee  # noqa: F401
 from app.models import employee_column  # noqa: F401
+from app.models import project  # noqa: F401
+from app.models import part # noqa: F401
+from app.models import part_column # noqa: F401
 
 # Import routers
 from app.api.auth import router as auth_router
@@ -27,6 +36,20 @@ app = FastAPI(
     version="1.0.0",
     #lifespan=lifespan,
 )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.error(f"Validation Error: {exc.errors()}")
+    try:
+        body = await request.json()
+        logger.error(f"Request Body: {body}")
+    except Exception:
+        logger.error("Could not read request body")
+        
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": str(exc.body)},
+    )
 
 # CORS
 origins = [

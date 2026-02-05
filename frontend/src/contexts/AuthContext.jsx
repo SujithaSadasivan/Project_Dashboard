@@ -10,8 +10,8 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const storedUser = localStorage.getItem('user');
+    const token = sessionStorage.getItem('token');
+    const storedUser = sessionStorage.getItem('user');
     
     if (token && storedUser) {
       try {
@@ -27,26 +27,43 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
+    console.log('AuthContext: Attempting login for', email);
     try {
+      console.log('AuthContext: Sending request to /auth/login');
       const response = await API.post('/auth/login', { email, password });
+      console.log('AuthContext: Response received', response.status, response.data);
+      
+      if (!response.data || !response.data.access_token) {
+        throw new Error('Invalid response from server: No access token received');
+      }
+
       const { access_token, user } = response.data;
       
-      localStorage.setItem('token', access_token);
-      localStorage.setItem('user', JSON.stringify(user));
+      sessionStorage.setItem('token', access_token);
+      sessionStorage.setItem('user', JSON.stringify(user));
       setUser(user);
       
       return { success: true };
     } catch (error) {
+      console.error('AuthContext: Login error', error);
+      let errorMessage = 'Login failed';
+      if (error.code === 'ECONNABORTED') {
+          errorMessage = 'Request timed out. The server might be waking up, please try again.';
+      } else if (error.response?.data?.detail) {
+          errorMessage = error.response.data.detail;
+      } else if (error.message) {
+          errorMessage = error.message;
+      }
       return { 
         success: false, 
-        error: error.response?.data?.detail || 'Login failed' 
+        error: errorMessage
       };
     }
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
     setUser(null);
     window.location.href = '/login';
   };

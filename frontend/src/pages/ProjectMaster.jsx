@@ -4,13 +4,14 @@ import axios from 'axios';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { getEmployees } from '../utils/employeeApi';
 
 const ProjectMaster = () => {
   // Fixed columns matching backend Project model
   const columns = [
     { id: 'id', label: 'ID', sortable: true, type: 'text', required: true, visible: true },
     { id: 'name', label: 'Project Name', sortable: true, type: 'text', required: true, visible: true },
-    { id: 'manager', label: 'Project Manager', sortable: true, type: 'text', required: true, visible: true },
+    { id: 'manager', label: 'Project Manager', sortable: true, type: 'select', options: [], required: true, visible: true },
     { id: 'status', label: 'Status', sortable: true, type: 'select', required: true, visible: true },
     { id: 'budget', label: 'Budget', sortable: true, type: 'number', required: true, visible: true },
     { id: 'timeline', label: 'Timeline', sortable: true, type: 'text', required: false, visible: true },
@@ -108,7 +109,22 @@ const ProjectMaster = () => {
   useEffect(() => {
     fetchProjects();
     fetchColumns();
+    fetchEmployees();
   }, []);
+
+  const fetchEmployees = () => {
+    getEmployees()
+      .then(res => {
+        const employeeNames = res.data.map(e => e.name);
+        setAvailableColumns(prev => prev.map(col => {
+          if (col.id === 'manager') {
+            return { ...col, type: 'select', options: employeeNames };
+          }
+          return col;
+        }));
+      })
+      .catch(err => console.error('Error fetching employees:', err));
+  };
 
   const fetchProjects = () => {
     axios.get(API_URL)

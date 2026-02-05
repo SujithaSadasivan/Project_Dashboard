@@ -6,8 +6,8 @@ export const useAuth = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const storedUser = localStorage.getItem('user');
+    const token = sessionStorage.getItem('token');
+    const storedUser = sessionStorage.getItem('user');
     
     if (token && storedUser) {
       setUser(JSON.parse(storedUser));
@@ -19,8 +19,8 @@ export const useAuth = () => {
     try {
       const response = await API.post('/api/auth/login', { email, password });
       
-      localStorage.setItem('token', response.data.access_token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
+      sessionStorage.setItem('token', response.data.access_token);
+      sessionStorage.setItem('user', JSON.stringify(response.data.user));
       setUser(response.data.user);
       
       return { success: true, user: response.data.user };
@@ -33,8 +33,8 @@ export const useAuth = () => {
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
     setUser(null);
     window.location.href = '/login';
   };

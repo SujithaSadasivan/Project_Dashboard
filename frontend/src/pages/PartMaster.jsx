@@ -54,12 +54,16 @@ const PartMaster = () => {
 
   // Helper to flatten API response
   const transformPartFromApi = (apiPart) => {
-    const { custom_fields, ...rest } = apiPart;
-    return { ...rest, ...(custom_fields || {}) };
+    const { custom_attributes, reorder_level, ...rest } = apiPart;
+    return { 
+      ...rest, 
+      reorderLevel: reorder_level,
+      ...(custom_attributes || {}) 
+    };
   };
 
   // Helper to nest custom fields for API request
-  const transformPartForSave = (partData) => {
+  const transformPartForSave = (partData, isUpdate = false) => {
     const stock = parseInt(partData.stock) || 0;
     const reorderLevel = parseInt(partData.reorderLevel) || 0;
     
@@ -67,15 +71,18 @@ const PartMaster = () => {
       name: partData.name,
       category: partData.category || '',
       stock: stock,
-      reorderLevel: reorderLevel,
+      reorder_level: reorderLevel,
       price: parseFloat(partData.price) || 0,
-      status: stock <= reorderLevel ? 'Reorder' : 'In Stock',
-      custom_fields: {}
+      status: stock <= reorderLevel ? 'Reorder' : 'In Stock'
     };
+
+    if (!isUpdate) {
+      payload.id = partData.id;
+    }
 
     Object.keys(partData).forEach(key => {
       if (!fixedColumnIds.includes(key) && key !== 'custom_fields' && key !== 'id') {
-        payload.custom_fields[key] = partData[key];
+        payload[key] = partData[key];
       }
     });
 
@@ -364,7 +371,7 @@ const PartMaster = () => {
       return;
     }
 
-    const payload = transformPartForSave(editForm);
+    const payload = transformPartForSave(editForm, true);
     console.log('Updating part payload:', payload);
 
     axios.put(`${API_URL}/${editingId}`, payload)
