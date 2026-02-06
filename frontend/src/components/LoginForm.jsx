@@ -13,11 +13,18 @@ const LoginForm = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [longLoading, setLongLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 const handleSubmit = async (e) => {
   e.preventDefault();
   setError('');
   setLoading(true);
+  setLongLoading(false);
+
+  // Timer to show message if it takes too long
+  const timer = setTimeout(() => {
+    setLongLoading(true);
+  }, 3000);
 
   // Use the actual values from formData, not the placeholder
   const email = formData.email;
@@ -26,6 +33,10 @@ const handleSubmit = async (e) => {
   console.log('Logging in with:', email);
   
   const result = await login(email, password);
+  
+  clearTimeout(timer);
+  setLongLoading(false);
+  
   console.log('Login result:', result);
   
   if (result.success) {
@@ -130,6 +141,15 @@ const handleSubmit = async (e) => {
         {error && (
           <div className="p-2 bg-red-50 border border-red-200 rounded-lg">
             <p className="text-xs text-red-700 text-center">{error}</p>
+          </div>
+        )}
+
+        {/* Long Loading Message */}
+        {longLoading && (
+          <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-lg mt-2">
+             <p className="text-xs text-yellow-800 text-center">
+               Connecting to server... This might take up to a minute if the server is waking up.
+             </p>
           </div>
         )}
 

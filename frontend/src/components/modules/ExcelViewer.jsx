@@ -116,7 +116,7 @@ const ExcelViewer = ({ excelViewerData, uploadedFilesData, onClose, onDataChange
               <FileSpreadsheet className="h-6 w-6 text-green-600" />
             </div>
             <div>
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base">{excelViewerData.name}</h3>
+              <h3 className="font-medium text-gray-900 text-sm sm:text-base">{excelViewerData.name.replace(/\.(xlsx|xls|csv)$/i, '')}</h3>
               <p className="text-xs text-gray-600">
                 {excelViewerData.type} • {excelViewerData.size} • {excelEditData.length} records
               </p>

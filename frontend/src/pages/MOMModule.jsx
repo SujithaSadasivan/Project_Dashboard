@@ -60,7 +60,7 @@ const MOMModule = () => {
     const newMeeting = {
       id: Date.now(),
       sno: meetings.length + 1,
-      speaker: '',
+      attendees: '', // Changed from speaker to attendees
       point: '',
       project: '',
       criticality: '2',
@@ -80,6 +80,23 @@ const MOMModule = () => {
       setMeetings([]);
       localStorage.removeItem('mom_meetings');
     }
+  };
+
+  // Count unique attendees
+  const countUniqueAttendees = () => {
+    const allAttendees = [];
+    meetings.forEach(meeting => {
+      const attendees = meeting.attendees || meeting.speaker || '';
+      if (attendees) {
+        // Split attendees by comma, semicolon, or "and"
+        const attendeeList = attendees.split(/[,;]| and /).map(a => a.trim()).filter(a => a);
+        allAttendees.push(...attendeeList);
+      }
+    });
+    
+    // Remove duplicates and count
+    const uniqueAttendees = [...new Set(allAttendees)];
+    return uniqueAttendees.length;
   };
 
   const tabs = [
@@ -129,7 +146,7 @@ const MOMModule = () => {
         </div>
       </div>
 
-      {/* Compact Stats */}
+      {/* Compact Stats - UPDATED with Attendees */}
       <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         <div className="bg-white border border-gray-300 rounded p-3 sm:p-4 flex items-center">
           <div className="bg-gray-100 p-1.5 sm:p-2 rounded mr-2 sm:mr-3">
@@ -145,9 +162,9 @@ const MOMModule = () => {
             <Icons.Users className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
           </div>
           <div>
-            <p className="text-[10px] sm:text-xs text-gray-500">Speakers</p>
+            <p className="text-[10px] sm:text-xs text-gray-500"> Attendees</p>
             <p className="text-sm sm:text-base font-bold text-green-600">
-              {new Set(meetings.map(m => m.speaker)).size}
+              {countUniqueAttendees()}
             </p>
           </div>
         </div>
