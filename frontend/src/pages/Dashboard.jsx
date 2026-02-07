@@ -21,15 +21,18 @@ import {
   ChevronRight as ChevronRightIcon
 } from 'lucide-react';
 
-import EmployeeMaster from "../pages/EmployeeMaster";
-import EmployeeAccess from "../pages/EmployeeAccess";
-import ProjectMaster from "../pages/ProjectMaster";
-import PartMaster from "../pages/PartMaster";
-import DepartmentMaster from "../pages/DepartmentMaster";
-import UploadTrackers from "../pages/UploadTrackers";
-import SystemSettings from "../pages/SystemSettings";
-import MOMModule from "../pages/MOMModule";
-import ProjectDashboard from "../pages/ProjectDashboard";
+import EmployeeMaster from "../pages/Masters/EmployeeMaster";
+import EmployeeAccess from "../pages/Masters/EmployeeAccess";
+import ProjectMaster from "../pages/Masters/ProjectMaster";
+import PartMaster from "../pages/Masters/PartMaster";
+import DepartmentMaster from "../pages/Masters/DepartmentMaster";
+import ProjectDashboard from "../pages/Masters/ProjectDashboard";
+
+import UploadTrackers from "../pages/Trackers/UploadTrackers";
+import SystemSettings from "../pages/Settings/SystemSettings";
+
+import MOMModule from "../pages/mom/MOMModule";
+
 
 // Utility function to manage sidebar modules
 const sidebarManager = {

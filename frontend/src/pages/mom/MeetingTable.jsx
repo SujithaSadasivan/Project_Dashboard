@@ -10,7 +10,7 @@ import {
   APPROVAL_OPTIONS,
   COLUMN_TYPES, 
   DEFAULT_COLUMNS
-} from './constants';
+} from '../constants';
 
 const MeetingTable = ({ meetings, onUpdateMeeting, onDeleteMeeting }) => {
   const [editingId, setEditingId] = useState(null);

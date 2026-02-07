@@ -3,6 +3,7 @@ from pydantic import BaseModel, EmailStr
 from datetime import datetime
 
 class EmployeeBase(BaseModel):
+    employee_id: str | None = None
     name: str
     email: EmailStr
     department: str | None = None
@@ -11,9 +12,12 @@ class EmployeeBase(BaseModel):
     custom_fields: dict = {}
 
 class EmployeeCreate(EmployeeBase):
+    id: int | None = None
     pass
 
 class EmployeeUpdate(BaseModel):
+    id: int | None = None
+    employee_id: str | None = None
     name: str | None = None
     email: EmailStr | None = None
     department: str | None = None

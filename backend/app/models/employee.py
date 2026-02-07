@@ -8,6 +8,7 @@ class Employee(Base):
     __tablename__ = "employees"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    employee_id = Column(String, unique=True, nullable=True)
     name = Column(String, nullable=False)
     email = Column(String, nullable=False, unique=True)
     department = Column(String, nullable=True)

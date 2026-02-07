@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "jspdf-autotable": "^5.0.7",
+    "react-audio-voice-recorder": "^2.2.0"
+  }
+}

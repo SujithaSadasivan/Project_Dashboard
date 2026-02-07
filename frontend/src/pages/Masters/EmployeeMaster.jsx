@@ -26,8 +26,9 @@ const EmployeeMaster = () => {
   const [editForm, setEditForm] = useState({});
   const [showDeletePrompt, setShowDeletePrompt] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
-  const [departmentFilter, setDepartmentFilter] = useState('');
+  // Set default sort to ID ascending
+  const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'ascending' });
+  const [columnFilter, setColumnFilter] = useState(''); // Changed from departmentFilter to columnFilter
   const [statusFilter, setStatusFilter] = useState('All Status');
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [newColumnName, setNewColumnName] = useState('');
@@ -728,9 +729,11 @@ const EmployeeMaster = () => {
 
   const filteredEmployees = employees.filter(emp => {
     const matchesSearch = Object.values(emp).some(v => String(v).toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesDept = !departmentFilter || emp.department?.toLowerCase().includes(departmentFilter.toLowerCase());
+    const matchesColumnFilter = !columnFilter || Object.values(emp).some(v => 
+      String(v).toLowerCase().includes(columnFilter.toLowerCase())
+    );
     const matchesStatus = statusFilter === 'All Status' || emp.status === statusFilter;
-    return matchesSearch && matchesDept && matchesStatus;
+    return matchesSearch && matchesColumnFilter && matchesStatus;
   });
 
   const sortedEmployees = React.useMemo(() => {
@@ -1135,19 +1138,19 @@ const EmployeeMaster = () => {
 
             {/* RIGHT SIDE */}
             <div className="flex gap-2 mt-2 sm:mt-0">
-              {/* Department Filter */}
+              {/* Column Filter (replaces Department Filter) */}
               <div className="relative">
                 <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <input
                   type="text"
                   placeholder="Filter..."
-                  value={departmentFilter}
-                  onChange={(e) => setDepartmentFilter(e.target.value)}
+                  value={columnFilter}
+                  onChange={(e) => setColumnFilter(e.target.value)}
                   className="h-10 pl-9 pr-3 text-xs sm:text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black w-full sm:w-48"
                 />
-                {departmentFilter && (
+                {columnFilter && (
                   <button
-                    onClick={() => setDepartmentFilter('')}
+                    onClick={() => setColumnFilter('')}
                     className="p-1 absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
                     <X className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -1301,26 +1304,27 @@ const EmployeeMaster = () => {
               {/* <span>Add Employee</span> */}
             </button>
             
-            {/* Edit and Delete buttons - only show when employees are selected */}
-            {selectedEmployees.length > 0 && (
+            {/* Edit, Save and Cancel buttons - only show when employees are selected or editing */}
+            {selectedEmployees.length > 0 || editingId ? (
               <div className="flex items-center gap-1 ml-1">
                 {editingId ? (
                   <>
+                    {/* Save and Cancel buttons - same design as Edit button */}
                     <button
                       onClick={saveEdit}
-                      className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-green-300 text-green-700 bg-green-50 rounded hover:bg-green-100"
+                      className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
                       title="Save changes"
                     >
                       <Check className="h-4 w-4" />
-                      <span className="hidden sm:inline">Save</span>
+                      
                     </button>
                     <button
                       onClick={cancelEdit}
-                      className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-red-300 text-red-700 bg-red-50 rounded hover:bg-red-100"
+                      className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
                       title="Cancel editing"
                     >
                       <X className="h-4 w-4" />
-                      <span className="hidden sm:inline">Cancel</span>
+                
                     </button>
                   </>
                 ) : (
@@ -1334,24 +1338,26 @@ const EmployeeMaster = () => {
                   </button>
                 )}
                 
-                <button
-                  onClick={handleBulkDelete}
-                  className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-red-50 hover:text-red-700 hover:border-red-300"
-                  title={selectedEmployees.length === 1 ? "Delete selected employee" : "Delete selected employees"}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  {selectedEmployees.length > 1 && <span>Delete ({selectedEmployees.length})</span>}
-                </button>
+                {!editingId && (
+                  <button
+                    onClick={handleBulkDelete}
+                    className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-red-50 hover:text-red-700 hover:border-red-300"
+                    title={selectedEmployees.length === 1 ? "Delete selected employee" : "Delete selected employees"}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {selectedEmployees.length > 1 && <span>Delete ({selectedEmployees.length})</span>}
+                  </button>
+                )}
               </div>
-            )}
+            ) : null}
           </div>
           
           {/* RIGHT SIDE - Info and Column Count */}
           <div className="flex items-center gap-4">
             <span>
               Showing {sortedEmployees.length} of {employees.length} employees
-              {(departmentFilter || statusFilter !== "All Status") &&
-                ` (Filtered${departmentFilter ? ` by Dept: ${departmentFilter}` : ''}${statusFilter !== "All Status" ? ` by Status: ${statusFilter}` : ''})`
+              {(columnFilter || statusFilter !== "All Status") &&
+                ` (Filtered${columnFilter ? ` by: ${columnFilter}` : ''}${statusFilter !== "All Status" ? ` by Status: ${statusFilter}` : ''})`
               }
             </span>
             {selectedEmployees.length > 0 && (

@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Float
+from sqlalchemy.dialects.postgresql import JSONB
 from app.core.database import Base
 
 class Project(Base):
@@ -10,3 +11,5 @@ class Project(Base):
     status = Column(String, default="Planning")
     budget = Column(Float, default=0.0)
     timeline = Column(String, nullable=True)
+    teamSize = Column(Integer, default=0)
+    custom_fields = Column(JSONB, default={})

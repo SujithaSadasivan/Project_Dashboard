@@ -1,58 +1,43 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, X, Check, ChevronUp, ChevronDown, Filter, Download, Eye, EyeOff, Briefcase, DollarSign, Users, TrendingUp, CheckCircle, Clock, AlertTriangle, FileText, Calendar } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, X, Check, ChevronUp, ChevronDown, Filter, Download, Eye, EyeOff, Building, Users, Target, Mail, Phone, Globe, BarChart3, MapPin, CheckCircle, AlertCircle, CheckSquare, Square } from 'lucide-react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { getEmployees } from '../utils/employeeApi';
 
-const ProjectMaster = () => {
-  // Fixed columns matching backend Project model
+const DepartmentMaster = () => {
+  // Fixed columns matching backend Department model
   const columns = [
     { id: 'id', label: 'ID', sortable: true, type: 'text', required: true, visible: true },
-    { id: 'name', label: 'Project Name', sortable: true, type: 'text', required: true, visible: true },
-    { id: 'manager', label: 'Project Manager', sortable: true, type: 'select', options: [], required: true, visible: true },
-    { id: 'status', label: 'Status', sortable: true, type: 'select', required: true, visible: true },
+    { id: 'name', label: 'Department Name', sortable: true, type: 'text', required: true, visible: true },
+    { id: 'head', label: 'Department Head', sortable: true, type: 'text', required: true, visible: true },
+    { id: 'employees', label: 'Employees', sortable: true, type: 'number', required: true, visible: true },
     { id: 'budget', label: 'Budget', sortable: true, type: 'number', required: true, visible: true },
-    { id: 'timeline', label: 'Timeline', sortable: true, type: 'text', required: false, visible: true },
-    { id: 'teamSize', label: 'Team Size', sortable: true, type: 'number', required: false, visible: true },
+    { id: 'location', label: 'Location', sortable: true, type: 'text', required: false, visible: true },
+    { id: 'status', label: 'Status', sortable: true, type: 'select', required: true, visible: true },
+    { id: 'email', label: 'Email', sortable: false, type: 'email', required: false, visible: true },
   ];
 
   // Status colors mapping
   const statusColors = {
-    'Planning': 'bg-blue-100 text-blue-800',
-    'In Progress': 'bg-yellow-100 text-yellow-800',
-    'Completed': 'bg-green-100 text-green-800',
-    'On Hold': 'bg-gray-100 text-gray-800',
-    'Delayed': 'bg-red-100 text-red-800',
     'Active': 'bg-green-100 text-green-800',
     'Inactive': 'bg-red-100 text-red-800',
-    'Pending': 'bg-gray-100 text-gray-800'
-  };
-
-  // Status icons mapping
-  const statusIcons = {
-    'Planning': Clock,
-    'In Progress': AlertTriangle,
-    'Completed': CheckCircle,
-    'On Hold': Clock,
-    'Delayed': AlertTriangle,
-    'Active': CheckCircle,
-    'Inactive': AlertTriangle,
-    'Pending': Clock
+    'Merged': 'bg-blue-100 text-blue-800',
+    'Restructuring': 'bg-yellow-100 text-yellow-800'
   };
 
   // Load columns from backend (initial state is fixed columns)
   const [availableColumns, setAvailableColumns] = useState(columns);
-  const [projects, setProjects] = useState([]);
-  const [newProject, setNewProject] = useState({});
+  const [departments, setDepartments] = useState([]);
+  const [newDept, setNewDept] = useState({});
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [showDeletePrompt, setShowDeletePrompt] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
-  const [managerFilter, setManagerFilter] = useState('');
+  // Set default sort to ID ascending
+  const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'ascending' });
+  const [columnFilter, setColumnFilter] = useState(''); // Changed from headFilter to columnFilter
   const [statusFilter, setStatusFilter] = useState('All Status');
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [newColumnName, setNewColumnName] = useState('');
@@ -62,35 +47,46 @@ const ProjectMaster = () => {
   const [validationErrors, setValidationErrors] = useState({});
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [showDeleteColumnPrompt, setShowDeleteColumnPrompt] = useState(null);
-  const [showAddProjectModal, setShowAddProjectModal] = useState(false);
+  const [showAddDeptModal, setShowAddDeptModal] = useState(false);
   const [notification, setNotification] = useState({ show: false, message: '', type: '' });
+  
+  // New state for checkboxes
+  const [selectedDepartments, setSelectedDepartments] = useState([]);
+  const [selectAll, setSelectAll] = useState(false);
+
+  // New state for action prompts
+  const [showBulkDeletePrompt, setShowBulkDeletePrompt] = useState(false);
+  const [showBulkEditPrompt, setShowBulkEditPrompt] = useState(false);
+  const [showAddColumnPrompt, setShowAddColumnPrompt] = useState(false);
+  const [showExportConfirmPrompt, setShowExportConfirmPrompt] = useState(null);
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
-  const API_URL = `${API_BASE_URL}/projects`;
+  const API_URL = `${API_BASE_URL}/departments`;
 
-  const fixedColumnIds = ['id', 'name', 'manager', 'status', 'budget', 'timeline', 'teamSize', 'created_at', 'updated_at'];
+  const fixedColumnIds = ['id', 'name', 'head', 'employees', 'budget', 'location', 'status', 'email', 'created_at', 'updated_at'];
 
   // Helper to flatten API response
-  const transformProjectFromApi = (apiProject) => {
-    const { custom_fields, ...rest } = apiProject;
+  const transformDeptFromApi = (apiDept) => {
+    const { custom_fields, ...rest } = apiDept;
     return { ...rest, ...(custom_fields || {}) };
   };
 
   // Helper to nest custom fields for API request
-  const transformProjectForSave = (projectData) => {
+  const transformDeptForSave = (deptData) => {
     const payload = {
-      name: projectData.name,
-      manager: projectData.manager,
-      status: projectData.status || 'Planning',
-      budget: parseFloat(projectData.budget) || 0,
-      timeline: projectData.timeline || '',
-      teamSize: parseInt(projectData.teamSize) || 0,
+      name: deptData.name,
+      head: deptData.head,
+      employees: parseInt(deptData.employees) || 0,
+      budget: parseFloat(deptData.budget) || 0,
+      location: deptData.location || '',
+      status: deptData.status || 'Active',
+      email: deptData.email || '',
       custom_fields: {}
     };
 
-    Object.keys(projectData).forEach(key => {
+    Object.keys(deptData).forEach(key => {
       if (!fixedColumnIds.includes(key) && key !== 'custom_fields' && key !== 'id') {
-        payload.custom_fields[key] = projectData[key];
+        payload.custom_fields[key] = deptData[key];
       }
     });
 
@@ -105,34 +101,22 @@ const ProjectMaster = () => {
     }, 3000);
   };
 
-  // Fetch projects from backend
+  // Fetch departments from backend
   useEffect(() => {
-    fetchProjects();
+    fetchDepartments();
     fetchColumns();
-    fetchEmployees();
   }, []);
 
-  const fetchEmployees = () => {
-    getEmployees()
-      .then(res => {
-        const employeeNames = res.data.map(e => e.name);
-        setAvailableColumns(prev => prev.map(col => {
-          if (col.id === 'manager') {
-            return { ...col, type: 'select', options: employeeNames };
-          }
-          return col;
-        }));
-      })
-      .catch(err => console.error('Error fetching employees:', err));
-  };
-
-  const fetchProjects = () => {
+  const fetchDepartments = () => {
     axios.get(API_URL)
       .then(res => {
-        const flattenedProjects = res.data.map(transformProjectFromApi);
-        setProjects(flattenedProjects);
+        const flattenedDepts = res.data.map(transformDeptFromApi);
+        setDepartments(flattenedDepts);
+        // Reset selection when departments are fetched
+        setSelectedDepartments([]);
+        setSelectAll(false);
       })
-      .catch(err => console.error('Error fetching projects:', err));
+      .catch(err => console.error('Error fetching departments:', err));
   };
 
   const fetchColumns = () => {
@@ -149,7 +133,7 @@ const ProjectMaster = () => {
         }));
 
         const fixedCols = columns.filter(c => !dbColumns.some(dc => dc.id === c.id));
-        const savedVisibility = JSON.parse(localStorage.getItem('projectColumnVisibility')) || {};
+        const savedVisibility = JSON.parse(localStorage.getItem('deptColumnVisibility')) || {};
 
         const mergedColumns = [...fixedCols, ...dbColumns].map(col => ({
           ...col,
@@ -175,11 +159,96 @@ const ProjectMaster = () => {
       visibilityMap[col.id] = col.visible;
     });
 
-    localStorage.setItem('projectColumnVisibility', JSON.stringify(visibilityMap));
+    localStorage.setItem('deptColumnVisibility', JSON.stringify(visibilityMap));
+    showNotification(`Column ${updatedColumns.find(c => c.id === columnId).visible ? 'shown' : 'hidden'} successfully`);
   };
 
   // Get visible columns for table
   const visibleColumns = availableColumns.filter(col => col.visible);
+
+  // Checkbox Functions
+  const toggleSelectAll = () => {
+    if (selectAll) {
+      // Deselect all
+      setSelectedDepartments([]);
+      setSelectAll(false);
+    } else {
+      // Select all currently visible departments
+      const allVisibleIds = sortedDepartments.map(dept => dept.id);
+      setSelectedDepartments(allVisibleIds);
+      setSelectAll(true);
+    }
+  };
+
+  const toggleDepartmentSelection = (departmentId) => {
+    setSelectedDepartments(prev => {
+      if (prev.includes(departmentId)) {
+        // Remove from selection
+        const newSelection = prev.filter(id => id !== departmentId);
+        setSelectAll(false);
+        return newSelection;
+      } else {
+        // Add to selection
+        const newSelection = [...prev, departmentId];
+        // Check if all visible departments are now selected
+        const allVisibleIds = sortedDepartments.map(dept => dept.id);
+        if (newSelection.length === allVisibleIds.length) {
+          setSelectAll(true);
+        }
+        return newSelection;
+      }
+    });
+  };
+
+  // Bulk edit function
+  const handleBulkEdit = () => {
+    if (selectedDepartments.length === 0) {
+      showNotification('Please select at least one department to edit', 'error');
+      return;
+    }
+    
+    setShowBulkEditPrompt({
+      show: true,
+      count: selectedDepartments.length
+    });
+  };
+
+  const confirmBulkEdit = () => {
+    if (selectedDepartments.length === 1) {
+      const department = departments.find(dept => dept.id === selectedDepartments[0]);
+      if (department) {
+        startEditing(department);
+      }
+    } else {
+      // For multiple selection, implement bulk edit logic here
+      // For now, just show a notification
+      showNotification(`${selectedDepartments.length} departments marked for bulk edit`, 'info');
+    }
+    setShowBulkEditPrompt({ show: false, count: 0 });
+  };
+
+  // Bulk delete function
+  const handleBulkDelete = () => {
+    if (selectedDepartments.length === 0) {
+      showNotification('Please select at least one department to delete', 'error');
+      return;
+    }
+    
+    setShowBulkDeletePrompt({
+      show: true,
+      count: selectedDepartments.length
+    });
+  };
+
+  const confirmBulkDelete = () => {
+    // Implement bulk delete API call here
+    // For now, simulate success
+    const count = selectedDepartments.length;
+    setSelectedDepartments([]);
+    setSelectAll(false);
+    setShowBulkDeletePrompt({ show: false, count: 0 });
+    showNotification(`${count} departments deleted successfully`);
+  };
 
   // Column editing functions
   const startEditColumn = (columnId, currentLabel) => {
@@ -204,7 +273,7 @@ const ProjectMaster = () => {
         .catch(err => {
           console.error(err);
           const msg = err.response?.data?.detail || err.message;
-          alert('Error updating column: ' + msg);
+          showNotification('Error updating column: ' + msg, 'error');
         });
       } else {
         setAvailableColumns(availableColumns.map(col =>
@@ -224,13 +293,13 @@ const ProjectMaster = () => {
 
   const handleDeleteColumn = (columnId) => {
     const column = availableColumns.find(col => col.id === columnId);
-    const isFixedColumn = ['id', 'name', 'manager', 'status', 'budget', 'timeline', 'teamSize'].includes(columnId);
+    const isFixedColumn = ['id', 'name', 'head', 'employees', 'budget', 'location', 'status', 'email'].includes(columnId);
    
     if (isFixedColumn) {
       setShowDeleteColumnPrompt({
         id: columnId,
         title: 'Cannot Delete Column',
-        message: `Cannot delete fixed column: ${column.label}. Fixed columns are required for the Project Master.`,
+        message: `Cannot delete fixed column: ${column.label}. Fixed columns are required for the Department Master.`,
         type: 'warning',
         columnLabel: column.label
       });
@@ -253,9 +322,9 @@ const ProjectMaster = () => {
 
     const cleanupAndClose = () => {
       if (isAddingNew) {
-        const newProjectData = { ...newProject };
-        delete newProjectData[columnId];
-        setNewProject(newProjectData);
+        const newDeptData = { ...newDept };
+        delete newDeptData[columnId];
+        setNewDept(newDeptData);
       }
       setShowDeleteColumnPrompt(null);
       setShowColumnModal(false);
@@ -271,7 +340,7 @@ const ProjectMaster = () => {
         .catch(err => {
           console.error(err);
           const msg = err.response?.data?.detail || err.message;
-          alert('Error deleting column: ' + msg);
+          showNotification('Error deleting column: ' + msg, 'error');
         });
     } else {
       setAvailableColumns(availableColumns.filter(col => col.id !== columnId));
@@ -293,156 +362,171 @@ const ProjectMaster = () => {
   };
 
   // Validation
-  const validateProjectForm = (project) => {
+  const validateDeptForm = (dept) => {
     const errors = {};
     for (const col of availableColumns) {
-      if (col.required && !project[col.id]?.toString().trim()) {
+      if (col.required && !dept[col.id]?.toString().trim()) {
         errors[col.id] = `${col.label} is required`;
       }
       if (col.type === 'number') {
-        const numValue = parseFloat(project[col.id]);
+        const numValue = parseFloat(dept[col.id]);
         if (col.required && (isNaN(numValue) || numValue < 0)) {
           errors[col.id] = `${col.label} must be a valid positive number`;
         }
+      }
+      if (col.type === 'email' && dept[col.id] && !dept[col.id].includes('@')) {
+        errors[col.id] = 'Please enter a valid email address';
       }
     }
     return errors;
   };
 
-  // Add Project Modal Functions
-  const handleAddProjectClick = () => {
-    setShowAddProjectModal(true);
+  // Add Department Modal Functions
+  const handleAddDeptClick = () => {
+    setShowAddDeptModal(true);
     setValidationErrors({});
-    const initialProject = {};
+    const initialDept = {};
     availableColumns.forEach(col => {
       if (col.id === 'status') {
-        initialProject[col.id] = 'Planning';
+        initialDept[col.id] = 'Active';
       } else if (col.type === 'number') {
-        initialProject[col.id] = '0';
+        initialDept[col.id] = '0';
       } else {
-        initialProject[col.id] = '';
+        initialDept[col.id] = '';
       }
     });
-    setNewProject(initialProject);
+    setNewDept(initialDept);
   };
 
-  const saveNewProject = () => {
-    const errors = validateProjectForm(newProject);
+  const saveNewDept = () => {
+    const errors = validateDeptForm(newDept);
     setValidationErrors(errors);
     
     if (Object.keys(errors).length > 0) {
       return; // Don't submit if there are errors
     }
 
-    const payload = transformProjectForSave(newProject);
-    console.log('Saving project payload:', payload);
+    const payload = transformDeptForSave(newDept);
+    console.log('Saving department payload:', payload);
 
     axios.post(API_URL, payload)
       .then(() => {
-        fetchProjects();
-        setShowAddProjectModal(false);
+        fetchDepartments();
+        setShowAddDeptModal(false);
         setValidationErrors({});
         // Reset form
-        const initialProject = {};
+        const initialDept = {};
         availableColumns.forEach(col => {
           if (col.id === 'status') {
-            initialProject[col.id] = 'Planning';
+            initialDept[col.id] = 'Active';
           } else if (col.type === 'number') {
-            initialProject[col.id] = '0';
+            initialDept[col.id] = '0';
           } else {
-            initialProject[col.id] = '';
+            initialDept[col.id] = '';
           }
         });
-        setNewProject(initialProject);
-        showNotification('Project added successfully');
+        setNewDept(initialDept);
+        showNotification('Department added successfully');
       })
       .catch(err => {
         console.error(err);
         const msg = err.response?.data?.detail || err.message;
-        alert('Error saving project: ' + msg);
+        showNotification('Error saving department: ' + msg, 'error');
       });
   };
 
-  const cancelNewProject = () => {
-    setShowAddProjectModal(false);
+  const cancelNewDept = () => {
+    setShowAddDeptModal(false);
     setValidationErrors({});
-    const initialProject = {};
+    const initialDept = {};
     availableColumns.forEach(col => {
       if (col.id === 'status') {
-        initialProject[col.id] = 'Planning';
+        initialDept[col.id] = 'Active';
       } else if (col.type === 'number') {
-        initialProject[col.id] = '0';
+        initialDept[col.id] = '0';
       } else {
-        initialProject[col.id] = '';
+        initialDept[col.id] = '';
       }
     });
-    setNewProject(initialProject);
+    setNewDept(initialDept);
   };
 
-  // Edit Project
-  const startEditing = (proj) => {
-    if (isAddingNew) cancelNewProject();
-    setEditingId(proj.id);
-    setEditForm({ ...proj });
+  // Edit Department
+  const startEditing = (dept) => {
+    if (isAddingNew) cancelNewDept();
+    setEditingId(dept.id);
+    setEditForm({ ...dept });
     setValidationErrors({});
   };
 
   const saveEdit = () => {
-    const errors = validateProjectForm(editForm);
+    const errors = validateDeptForm(editForm);
     if (Object.keys(errors).length > 0) {
       setValidationErrors(errors);
       return;
     }
 
-    const payload = transformProjectForSave(editForm);
-    console.log('Updating project payload:', payload);
+    const payload = transformDeptForSave(editForm);
+    console.log('Updating department payload:', payload);
 
     axios.put(`${API_URL}/${editingId}`, payload)
       .then(() => { 
-        fetchProjects(); 
+        fetchDepartments(); 
         setEditingId(null); 
         setEditForm({}); 
         setValidationErrors({}); 
-        showNotification('Project updated successfully');
+        showNotification('Department updated successfully');
       })
       .catch(err => {
         console.error(err);
         const msg = err.response?.data?.detail || err.message;
-        alert('Error updating project: ' + msg);
+        showNotification('Error updating department: ' + msg, 'error');
       });
   };
 
   const cancelEdit = () => { setEditingId(null); setEditForm({}); setValidationErrors({}); };
 
-  // Delete Project
+  // Delete Department
   const showDeleteConfirmation = (id, name) => setShowDeletePrompt({ id, name });
 
-  const confirmDeleteProject = () => {
+  const confirmDeleteDept = () => {
     if (!showDeletePrompt) return;
 
     axios.delete(`${API_URL}/${showDeletePrompt.id}`)
       .then(() => { 
-        fetchProjects(); 
+        fetchDepartments(); 
         setShowDeletePrompt(null); 
-        showNotification('Project deleted successfully');
+        showNotification('Department deleted successfully');
       })
       .catch(err => {
         console.error(err);
         const msg = err.response?.data?.detail || err.message;
-        alert('Error deleting project: ' + msg);
+        showNotification('Error deleting department: ' + msg, 'error');
       });
   };
 
   const cancelDelete = () => setShowDeletePrompt(null);
 
   // Add new column
+  const handleAddColumnClick = () => {
+    if (!newColumnName.trim()) {
+      showNotification('Please enter a column name', 'error');
+      return;
+    }
+    
+    setShowAddColumnPrompt({
+      show: true,
+      columnName: newColumnName
+    });
+  };
+
   const handleAddColumn = () => {
     if (newColumnName.trim()) {
       const newColumnId = newColumnName.toLowerCase().replace(/\s+/g, '_');
       
       // Check if column already exists
       if (availableColumns.find(col => col.id === newColumnId)) {
-        alert('Column with this name already exists');
+        showNotification('Column with this name already exists', 'error');
         return;
       }
       
@@ -459,22 +543,36 @@ const ProjectMaster = () => {
           setNewColumnName('');
           setNewColumnType('text');
           setShowColumnModal(false);
+          setShowAddColumnPrompt({ show: false, columnName: '' });
           showNotification('Column added successfully');
         })
         .catch(err => {
           console.error(err);
           const msg = err.response?.data?.detail || err.message;
-          alert('Error creating column: ' + msg);
+          showNotification('Error creating column: ' + msg, 'error');
         });
     }
   };
 
   // Export functions
+  const handleExportClick = (format) => {
+    if (sortedDepartments.length === 0) {
+      showNotification('No data to export', 'error');
+      return;
+    }
+    
+    setShowExportConfirmPrompt({
+      show: true,
+      format: format,
+      count: sortedDepartments.length
+    });
+  };
+
   const handleExport = (format) => {
-    const dataToExport = sortedProjects.map(proj => {
+    const dataToExport = sortedDepartments.map(dept => {
       const row = {};
       availableColumns.forEach(col => {
-        row[col.label] = proj[col.id] || '';
+        row[col.label] = dept[col.id] || '';
       });
       return row;
     });
@@ -485,23 +583,25 @@ const ProjectMaster = () => {
       case 'excel':
         const ws = XLSX.utils.json_to_sheet(dataToExport);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Projects");
-        XLSX.writeFile(wb, "projects.xlsx");
+        XLSX.utils.book_append_sheet(wb, ws, "Departments");
+        XLSX.writeFile(wb, "departments.xlsx");
         setShowExportDropdown(false);
+        showNotification('Export to Excel completed successfully');
         return;
       case 'csv':
         content = convertToCSV(dataToExport);
         mimeType = 'text/csv';
-        filename = 'projects.csv';
+        filename = 'departments.csv';
         break;
       case 'json':
         content = JSON.stringify(dataToExport, null, 2);
         mimeType = 'application/json';
-        filename = 'projects.json';
+        filename = 'departments.json';
         break;
       case 'pdf':
         exportToPDF(dataToExport);
         setShowExportDropdown(false);
+        showNotification('Export to PDF completed successfully');
         return;
     }
    
@@ -516,13 +616,14 @@ const ProjectMaster = () => {
     window.URL.revokeObjectURL(url);
    
     setShowExportDropdown(false);
+    showNotification(`Export to ${format.toUpperCase()} completed successfully`);
   };
 
   const exportToPDF = (data) => {
     const doc = new jsPDF();
     const tableColumn = availableColumns.map(col => col.label);
-    const tableRows = data.map(proj => 
-      availableColumns.map(col => proj[col.label] || '')
+    const tableRows = data.map(dept => 
+      availableColumns.map(col => dept[col.label] || '')
     );
 
     doc.autoTable({
@@ -533,7 +634,7 @@ const ProjectMaster = () => {
       headStyles: { fillColor: [41, 128, 185] }
     });
 
-    doc.save("projects.pdf");
+    doc.save("departments.pdf");
   };
 
   const convertToCSV = (data) => {
@@ -558,7 +659,7 @@ const ProjectMaster = () => {
     if (isEdit) {
       setEditForm({ ...editForm, [field]: value });
     } else {
-      setNewProject({ ...newProject, [field]: value });
+      setNewDept({ ...newDept, [field]: value });
     }
     // Clear validation error for this field when user starts typing
     if (validationErrors[field]) {
@@ -569,13 +670,13 @@ const ProjectMaster = () => {
   const renderInput = (col, value, onChange, error, isModal = false) => {
     const inputClass = `w-full px-3 py-2 text-sm border ${error ? 'border-red-500' : 'border-gray-300'} rounded focus:outline-none focus:ring-1 focus:ring-black`;
     
-    const statusOptions = ['Planning', 'In Progress', 'Completed', 'On Hold', 'Delayed'];
+    const statusOptions = ['Active', 'Inactive', 'Merged', 'Restructuring'];
    
     if (col.id === 'status' || col.type === 'select') return (
       <div>
         <label className="block text-xs font-medium text-gray-700 mb-1">{col.label} {col.required && <span className="text-red-500">*</span>}</label>
         <select
-          value={value||'Planning'}
+          value={value||'Active'}
           onChange={e=>onChange(col.id,e.target.value)}
           className={inputClass}
         >
@@ -601,6 +702,19 @@ const ProjectMaster = () => {
         {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
       </div>
     );
+    if (col.type === 'email') return (
+      <div>
+        <label className="block text-xs font-medium text-gray-700 mb-1">{col.label} {col.required && <span className="text-red-500">*</span>}</label>
+        <input
+          type="email"
+          value={value||''}
+          onChange={e=>onChange(col.id,e.target.value)}
+          className={inputClass}
+          placeholder={`Enter ${col.label.toLowerCase()}`}
+        />
+        {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+      </div>
+    );
     return (
       <div>
         <label className="block text-xs font-medium text-gray-700 mb-1">{col.label} {col.required && <span className="text-red-500">*</span>}</label>
@@ -616,79 +730,48 @@ const ProjectMaster = () => {
     );
   };
 
-  const renderCellContent = (col, value) => {
-    if (col.id === 'status') {
-      const StatusIcon = statusIcons[value] || Clock;
-      return (
-        <div className="flex items-center">
-          <StatusIcon className={`h-3 w-3 sm:h-4 sm:w-4 mr-1 ${
-            value === 'Completed' || value === 'Active' ? 'text-green-500' :
-            value === 'In Progress' ? 'text-yellow-500' :
-            value === 'Planning' ? 'text-blue-500' :
-            value === 'Delayed' || value === 'Inactive' ? 'text-red-500' : 'text-gray-500'
-          }`} />
-          <span className={`px-2 py-1 rounded-full text-[10px] sm:text-xs ${statusColors[value] || 'bg-gray-100 text-gray-800'}`}>
-            {value||'-'}
-          </span>
-        </div>
-      );
-    } else if (col.id === 'budget') {
-      return (
-        <div className="flex items-center">
-          <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 text-gray-500 mr-1" />
-          <span className="font-medium">${(parseFloat(value) || 0).toLocaleString()}</span>
-        </div>
-      );
-    } else if (col.id === 'teamSize') {
-      return (
-        <div className="flex items-center">
-          <Users className="h-3 w-3 sm:h-4 sm:w-4 text-gray-500 mr-1" />
-          <span>{value||'0'}</span>
-        </div>
-      );
-    } else if (col.id === 'timeline') {
-      return (
-        <div className="flex items-center">
-          <Calendar className="h-3 w-3 sm:h-4 sm:w-4 text-gray-500 mr-1" />
-          <span>{value||'-'}</span>
-        </div>
-      );
-    }
-    return value||'-';
-  };
-
+  const renderCellContent = (col, value, dept) => {
+  // For status, just return the colored badge without icon
+  if (col.id === 'status') {
+    return (
+      <span className={`px-2 py-1 rounded-full text-[10px] sm:text-xs ${statusColors[value] || 'bg-gray-100 text-gray-800'}`}>
+        {value||'-'}
+      </span>
+    );
+  }
+  // For budget, format as plain text with dollar sign
+  if (col.id === 'budget') {
+    return `$${(parseFloat(value) || 0).toLocaleString()}`;
+  }
+  // For all other columns, just return the plain value
+  return value||'-';
+};
   // Filter & Sort
-  const uniqueManagers = [...new Set(projects.map(proj=>proj.manager).filter(Boolean))];
-  const statusOptions = ['All Status', 'Planning', 'In Progress', 'Completed', 'On Hold', 'Delayed'];
+  const uniqueHeads = [...new Set(departments.map(dept=>dept.head).filter(Boolean))];
+  const statusOptions = ['All Status', 'Active', 'Inactive', 'Merged', 'Restructuring'];
 
-  const filteredProjects = projects.filter(proj => {
-    const matchesSearch = Object.values(proj).some(v => String(v).toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesManager = !managerFilter || proj.manager?.toLowerCase().includes(managerFilter.toLowerCase());
-    const matchesStatus = statusFilter === 'All Status' || proj.status === statusFilter;
-    return matchesSearch && matchesManager && matchesStatus;
+  const filteredDepartments = departments.filter(dept => {
+    const matchesSearch = Object.values(dept).some(v => String(v).toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesColumnFilter = !columnFilter || Object.values(dept).some(v => 
+      String(v).toLowerCase().includes(columnFilter.toLowerCase())
+    );
+    const matchesStatus = statusFilter === 'All Status' || dept.status === statusFilter;
+    return matchesSearch && matchesColumnFilter && matchesStatus;
   });
 
-  const sortedProjects = React.useMemo(() => {
-    if (!sortConfig.key) return filteredProjects;
-    return [...filteredProjects].sort((a,b)=>{
+  const sortedDepartments = React.useMemo(() => {
+    if (!sortConfig.key) return filteredDepartments;
+    return [...filteredDepartments].sort((a,b)=>{
       const aVal = a[sortConfig.key]||'';
       const bVal = b[sortConfig.key]||'';
       if(aVal<bVal) return sortConfig.direction==='ascending'?-1:1;
       if(aVal>bVal) return sortConfig.direction==='ascending'?1:-1;
       return 0;
     });
-  }, [filteredProjects, sortConfig]);
-
-  // Calculate project statistics
-  const activeProjects = projects.filter(p => p.status === 'In Progress').length;
-  const completedProjects = projects.filter(p => p.status === 'Completed').length;
-  const totalBudget = projects.reduce((sum, p) => sum + (parseFloat(p.budget) || 0), 0);
-  const completionRate = projects.length > 0 
-    ? Math.round((completedProjects / projects.length) * 100)
-    : 0;
+  }, [filteredDepartments, sortConfig]);
 
   return (
-    <div className="space-y-3 sm:space-y-4 px-0">
+    <div className="space-y-3 sm:space-y-4 px-0 relative">
       {/* Notification Banner */}
       {notification.show && (
         <div className={`fixed bottom-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 ${
@@ -708,21 +791,23 @@ const ProjectMaster = () => {
         </div>
       )}
 
-      {/* Delete Project Modal */}
+      {/* Delete Department Modal */}
       {showDeletePrompt && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
             <div className="flex items-center justify-between mb-3 sm:mb-4">
               <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Delete</h3>
-              <button onClick={cancelDelete} className="text-gray-400 hover:text-gray-600"><X className="h-4 w-4 sm:h-5 sm:w-5"/></button>
+              <button onClick={cancelDelete} className="p-1 text-gray-400 hover:text-gray-600">
+                <X className="h-4 w-4 sm:h-5 sm:w-5"/>
+              </button>
             </div>
             <div className="mb-4">
-              <p className="text-xs sm:text-sm text-gray-600">Delete project <span className="font-medium">{showDeletePrompt.name}</span>?</p>
+              <p className="text-xs sm:text-sm text-gray-600">Delete department <span className="font-medium">{showDeletePrompt.name}</span>?</p>
               <p className="text-xs text-red-600 mt-1">This action cannot be undone.</p>
             </div>
             <div className="flex justify-end space-x-2">
               <button onClick={cancelDelete} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
-              <button onClick={confirmDeleteProject} className="px-3 py-1.5 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700">Delete</button>
+              <button onClick={confirmDeleteDept} className="px-3 py-1.5 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700">Delete</button>
             </div>
           </div>
         </div>
@@ -730,7 +815,7 @@ const ProjectMaster = () => {
 
       {/* Delete Column Prompt */}
       {showDeleteColumnPrompt && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-[60]">
           <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
             <div className="flex items-center justify-between mb-3 sm:mb-4">
               <h3 className="font-medium text-gray-900 text-sm sm:text-base">
@@ -738,7 +823,7 @@ const ProjectMaster = () => {
               </h3>
               <button
                 onClick={() => setShowDeleteColumnPrompt(null)}
-                className="text-gray-400 hover:text-gray-600"
+                className="p-1 text-gray-400 hover:text-gray-600"
               >
                 <X className="h-4 w-4 sm:h-5 sm:w-5"/>
               </button>
@@ -785,13 +870,109 @@ const ProjectMaster = () => {
         </div>
       )}
 
+      {/* Bulk Delete Prompt */}
+      {showBulkDeletePrompt.show && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Bulk Delete</h3>
+              <button onClick={() => setShowBulkDeletePrompt({ show: false, count: 0 })} className="p-1 text-gray-400 hover:text-gray-600">
+                <X className="h-4 w-4 sm:h-5 sm:w-5"/>
+              </button>
+            </div>
+            <div className="mb-4">
+              <p className="text-xs sm:text-sm text-gray-600">
+                Are you sure you want to delete {showBulkDeletePrompt.count} selected department{showBulkDeletePrompt.count > 1 ? 's' : ''}?
+              </p>
+              <p className="text-xs text-red-600 mt-1">This action cannot be undone.</p>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <button onClick={() => setShowBulkDeletePrompt({ show: false, count: 0 })} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+              <button onClick={confirmBulkDelete} className="px-3 py-1.5 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Edit Prompt */}
+      {showBulkEditPrompt.show && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Bulk Edit</h3>
+              <button onClick={() => setShowBulkEditPrompt({ show: false, count: 0 })} className="p-1 text-gray-400 hover:text-gray-600">
+                <X className="h-4 w-4 sm:h-5 sm:w-5"/>
+              </button>
+            </div>
+            <div className="mb-4">
+              <p className="text-xs sm:text-sm text-gray-600">
+                Are you sure you want to edit {showBulkEditPrompt.count} selected department{showBulkEditPrompt.count > 1 ? 's' : ''}?
+              </p>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <button onClick={() => setShowBulkEditPrompt({ show: false, count: 0 })} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+              <button onClick={confirmBulkEdit} className="px-3 py-1.5 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Edit</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Column Prompt */}
+      {showAddColumnPrompt.show && (
+        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <h3 className="font-medium text-gray-900 text-sm sm:text-base">Add New Column</h3>
+              <button onClick={() => setShowAddColumnPrompt({ show: false, columnName: '' })} className="p-1 text-gray-400 hover:text-gray-600">
+                <X className="h-4 w-4 sm:h-5 sm:w-5"/>
+              </button>
+            </div>
+            <div className="mb-4">
+              <p className="text-xs sm:text-sm text-gray-600">
+                Are you sure you want to add column "<span className="font-medium">{showAddColumnPrompt.columnName}</span>"?
+              </p>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <button onClick={() => setShowAddColumnPrompt({ show: false, columnName: '' })} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+              <button onClick={handleAddColumn} className="px-3 py-1.5 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800">Add Column</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Confirmation Prompt */}
+      {showExportConfirmPrompt?.show && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Export</h3>
+              <button onClick={() => setShowExportConfirmPrompt(null)} className="p-1 text-gray-400 hover:text-gray-600">
+                <X className="h-4 w-4 sm:h-5 sm:w-5"/>
+              </button>
+            </div>
+            <div className="mb-4">
+              <p className="text-xs sm:text-sm text-gray-600">
+                Export {showExportConfirmPrompt.count} department{showExportConfirmPrompt.count > 1 ? 's' : ''} as {showExportConfirmPrompt.format.toUpperCase()}?
+              </p>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <button onClick={() => setShowExportConfirmPrompt(null)} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+              <button onClick={() => {
+                handleExport(showExportConfirmPrompt.format);
+                setShowExportConfirmPrompt(null);
+              }} className="px-3 py-1.5 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Export</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Column Management Modal */}
       {showColumnModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full mx-4">
             <div className="flex items-center justify-between mb-4">
               <div></div>
-              <button onClick={() => setShowColumnModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowColumnModal(false)} className="p-1 text-gray-400 hover:text-gray-600">
                 <X className="h-4 w-4 sm:h-5 sm:w-5" />
               </button>
             </div>
@@ -806,13 +987,13 @@ const ProjectMaster = () => {
               <div className="flex flex-col sm:flex-row gap-2 mt-2">
                 <input
                   type="text"
-                  placeholder="Column name (e.g., Start Date)"
+                  placeholder="Column name (e.g., Phone Number)"
                   value={newColumnName}
                   onChange={(e) => setNewColumnName(e.target.value)}
                   className="flex-grow px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded"
                 />
                 <button
-                  onClick={handleAddColumn}
+                  onClick={handleAddColumnClick}
                   className="px-3 py-2 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800 whitespace-nowrap"
                 >
                   Add Column
@@ -824,7 +1005,7 @@ const ProjectMaster = () => {
               <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Available Columns</h4>
               <div className="space-y-2 max-h-60 overflow-y-auto">
                 {availableColumns.map((column) => {
-                  const isFixedColumn = ['id', 'name', 'manager', 'status', 'budget', 'timeline', 'teamSize'].includes(column.id);
+                  const isFixedColumn = ['id', 'name', 'head', 'employees', 'budget', 'location', 'status', 'email'].includes(column.id);
                   const isEditing = editingColumn === column.id;
                  
                   return (
@@ -840,14 +1021,14 @@ const ProjectMaster = () => {
                             />
                             <button
                               onClick={() => saveEditColumn(column.id)}
-                              className="text-green-600 hover:text-green-800"
+                              className="p-1 text-green-600 hover:text-green-800"
                               title="Save"
                             >
                               <Check className="h-3 w-3 sm:h-4 sm:w-4" />
                             </button>
                             <button
                               onClick={cancelEditColumn}
-                              className="text-red-600 hover:text-red-800"
+                              className="p-1 text-red-600 hover:text-red-800"
                               title="Cancel"
                             >
                               <X className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -874,7 +1055,7 @@ const ProjectMaster = () => {
                         {/* View/Hide button */}
                         <button
                           onClick={() => toggleColumnVisibility(column.id)}
-                          className={`${column.visible ? 'text-blue-600 hover:text-blue-800' : 'text-gray-400 hover:text-gray-600'}`}
+                          className={`p-1 ${column.visible ? 'text-blue-600 hover:text-blue-800' : 'text-gray-400 hover:text-gray-600'}`}
                           title={column.visible ? "Hide column" : "Show column"}
                         >
                           {column.visible ? <Eye className="h-3 w-3 sm:h-4 sm:w-4" /> : <EyeOff className="h-3 w-3 sm:h-4 sm:w-4" />}
@@ -884,7 +1065,7 @@ const ProjectMaster = () => {
                         {!isEditing && (
                           <button
                             onClick={() => startEditColumn(column.id, column.label)}
-                            className="text-blue-600 hover:text-blue-800"
+                            className="p-1 text-blue-600 hover:text-blue-800"
                             title="Edit"
                           >
                             <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -894,7 +1075,7 @@ const ProjectMaster = () => {
                         {/* Delete button */}
                         <button
                           onClick={() => handleDeleteColumn(column.id)}
-                          className="text-red-600 hover:text-red-800"
+                          className="p-1 text-red-600 hover:text-red-800"
                           title="Delete"
                         >
                           <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -911,19 +1092,19 @@ const ProjectMaster = () => {
         </div>
       )}
 
-      {/* Add Project Modal */}
-      {showAddProjectModal && (
+      {/* Add Department Modal */}
+      {showAddDeptModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-4 sm:p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-medium text-gray-900 text-sm sm:text-base">
                 <span className="bg-gray-200 px-2 py-0.5 rounded">
-                  Add New Project
+                  Add New Department
                 </span>
               </h3>
               <button
-                onClick={cancelNewProject}
-                className="text-gray-400 hover:text-gray-600"
+                onClick={cancelNewDept}
+                className="p-1 text-gray-400 hover:text-gray-600"
               >
                 <X className="h-4 w-4 sm:h-5 sm:w-5" />
               </button>
@@ -933,23 +1114,23 @@ const ProjectMaster = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
               {availableColumns.map((col) => (
                 <div key={col.id} className="col-span-1">
-                  {renderInput(col, newProject[col.id], (f, v) => handleInputChange(f, v), validationErrors[col.id], true)}
+                  {renderInput(col, newDept[col.id], (f, v) => handleInputChange(f, v), validationErrors[col.id], true)}
                 </div>
               ))}
             </div>
            
             <div className="flex justify-end space-x-2">
               <button
-                onClick={cancelNewProject}
+                onClick={cancelNewDept}
                 className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
-                onClick={saveNewProject}
+                onClick={saveNewDept}
                 className="px-4 py-2 text-sm bg-black text-white rounded hover:bg-gray-800"
               >
-                Save Project
+                Save Department
               </button>
             </div>
           </div>
@@ -976,57 +1157,47 @@ const ProjectMaster = () => {
                   className="w-full sm:w-48 h-10 pl-9 pr-3 text-xs sm:text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black"
                 />
               </div>
-
-              {/* Buttons */}
-              <div className="flex gap-2">
-                <button
-                  onClick={handleAddProjectClick}
-                  className="flex items-center gap-1 h-10 px-3 bg-black text-white rounded text-xs sm:text-sm hover:bg-gray-800"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Project
-                </button>
-
-                <button
-                  onClick={() => setShowColumnModal(true)}
-                  className="flex items-center gap-1 h-10 px-3 bg-black text-white rounded text-xs sm:text-sm hover:bg-gray-800"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Column
-                </button>
-              </div>
             </div>
 
             {/* RIGHT SIDE */}
             <div className="flex gap-2 mt-2 sm:mt-0">
-              {/* Manager Filter */}
+              {/* Column Filter (replaces Head Filter) */}
               <div className="relative">
                 <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <input
                   type="text"
                   placeholder="Filter..."
-                  value={managerFilter}
-                  onChange={(e) => setManagerFilter(e.target.value)}
+                  value={columnFilter}
+                  onChange={(e) => setColumnFilter(e.target.value)}
                   className="h-10 pl-9 pr-3 text-xs sm:text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black w-full sm:w-48"
                 />
-                {managerFilter && (
+                {columnFilter && (
                   <button
-                    onClick={() => setManagerFilter('')}
-                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    onClick={() => setColumnFilter('')}
+                    className="p-1 absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
                     <X className="h-3 w-3 sm:h-4 sm:w-4" />
                   </button>
                 )}
               </div>
 
+              {/* Add Column Button */}
+              <button
+                onClick={() => setShowColumnModal(true)}
+                className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50 whitespace-nowrap"
+              >
+                <Plus className="h-4 w-4" />
+                {/* <span>Add Column</span> */}
+              </button>
+
               {/* Export Button with Dropdown */}
               <div className="relative">
                 <button
                   onClick={() => setShowExportDropdown(!showExportDropdown)}
-                  className="flex items-center gap-1 h-10 px-3 bg-black text-white rounded text-xs sm:text-sm hover:bg-gray-800"
+                  className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
                 >
                   <Download className="h-4 w-4" />
-                  Export
+                  {/* <span>Export</span> */}
                 </button>
                
                 {/* Export Dropdown */}
@@ -1038,25 +1209,25 @@ const ProjectMaster = () => {
                     />
                     <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-300 rounded shadow-lg z-50">
                       <button
-                        onClick={() => handleExport('excel')}
+                        onClick={() => handleExportClick('excel')}
                         className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
                       >
                         Export as Excel
                       </button>
                       <button
-                        onClick={() => handleExport('csv')}
+                        onClick={() => handleExportClick('csv')}
                         className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
                       >
                         Export as CSV
                       </button>
                       <button
-                        onClick={() => handleExport('json')}
+                        onClick={() => handleExportClick('json')}
                         className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
                       >
                         Export as JSON
                       </button>
                       <button
-                        onClick={() => handleExport('pdf')}
+                        onClick={() => handleExportClick('pdf')}
                         className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
                       >
                         Export as PDF
@@ -1069,83 +1240,155 @@ const ProjectMaster = () => {
           </div>
         </div>
 
-        {/* TABLE SECTION */}
-        <div className="overflow-auto max-h-[calc(100vh-300px)]">
-          <table className="min-w-full text-xs sm:text-sm border-collapse">
-            <thead className="bg-gray-100 sticky top-0 z-10">
-              <tr className="border-b border-gray-300">
-                {visibleColumns.map(col => (
-                  <th
-                    key={col.id}
-                    className="text-left py-3 px-4 font-medium text-gray-700 cursor-pointer hover:bg-gray-200 whitespace-nowrap border-r border-gray-300 last:border-r-0"
-                    onClick={() => col.sortable && handleSort(col.id)}
-                  >
-                    <div className="flex items-center space-x-1">
-                      <span>{col.label}</span>
-                      {col.required && <span className="text-red-500">*</span>}
-                      {col.sortable && getSortIcon(col.id)}
+        {/* TABLE SECTION with fixed footer buttons */}
+        <div className="relative">
+          <div className="overflow-auto max-h-[calc(100vh-300px)]">
+            <table className="min-w-full text-xs sm:text-sm border-collapse">
+              <thead className="bg-gray-100 sticky top-0 z-10">
+                <tr className="border-b border-gray-300">
+                  {/* Checkbox column */}
+                  <th className="text-left py-2 px-3 font-medium text-gray-700 cursor-pointer hover:bg-gray-200 whitespace-nowrap border-r border-gray-300 w-10">
+                    <div className="flex items-center justify-center">
+                      <button
+                        onClick={toggleSelectAll}
+                        className="p-1 text-gray-600 hover:text-gray-800"
+                      >
+                        {selectAll ? (
+                          <CheckSquare className="h-4 w-4" />
+                        ) : (
+                          <Square className="h-4 w-4" />
+                        )}
+                      </button>
                     </div>
                   </th>
-                ))}
-                <th className="text-left py-3 px-4 font-medium text-gray-700 whitespace-nowrap border-r border-gray-300">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {sortedProjects.map(proj => (
-                <tr
-                  key={proj.id}
-                  className="border-b border-gray-300 hover:bg-gray-50 transition-colors"
-                >
-                  {editingId === proj.id ?
-                    visibleColumns.map(col => (
-                      <td key={col.id} className="py-3 px-4 whitespace-nowrap border-r border-gray-300 last:border-r-0">
-                        {renderInput(col, editForm[col.id], (f, v) => handleInputChange(f, v, true), validationErrors[col.id])}
-                      </td>
-                    )) :
-                    visibleColumns.map(col => (
-                      <td key={col.id} className="py-3 px-4 whitespace-nowrap border-r border-gray-300 last:border-r-0">
-                        {renderCellContent(col, proj[col.id])}
-                      </td>
-                    ))
-                  }
-                  <td className="py-3 px-4 whitespace-nowrap border-r border-gray-300">
-                    {editingId === proj.id ? (
-                      <div className="flex items-center space-x-2">
-                        <button onClick={saveEdit} className="p-1 text-green-600 hover:text-green-800">
-                          <Check className="h-4 w-4" />
-                        </button>
-                        <button onClick={cancelEdit} className="p-1 text-red-600 hover:text-red-800">
-                          <X className="h-4 w-4" />
-                        </button>
+                  {visibleColumns.map(col => (
+                    <th
+                      key={col.id}
+                      className="text-left py-2 px-3 font-medium text-gray-700 cursor-pointer hover:bg-gray-200 whitespace-nowrap border-r border-gray-300 last:border-r-0"
+                      onClick={() => col.sortable && handleSort(col.id)}
+                    >
+                      <div className="flex items-center space-x-1">
+                        <span>{col.label}</span>
+                        {col.required && <span className="text-red-500">*</span>}
+                        {col.sortable && getSortIcon(col.id)}
                       </div>
-                    ) : (
-                      <div className="flex items-center space-x-2">
-                        <button onClick={() => startEditing(proj)} className="p-1 text-blue-600 hover:text-blue-800">
-                          <Edit className="h-4 w-4" />
-                        </button>
-                        <button onClick={() => showDeleteConfirmation(proj.id, proj.name)} className="p-1 text-red-600 hover:text-red-800">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    )}
-                  </td>
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+
+              <tbody>
+                {sortedDepartments.map(dept => (
+                  <tr
+                    key={dept.id}
+                    className="border-b border-gray-300 hover:bg-gray-50 transition-colors"
+                  >
+                    {/* Checkbox cell */}
+                    <td className="py-2 px-3 whitespace-nowrap border-r border-gray-300 w-10">
+                      <div className="flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedDepartments.includes(dept.id)}
+                          onChange={() => toggleDepartmentSelection(dept.id)}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                      </div>
+                    </td>
+                    {editingId === dept.id ?
+                      visibleColumns.map(col => (
+                        <td key={col.id} className="py-2 px-3 whitespace-nowrap border-r border-gray-300 last:border-r-0">
+                          {renderInput(col, editForm[col.id], (f, v) => handleInputChange(f, v, true), validationErrors[col.id])}
+                        </td>
+                      )) :
+                      visibleColumns.map(col => (
+                        <td key={col.id} className="py-2 px-3 whitespace-nowrap border-r border-gray-300 last:border-r-0">
+                          {renderCellContent(col, dept[col.id], dept)}
+                        </td>
+                      ))
+                    }
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Removed the fixed Add Column Button from here since it's now in the toolbar */}
         </div>
 
-        {/* FOOTER SECTION */}
-        <div className="px-4 py-3 border-t border-gray-300 text-xs text-gray-600 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div>
-            Showing {sortedProjects.length} of {projects.length} projects
-            {(managerFilter || statusFilter !== "All Status") &&
-              ` (Filtered${managerFilter ? ` by Manager: ${managerFilter}` : ''}${statusFilter !== "All Status" ? ` by Status: ${statusFilter}` : ''})`
-            }
-            <span className="ml-2 text-blue-600">
+        {/* FOOTER SECTION with Add Department and Action buttons on LEFT */}
+        <div className="px-4 py-3 border-t border-gray-300 text-xs text-gray-900 flex flex-col sm:flex-row items-center justify-between gap-2 bg-white relative">
+          {/* LEFT SIDE - Add Department and Action Buttons */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleAddDeptClick}
+              className="flex items-center gap-1 h-10 px-3 text-xs border border-gray-300 rounded hover:bg-gray-50"
+            >
+              <Plus className="h-4 w-4" />
+              {/* <span>Add Department</span> */}
+            </button>
+            
+            {/* Edit, Save and Cancel buttons - only show when departments are selected or editing */}
+            {selectedDepartments.length > 0 || editingId ? (
+              <div className="flex items-center gap-1 ml-1">
+                {editingId ? (
+                  <>
+                    {/* Save and Cancel buttons - same design as Edit button */}
+                    <button
+                      onClick={saveEdit}
+                      className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
+                      title="Save changes"
+                    >
+                      <Check className="h-4 w-4" />
+                      
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
+                      title="Cancel editing"
+                    >
+                      <X className="h-4 w-4" />
+                
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={handleBulkEdit}
+                    className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
+                    title={selectedDepartments.length === 1 ? "Edit selected department" : "Edit selected departments"}
+                  >
+                    <Edit className="h-4 w-4" />
+                    {selectedDepartments.length > 1 && <span>Edit ({selectedDepartments.length})</span>}
+                  </button>
+                )}
+                
+                {!editingId && (
+                  <button
+                    onClick={handleBulkDelete}
+                    className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-red-50 hover:text-red-700 hover:border-red-300"
+                    title={selectedDepartments.length === 1 ? "Delete selected department" : "Delete selected departments"}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {selectedDepartments.length > 1 && <span>Delete ({selectedDepartments.length})</span>}
+                  </button>
+                )}
+              </div>
+            ) : null}
+          </div>
+          
+          {/* RIGHT SIDE - Info and Column Count */}
+          <div className="flex items-center gap-4">
+            <span>
+              Showing {sortedDepartments.length} of {departments.length} departments
+              {(columnFilter || statusFilter !== "All Status") &&
+                ` (Filtered${columnFilter ? ` by: ${columnFilter}` : ''}${statusFilter !== "All Status" ? ` by Status: ${statusFilter}` : ''})`
+              }
+            </span>
+            {selectedDepartments.length > 0 && (
+              <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
+                {selectedDepartments.length} selected
+              </span>
+            )}
+            <span className="text-blue-600">
               ({visibleColumns.length} of {availableColumns.length} columns visible)
             </span>
           </div>
@@ -1155,4 +1398,4 @@ const ProjectMaster = () => {
   );
 };
 
-export default ProjectMaster;
+export default DepartmentMaster;
