@@ -3,7 +3,6 @@ from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
 # Set up logging
@@ -20,6 +19,7 @@ from app.models import employee_column  # noqa: F401
 from app.models import project  # noqa: F401
 from app.models import part # noqa: F401
 from app.models import part_column # noqa: F401
+from app.models import upload_tracker # noqa: F401
 
 # Import routers
 from app.api.auth import router as auth_router
@@ -57,6 +57,9 @@ origins = [
     "https://automated-manufact-git-6ff091-gokulakrishnans-projects-78c7d2dd.vercel.app",  # preview
     "https://automated-manufacturing-kdmeekg5b.vercel.app", 
     "http://localhost:5173",  # local frontend testing
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
 
 if FRONTEND_URL and FRONTEND_URL not in origins:
@@ -82,10 +85,14 @@ app.include_router(datasets_router, prefix=API_PREFIX)
 
 #testing routes
 @app.get("/test-db")
-async def test_db(db: AsyncSession = Depends(get_db)):
-    result = await db.execute("SELECT NOW()")
-    current_time = result.scalar()
-    return {"current_time": str(current_time)}
+async def test_db(db=Depends(get_db)): 
+    from sqlalchemy import text
+    try:
+        result = db.execute(text("SELECT 1"))
+        return {"status": "ok", "result": result.scalar()}
+    except Exception as e:
+        logger.error(f"Database test failed: {str(e)}")
+        return {"status": "error", "detail": str(e)}
 
 @app.get("/healthz")
 def health_check():

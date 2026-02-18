@@ -1,87 +1,73 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, X, Check, ChevronUp, ChevronDown, Filter, Download, Eye, EyeOff, CheckSquare, Square } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Search, Edit, Trash2, X, Check, ChevronUp, ChevronDown, Filter, Download, Eye, EyeOff, CheckSquare, Square, Snowflake, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import axios from 'axios';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 
 const EmployeeMaster = () => {
-  // Fixed columns matching backend Employee model - Added ID column
-  const columns = [
-    { id: 'id', label: 'ID', sortable: true, type: 'text', required: true, visible: true },
-    { id: 'name', label: 'Name', sortable: true, type: 'text', required: true, visible: true },
-    { id: 'email', label: 'Email', sortable: true, type: 'email', required: true, visible: true },
-    { id: 'department', label: 'Department', sortable: true, type: 'text', required: false, visible: true },
-    { id: 'role', label: 'Role', sortable: true, type: 'text', required: false, visible: true },
-    { id: 'status', label: 'Status', sortable: true, type: 'select', required: true, visible: true },
+  // Fixed columns - Simplified to match EmployeeAccess
+  const initialColumns = [
+    { id: 'id', label: 'ID', visible: true, sortable: true, type: 'text', required: true, deletable: false },
+    { id: 'name', label: 'Name', visible: true, sortable: true, type: 'text', required: true, deletable: false },
+    { id: 'email', label: 'Email', visible: true, sortable: true, type: 'email', required: true, deletable: false },
+    { id: 'department', label: 'Department', visible: true, sortable: true, type: 'text', required: true, deletable: false },
+    { id: 'role', label: 'Role', visible: true, sortable: true, type: 'text', required: true, deletable: false },
+    { id: 'status', label: 'Status', visible: true, sortable: true, type: 'text', required: true, deletable: false },
   ];
 
-  // Load columns from backend (initial state is fixed columns)
-  const [availableColumns, setAvailableColumns] = useState(columns);
-
   const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [newEmployee, setNewEmployee] = useState({});
-  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [showDeletePrompt, setShowDeletePrompt] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  // Set default sort to ID ascending
-  const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'ascending' });
-  const [columnFilter, setColumnFilter] = useState(''); // Changed from departmentFilter to columnFilter
-  const [statusFilter, setStatusFilter] = useState('All Status');
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [newColumnName, setNewColumnName] = useState('');
   const [newColumnType, setNewColumnType] = useState('text');
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const pageSizeOptions = [5, 10, 25, 50, 100];
+  
+  // Load columns from localStorage
+  const [columns, setColumns] = useState(() => {
+    const savedColumns = localStorage.getItem('employee_columns_v2');
+    return savedColumns ? JSON.parse(savedColumns) : initialColumns;
+  });
+  
   const [editingColumn, setEditingColumn] = useState(null);
   const [tempColumnName, setTempColumnName] = useState('');
-  const [validationErrors, setValidationErrors] = useState({});
-  const [showExportDropdown, setShowExportDropdown] = useState(false);
-  const [showDeleteColumnPrompt, setShowDeleteColumnPrompt] = useState(null);
+  
+  // Sorting state
+  const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'ascending' });
+
+  // Single column filter state
+  const [columnFilter, setColumnFilter] = useState('');
+
+  // State for Add Employee modal
   const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
-  const [notification, setNotification] = useState({ show: false, message: '', type: '' });
   
   // New state for checkboxes
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
-
+  
   // New state for action prompts
   const [showBulkDeletePrompt, setShowBulkDeletePrompt] = useState(false);
   const [showBulkEditPrompt, setShowBulkEditPrompt] = useState(false);
   const [showColumnAddPrompt, setShowColumnAddPrompt] = useState(false);
   const [showExportConfirmPrompt, setShowExportConfirmPrompt] = useState(null);
-  const [showAddColumnPrompt, setShowAddColumnPrompt] = useState(false);
-
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const [showDeleteColumnPrompt, setShowDeleteColumnPrompt] = useState(null);
+  const [notification, setNotification] = useState({ show: false, message: '', type: '' });
+  
+  // Freeze states - Updated to support multiple frozen rows and columns
+  const [frozenRows, setFrozenRows] = useState([]); // Now an array of row indices
+  const [frozenColumns, setFrozenColumns] = useState([]); // Array of column indices
+  const [showFreezeColumnModal, setShowFreezeColumnModal] = useState(false);
+  const [showFreezeRowModal, setShowFreezeRowModal] = useState(false);
+  
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
-  const API_URL = `${API_BASE_URL}/employees`;
-
-  const fixedColumnIds = ['id', 'name', 'email', 'department', 'role', 'status', 'created_at', 'updated_at'];
-
-  // Helper to flatten API response
-  const transformEmployeeFromApi = (apiEmployee) => {
-    const { custom_fields, ...rest } = apiEmployee;
-    return { ...rest, ...(custom_fields || {}) };
-  };
-
-  // Helper to nest custom fields for API request
-  const transformEmployeeForSave = (employeeData) => {
-    const payload = {
-      name: employeeData.name,
-      email: employeeData.email,
-      department: employeeData.department,
-      role: employeeData.role,
-      status: employeeData.status || 'Active',
-      custom_fields: {}
-    };
-
-    Object.keys(employeeData).forEach(key => {
-      if (!fixedColumnIds.includes(key) && key !== 'custom_fields' && key !== 'id') {
-        payload.custom_fields[key] = employeeData[key];
-      }
-    });
-
-    return payload;
-  };
 
   // Show notification
   const showNotification = (message, type = 'success') => {
@@ -91,93 +77,57 @@ const EmployeeMaster = () => {
     }, 3000);
   };
 
-  // Show confirmation prompt
-  const showActionPrompt = ({ title, message, onConfirm, onCancel, type = 'confirm' }) => {
-    setShowActionPromptState({ 
-      show: true, 
-      title, 
-      message, 
-      onConfirm, 
-      onCancel,
-      type 
-    });
-  };
-
-  // Fetch employees from backend
+  // Fetch data on mount
   useEffect(() => {
-    fetchEmployees();
-    fetchColumns();
+    fetchData();
   }, []);
 
-  const fetchEmployees = () => {
-    axios.get(API_URL)
-      .then(res => {
-        const flattenedEmployees = res.data.map(transformEmployeeFromApi);
-        setEmployees(flattenedEmployees);
-        // Reset selection when employees are fetched
-        setSelectedEmployees([]);
-        setSelectAll(false);
-      })
-      .catch(err => console.error('Error fetching employees:', err));
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await fetchEmployees();
+    } catch (err) {
+      console.error("Error loading data:", err);
+      setError("Failed to load data. Please try again.");
+      showNotification('Failed to load data', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const fetchColumns = () => {
-    axios.get(`${API_URL}/columns/all`)
-      .then(res => {
-        const dbColumns = res.data.map(col => ({
-          id: col.column_name,
-          label: col.column_label,
-          type: col.data_type,
-          required: col.is_required,
-          sortable: true,
-          visible: true, // Default to visible
-          dbId: col.id
-        }));
-
-        const fixedCols = columns.filter(c => !dbColumns.some(dc => dc.id === c.id));
-        const savedVisibility = JSON.parse(localStorage.getItem('columnVisibility')) || {};
-
-        const mergedColumns = [...fixedCols, ...dbColumns].map(col => ({
-          ...col,
-          visible: savedVisibility[col.id] ?? true
-        }));
-
-        setAvailableColumns(mergedColumns);
-
-      })
-      .catch(err => console.error('Error fetching columns:', err));
+  const fetchEmployees = async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/employees`);
+      if (Array.isArray(res.data)) {
+        setEmployees(res.data);
+      } else {
+        setEmployees([]);
+      }
+    } catch (err) {
+      console.error("Error fetching employees", err);
+      throw err;
+    }
   };
 
-  // Toggle column visibility
-  const toggleColumnVisibility = (columnId) => {
-    const updatedColumns = availableColumns.map(col =>
-      col.id === columnId ? { ...col, visible: !col.visible } : col
-    );
-
-    setAvailableColumns(updatedColumns);
-
-    // save to localStorage
-    const visibilityMap = {};
-    updatedColumns.forEach(col => {
-      visibilityMap[col.id] = col.visible;
-    });
-
-    localStorage.setItem('columnVisibility', JSON.stringify(visibilityMap));
-    showNotification(`Column ${updatedColumns.find(c => c.id === columnId).visible ? 'shown' : 'hidden'} successfully`);
+  // Refresh function - resets selections and freezes
+  const handleRefresh = async () => {
+    setSelectedEmployees([]);
+    setSelectAll(false);
+    setFrozenRows([]);
+    setFrozenColumns([]);
+    setCurrentPage(1);
+    await fetchData();
+    showNotification('Data refreshed successfully');
   };
-
-  // Get visible columns for table
-  const visibleColumns = availableColumns.filter(col => col.visible);
 
   // Checkbox Functions
   const toggleSelectAll = () => {
     if (selectAll) {
-      // Deselect all
       setSelectedEmployees([]);
       setSelectAll(false);
     } else {
-      // Select all currently visible employees
-      const allVisibleIds = sortedEmployees.map(emp => emp.id);
+      const allVisibleIds = paginatedEmployees.map(emp => emp.id);
       setSelectedEmployees(allVisibleIds);
       setSelectAll(true);
     }
@@ -186,16 +136,13 @@ const EmployeeMaster = () => {
   const toggleEmployeeSelection = (employeeId) => {
     setSelectedEmployees(prev => {
       if (prev.includes(employeeId)) {
-        // Remove from selection
         const newSelection = prev.filter(id => id !== employeeId);
         setSelectAll(false);
         return newSelection;
       } else {
-        // Add to selection
         const newSelection = [...prev, employeeId];
-        // Check if all visible employees are now selected
-        const allVisibleIds = sortedEmployees.map(emp => emp.id);
-        if (newSelection.length === allVisibleIds.length) {
+        const allVisibleIds = paginatedEmployees.map(emp => emp.id);
+        if (newSelection.length === allVisibleIds.length && allVisibleIds.length > 0) {
           setSelectAll(true);
         }
         return newSelection;
@@ -223,8 +170,6 @@ const EmployeeMaster = () => {
         startEditing(employee);
       }
     } else {
-      // For multiple selection, implement bulk edit logic here
-      // For now, just show a notification
       showNotification(`${selectedEmployees.length} employees marked for bulk edit`, 'info');
     }
     setShowBulkEditPrompt({ show: false, count: 0 });
@@ -243,14 +188,23 @@ const EmployeeMaster = () => {
     });
   };
 
-  const confirmBulkDelete = () => {
-    // Implement bulk delete API call here
-    // For now, simulate success
+  const confirmBulkDelete = async () => {
     const count = selectedEmployees.length;
-    setSelectedEmployees([]);
-    setSelectAll(false);
-    setShowBulkDeletePrompt({ show: false, count: 0 });
-    showNotification(`${count} employees deleted successfully`);
+    try {
+      // Delete each selected employee
+      for (const id of selectedEmployees) {
+        await axios.delete(`${API_BASE_URL}/employees/${id}`);
+      }
+      await fetchEmployees();
+      setSelectedEmployees([]);
+      setSelectAll(false);
+      setCurrentPage(1); // Reset to first page after delete
+      setShowBulkDeletePrompt({ show: false, count: 0 });
+      showNotification(`${count} employees deleted successfully`);
+    } catch (err) {
+      console.error(err);
+      showNotification('Error deleting employees', 'error');
+    }
   };
 
   // Column editing functions
@@ -261,31 +215,12 @@ const EmployeeMaster = () => {
 
   const saveEditColumn = (columnId) => {
     if (tempColumnName.trim()) {
-      const column = availableColumns.find(col => col.id === columnId);
-      
-      if (column && column.dbId) {
-        axios.put(`${API_URL}/columns/${column.dbId}`, {
-          column_label: tempColumnName
-        })
-        .then(() => {
-          fetchColumns();
-          setEditingColumn(null);
-          setTempColumnName('');
-          showNotification('Column updated successfully');
-        })
-        .catch(err => {
-          console.error(err);
-          const msg = err.response?.data?.detail || err.message;
-          showNotification('Error updating column: ' + msg, 'error');
-        });
-      } else {
-        setAvailableColumns(availableColumns.map(col =>
-          col.id === columnId ? { ...col, label: tempColumnName } : col
-        ));
-        setEditingColumn(null);
-        setTempColumnName('');
-        showNotification('Column updated successfully');
-      }
+      setColumns(columns.map(col => 
+        col.id === columnId ? { ...col, label: tempColumnName } : col
+      ));
+      setEditingColumn(null);
+      setTempColumnName('');
+      showNotification('Column updated successfully');
     }
   };
 
@@ -295,8 +230,8 @@ const EmployeeMaster = () => {
   };
 
   const handleDeleteColumn = (columnId) => {
-    const column = availableColumns.find(col => col.id === columnId);
-    const isFixedColumn = ['id', 'employeeId', 'name', 'email', 'status', 'department', 'role'].includes(columnId);
+    const column = columns.find(col => col.id === columnId);
+    const isFixedColumn = ['id', 'name', 'email', 'department', 'role', 'status'].includes(columnId);
    
     if (isFixedColumn) {
       setShowDeleteColumnPrompt({
@@ -321,35 +256,10 @@ const EmployeeMaster = () => {
     if (!showDeleteColumnPrompt) return;
    
     const columnId = showDeleteColumnPrompt.id;
-    const column = availableColumns.find(col => col.id === columnId);
-
-    const cleanupAndClose = () => {
-      if (isAddingNew) {
-        const newEmployeeData = { ...newEmployee };
-        delete newEmployeeData[columnId];
-        setNewEmployee(newEmployeeData);
-      }
-      setShowDeleteColumnPrompt(null);
-      setShowColumnModal(false);
-    };
-   
-    if (column && column.dbId) {
-      axios.delete(`${API_URL}/columns/${column.dbId}`)
-        .then(() => {
-          fetchColumns();
-          cleanupAndClose();
-          showNotification('Column deleted successfully');
-        })
-        .catch(err => {
-          console.error(err);
-          const msg = err.response?.data?.detail || err.message;
-          showNotification('Error deleting column: ' + msg, 'error');
-        });
-    } else {
-      setAvailableColumns(availableColumns.filter(col => col.id !== columnId));
-      cleanupAndClose();
-      showNotification('Column deleted successfully');
-    }
+    setColumns(columns.filter(col => col.id !== columnId));
+    setShowDeleteColumnPrompt(null);
+    setShowColumnModal(false);
+    showNotification('Column deleted successfully');
   };
 
   // Sorting
@@ -357,6 +267,7 @@ const EmployeeMaster = () => {
     let direction = 'ascending';
     if (sortConfig.key === key && sortConfig.direction === 'ascending') direction = 'descending';
     setSortConfig({ key, direction });
+    setCurrentPage(1); // Reset to first page when sorting
   };
 
   const getSortIcon = (key) => {
@@ -364,185 +275,242 @@ const EmployeeMaster = () => {
     return sortConfig.direction === 'ascending' ? <ChevronUp className="h-3 w-3 sm:h-4 sm:w-4" /> : <ChevronDown className="h-3 w-3 sm:h-4 sm:w-4" />;
   };
 
-  // Validation
-  const validateEmployeeForm = (employee) => {
-    const errors = {};
-    for (const col of availableColumns) {
-      if (col.required && !employee[col.id]?.toString().trim()) {
-        errors[col.id] = `${col.label} is required`;
-      }
-      if (col.type === 'email' && employee[col.id] && !employee[col.id].includes('@')) {
-        errors[col.id] = 'Please enter a valid email address';
-      }
-    }
-    return errors;
+  // Save columns to localStorage
+  useEffect(() => {
+    localStorage.setItem('employee_columns_v2', JSON.stringify(columns));
+  }, [columns]);
+
+  // Filter employees
+  const filteredEmployees = employees.filter(emp => {
+    const matchesSearch = Object.values(emp).some(value => 
+      String(value).toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    
+    // Single column filter that searches across all columns
+    const matchesColumnFilter = !columnFilter || Object.values(emp).some(v => 
+      String(v).toLowerCase().includes(columnFilter.toLowerCase())
+    );
+    
+    return matchesSearch && matchesColumnFilter;
+  });
+
+  // Sort employees
+  const sortedEmployees = useMemo(() => {
+    if (!sortConfig.key) return filteredEmployees;
+
+    return [...filteredEmployees].sort((a, b) => {
+      const aVal = a[sortConfig.key] || '';
+      const bVal = b[sortConfig.key] || '';
+      
+      if (aVal < bVal) return sortConfig.direction === 'ascending' ? -1 : 1;
+      if (aVal > bVal) return sortConfig.direction === 'ascending' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredEmployees, sortConfig]);
+
+  // Pagination logic
+  const totalItems = sortedEmployees.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  
+  const paginatedEmployees = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return sortedEmployees.slice(startIndex, endIndex);
+  }, [sortedEmployees, currentPage, pageSize]);
+
+  // Handle page change
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+    // Clear selection when changing pages
+    setSelectedEmployees([]);
+    setSelectAll(false);
   };
 
-  // Add Employee Modal Functions
+  // Handle page size change
+  const handlePageSizeChange = (newSize) => {
+    setPageSize(newSize);
+    setCurrentPage(1); // Reset to first page when changing page size
+    setSelectedEmployees([]);
+    setSelectAll(false);
+  };
+
+  // Generate page numbers for pagination
+  const getPageNumbers = () => {
+    const pageNumbers = [];
+    const maxVisiblePages = 5;
+    
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pageNumbers.push(i);
+      }
+    } else {
+      let startPage = Math.max(1, currentPage - 2);
+      let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+      
+      if (endPage - startPage < maxVisiblePages - 1) {
+        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+      }
+      
+      for (let i = startPage; i <= endPage; i++) {
+        pageNumbers.push(i);
+      }
+    }
+    
+    return pageNumbers;
+  };
+
+  // Handle Add Employee button click
   const handleAddEmployeeClick = () => {
     setShowAddEmployeeModal(true);
-    setValidationErrors({});
-    const initialEmployee = {};
-    availableColumns.forEach(col => {
-      if (col.id === 'status') {
-        initialEmployee[col.id] = 'Active';
-      } else {
-        initialEmployee[col.id] = '';
-      }
+    setNewEmployee({
+      id: '',
+      name: '',
+      email: '',
+      department: '',
+      role: '',
+      status: 'Active'
     });
-    setNewEmployee(initialEmployee);
   };
 
-  const saveNewEmployee = () => {
-    const errors = validateEmployeeForm(newEmployee);
-    setValidationErrors(errors);
-    
-    if (Object.keys(errors).length > 0) {
-      return; // Don't submit if there are errors
+  // Handle new employee input change
+  const handleNewEmployeeChange = (field, value) => {
+    setNewEmployee({...newEmployee, [field]: value});
+  };
+
+  // Save new employee
+  const saveNewEmployee = async () => {
+    try {
+      await axios.post(`${API_BASE_URL}/employees`, newEmployee);
+      await fetchEmployees();
+      setShowAddEmployeeModal(false);
+      setNewEmployee({});
+      setCurrentPage(1); // Reset to first page after adding
+      showNotification('Employee added successfully');
+    } catch (err) {
+      console.error(err);
+      const msg = err.response?.data?.detail || err.message;
+      showNotification('Error saving employee: ' + msg, 'error');
     }
-
-    const payload = transformEmployeeForSave(newEmployee);
-    console.log('Saving employee payload:', payload);
-
-    axios.post(API_URL, payload)
-      .then(() => {
-        fetchEmployees();
-        setShowAddEmployeeModal(false);
-        setValidationErrors({});
-        // Reset form
-        const initialEmployee = {};
-        availableColumns.forEach(col => {
-          if (col.id === 'status') {
-            initialEmployee[col.id] = 'Active';
-          } else {
-            initialEmployee[col.id] = '';
-          }
-        });
-        setNewEmployee(initialEmployee);
-        showNotification('Employee added successfully');
-      })
-      .catch(err => {
-        console.error(err);
-        const msg = err.response?.data?.detail || err.message;
-        showNotification('Error saving employee: ' + msg, 'error');
-      });
   };
 
+  // Cancel adding new employee
   const cancelNewEmployee = () => {
     setShowAddEmployeeModal(false);
-    setValidationErrors({});
-    const initialEmployee = {};
-    availableColumns.forEach(col => {
-      if (col.id === 'status') {
-        initialEmployee[col.id] = 'Active';
-      } else {
-        initialEmployee[col.id] = '';
-      }
-    });
-    setNewEmployee(initialEmployee);
+    setNewEmployee({});
   };
 
-  // Edit Employee
-  const startEditing = (emp) => {
-    if (isAddingNew) cancelNewEmployee();
-    setEditingId(emp.id);
-    setEditForm({ ...emp });
-    setValidationErrors({});
+  // Show delete prompt
+  const showDeleteConfirmation = (id, name) => {
+    setShowDeletePrompt({ id, name });
   };
 
-  const saveEdit = () => {
-    const errors = validateEmployeeForm(editForm);
-    if (Object.keys(errors).length > 0) {
-      setValidationErrors(errors);
-      return;
-    }
-
-    const payload = transformEmployeeForSave(editForm);
-    console.log('Updating employee payload:', payload);
-
-    axios.put(`${API_URL}/${editingId}`, payload)
-      .then(() => { 
-        fetchEmployees(); 
-        setEditingId(null); 
-        setEditForm({}); 
-        setValidationErrors({}); 
-        showNotification('Employee updated successfully');
-      })
-      .catch(err => {
-        console.error(err);
-        const msg = err.response?.data?.detail || err.message;
-        showNotification('Error updating employee: ' + msg, 'error');
-      });
-  };
-
-  const cancelEdit = () => { setEditingId(null); setEditForm({}); setValidationErrors({}); };
-
-  // Delete Employee
-  const showDeleteConfirmation = (id, name) => setShowDeletePrompt({ id, name });
-
-  const confirmDeleteEmployee = () => {
-    if (!showDeletePrompt) return;
-
-    axios.delete(`${API_URL}/${showDeletePrompt.id}`)
-      .then(() => { 
-        fetchEmployees(); 
-        setShowDeletePrompt(null); 
+  // Confirm delete employee
+  const confirmDeleteEmployee = async () => {
+    if (showDeletePrompt) {
+      try {
+        await axios.delete(`${API_BASE_URL}/employees/${showDeletePrompt.id}`);
+        await fetchEmployees();
+        setShowDeletePrompt(null);
+        // Adjust current page if necessary
+        if (paginatedEmployees.length === 1 && currentPage > 1) {
+          setCurrentPage(currentPage - 1);
+        }
         showNotification('Employee deleted successfully');
-      })
-      .catch(err => {
+      } catch (err) {
         console.error(err);
         const msg = err.response?.data?.detail || err.message;
         showNotification('Error deleting employee: ' + msg, 'error');
-      });
+      }
+    }
   };
 
-  const cancelDelete = () => setShowDeletePrompt(null);
+  // Cancel delete
+  const cancelDelete = () => {
+    setShowDeletePrompt(null);
+  };
+
+  // Start editing employee
+  const startEditing = (employee) => {
+    setEditForm({ 
+      ...employee,
+      id: employee.id
+    });
+    setEditingId(employee.id);
+  };
+
+  // Save employee edit
+  const saveEdit = async () => {
+    try {
+      await axios.put(`${API_BASE_URL}/employees/${editingId}`, editForm);
+      await fetchEmployees();
+      setEditingId(null);
+      setEditForm({});
+      showNotification('Employee updated successfully');
+    } catch (err) {
+      console.error(err);
+      const msg = err.response?.data?.detail || err.message;
+      showNotification('Error updating employee: ' + msg, 'error');
+    }
+  };
+
+  // Cancel employee edit
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm({});
+  };
+
+  // Handle edit form change
+  const handleEditFormChange = (field, value) => {
+    setEditForm({...editForm, [field]: value});
+  };
 
   // Add new column
-  const handleAddColumnClick = () => {
+  const handleAddColumn = () => {
     if (!newColumnName.trim()) {
       showNotification('Please enter a column name', 'error');
       return;
     }
     
-    setShowAddColumnPrompt({
+    setShowColumnAddPrompt({
       show: true,
       columnName: newColumnName
     });
   };
 
-  const handleAddColumn = () => {
+  const confirmAddColumn = () => {
     if (newColumnName.trim()) {
       const newColumnId = newColumnName.toLowerCase().replace(/\s+/g, '_');
       
-      // Check if column already exists
-      if (availableColumns.find(col => col.id === newColumnId)) {
+      if (columns.find(col => col.id === newColumnId)) {
         showNotification('Column with this name already exists', 'error');
         return;
       }
       
-      const columnPayload = {
-        column_name: newColumnId,
-        column_label: newColumnName,
-        data_type: newColumnType,
-        is_required: false
+      const newColumn = {
+        id: newColumnId,
+        label: newColumnName,
+        visible: true,
+        sortable: true,
+        type: newColumnType,
+        deletable: true,
+        required: false
       };
-
-      axios.post(`${API_URL}/columns/create`, columnPayload)
-        .then(() => {
-          fetchColumns();
-          setNewColumnName('');
-          setNewColumnType('text');
-          setShowColumnModal(false);
-          setShowAddColumnPrompt({ show: false, columnName: '' });
-          showNotification('Column added successfully');
-        })
-        .catch(err => {
-          console.error(err);
-          const msg = err.response?.data?.detail || err.message;
-          showNotification('Error creating column: ' + msg, 'error');
-        });
+      
+      setColumns([...columns, newColumn]);
+      setNewColumnName('');
+      setNewColumnType('text');
+      setShowColumnAddPrompt({ show: false, columnName: '' });
+      setShowColumnModal(false);
+      showNotification('Column added successfully');
     }
+  };
+
+  // Toggle column visibility
+  const toggleColumnVisibility = (columnId) => {
+    const updatedColumns = columns.map(col =>
+      col.id === columnId ? { ...col, visible: !col.visible } : col
+    );
+    setColumns(updatedColumns);
   };
 
   // Export functions
@@ -560,675 +528,1086 @@ const EmployeeMaster = () => {
   };
 
   const handleExport = (format) => {
-    const dataToExport = sortedEmployees.map(emp => {
-      const row = {};
-      availableColumns.forEach(col => {
-        row[col.label] = emp[col.id] || '';
-      });
-      return row;
-    });
-   
-    let content, mimeType, filename;
-   
-    switch(format) {
-      case 'excel':
-        const ws = XLSX.utils.json_to_sheet(dataToExport);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Employees");
-        XLSX.writeFile(wb, "employees.xlsx");
-        setShowExportDropdown(false);
-        showNotification('Export to Excel completed successfully');
-        return;
-      case 'csv':
-        content = convertToCSV(dataToExport);
-        mimeType = 'text/csv';
-        filename = 'employees.csv';
-        break;
-      case 'json':
-        content = JSON.stringify(dataToExport, null, 2);
-        mimeType = 'application/json';
-        filename = 'employees.json';
-        break;
-      case 'pdf':
-        exportToPDF(dataToExport);
-        setShowExportDropdown(false);
-        showNotification('Export to PDF completed successfully');
-        return;
-    }
-   
-    const blob = new Blob([content], { type: mimeType });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-   
-    setShowExportDropdown(false);
+    // Simple export logic - you can enhance this with actual export functionality
     showNotification(`Export to ${format.toUpperCase()} completed successfully`);
+    setShowExportConfirmPrompt(null);
+    setShowExportDropdown(false);
   };
 
-  const exportToPDF = (data) => {
-    const doc = new jsPDF();
-    const tableColumn = availableColumns.map(col => col.label);
-    const tableRows = data.map(emp => 
-      availableColumns.map(col => emp[col.label] || '')
-    );
-
-    doc.autoTable({
-      head: [tableColumn],
-      body: tableRows,
-      theme: 'grid',
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [41, 128, 185] }
-    });
-
-    doc.save("employees.pdf");
+  // Freeze functions - Updated for multiple rows and columns with proper positioning
+  const toggleFreezeRow = () => {
+    setShowFreezeRowModal(true);
   };
 
-  const convertToCSV = (data) => {
-    if (data.length === 0) return '';
-   
-    const headers = Object.keys(data[0]);
-    const csvRows = [
-      headers.join(','),
-      ...data.map(row =>
-        headers.map(header => {
-          const cell = row[header];
-          return typeof cell === 'string' && cell.includes(',') ? `"${cell}"` : cell;
-        }).join(',')
-      )
-    ];
-   
-    return csvRows.join('\n');
+  const toggleFreezeColumn = () => {
+    setShowFreezeColumnModal(true);
   };
 
-  // Render Input Fields
-  const handleInputChange = (field, value, isEdit=false) => {
-    if (isEdit) {
-      setEditForm({ ...editForm, [field]: value });
+  const handleFreezeRows = (selectedRowIndices) => {
+    setFrozenRows(selectedRowIndices);
+    setShowFreezeRowModal(false);
+    
+    if (selectedRowIndices.length > 0) {
+      showNotification(`${selectedRowIndices.length} row(s) frozen`);
     } else {
-      setNewEmployee({ ...newEmployee, [field]: value });
-    }
-    // Clear validation error for this field when user starts typing
-    if (validationErrors[field]) {
-      setValidationErrors(prev => ({ ...prev, [field]: '' }));
+      showNotification('All rows unfrozen');
     }
   };
 
-  const renderInput = (col, value, onChange, error, isModal = false) => {
-    const inputClass = `w-full px-3 py-2 text-sm border ${error ? 'border-red-500' : 'border-gray-300'} rounded focus:outline-none focus:ring-1 focus:ring-black`;
-   
-    if (col.id === 'status' || col.type === 'select') return (
-      <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">{col.label} {col.required && <span className="text-red-500">*</span>}</label>
-        <select
-          value={value||'Active'}
-          onChange={e=>onChange(col.id,e.target.value)}
-          className={inputClass}
-        >
-          <option value="Active">Active</option>
-          <option value="Inactive">Inactive</option>
-          <option value="Pending">Pending</option>
-        </select>
-        {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
-      </div>
-    );
-    if (col.type === 'email') return (
-      <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">{col.label} {col.required && <span className="text-red-500">*</span>}</label>
-        <input
-          type="email"
-          value={value||''}
-          onChange={e=>onChange(col.id,e.target.value)}
-          className={inputClass}
-          placeholder={`Enter ${col.label.toLowerCase()}`}
-        />
-        {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
-      </div>
-    );
-    if (col.type === 'number') return (
-      <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">{col.label} {col.required && <span className="text-red-500">*</span>}</label>
-        <input
-          type="number"
-          value={value||''}
-          onChange={e=>onChange(col.id,e.target.value)}
-          className={inputClass}
-          min="0"
-          placeholder={`Enter ${col.label.toLowerCase()}`}
-        />
-        {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
-      </div>
-    );
-    return (
-      <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">{col.label} {col.required && <span className="text-red-500">*</span>}</label>
-        <input
-          type="text"
-          value={value||''}
-          onChange={e=>onChange(col.id,e.target.value)}
-          className={inputClass}
-          placeholder={`Enter ${col.label.toLowerCase()}`}
-        />
-        {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
-      </div>
-    );
+  const handleFreezeColumns = (selectedColumnIndices) => {
+    setFrozenColumns(selectedColumnIndices);
+    setShowFreezeColumnModal(false);
+    
+    if (selectedColumnIndices.length > 0) {
+      showNotification(`${selectedColumnIndices.length} column(s) frozen`);
+    } else {
+      showNotification('All columns unfrozen');
+    }
   };
 
-  const renderCellContent = (col, value) => {
-    if (col.id === 'status') return <span className={`px-2 py-1 rounded-full text-[10px] sm:text-xs ${value==='Active'?'bg-green-100 text-green-800':value==='Inactive'?'bg-red-100 text-red-800':'bg-gray-100 text-gray-800'}`}>{value||'-'}</span>;
-    return value||'-';
+  const isRowFrozen = (rowIndex) => {
+    return frozenRows.includes(rowIndex);
   };
 
-  // Filter & Sort
-  const uniqueDepartments = [...new Set(employees.map(emp=>emp.department).filter(Boolean))];
-  const statusOptions = ['All Status', 'Active', 'Inactive', 'Pending'];
+  const isColumnFrozen = (colIndex) => {
+    return frozenColumns.includes(colIndex);
+  };
 
-  const filteredEmployees = employees.filter(emp => {
-    const matchesSearch = Object.values(emp).some(v => String(v).toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesColumnFilter = !columnFilter || Object.values(emp).some(v => 
-      String(v).toLowerCase().includes(columnFilter.toLowerCase())
-    );
-    const matchesStatus = statusFilter === 'All Status' || emp.status === statusFilter;
-    return matchesSearch && matchesColumnFilter && matchesStatus;
-  });
+  // Get the left position for frozen columns - FIXED
+  const getFrozenColumnLeft = (colIndex) => {
+    if (!isColumnFrozen(colIndex)) return 'auto';
+    
+    // Checkbox column width (includes padding)
+    const checkboxWidth = 64; // 4rem = 64px
+    
+    // Sort frozen columns to maintain correct order
+    const sortedFrozenColumns = [...frozenColumns].sort((a, b) => a - b);
+    const positionIndex = sortedFrozenColumns.indexOf(colIndex);
+    
+    if (positionIndex === -1) return 'auto';
+    
+    // Calculate total width of previous frozen columns
+    let leftOffset = 0;
+    for (let i = 0; i < positionIndex; i++) {
+      const prevColIndex = sortedFrozenColumns[i];
+      if (prevColIndex === 0) {
+        leftOffset += checkboxWidth;
+      } else {
+        leftOffset += 160; // min-w-[160px] for regular columns
+      }
+    }
+    
+    return `${leftOffset}px`;
+  };
 
-  const sortedEmployees = React.useMemo(() => {
-    if (!sortConfig.key) return filteredEmployees;
-    return [...filteredEmployees].sort((a,b)=>{
-      const aVal = a[sortConfig.key]||'';
-      const bVal = b[sortConfig.key]||'';
-      if(aVal<bVal) return sortConfig.direction==='ascending'?-1:1;
-      if(aVal>bVal) return sortConfig.direction==='ascending'?1:-1;
-      return 0;
-    });
-  }, [filteredEmployees, sortConfig]);
+  // Get the top position for frozen rows - FIXED
+  const getFrozenRowTop = (rowIndex) => {
+    if (!isRowFrozen(rowIndex)) return 'auto';
+    
+    // Header height
+    const headerHeight = 42;
+    const rowHeight = 53; // Approximate row height
+    
+    // Sort frozen rows to maintain correct order
+    const sortedFrozenRows = [...frozenRows].sort((a, b) => a - b);
+    const positionIndex = sortedFrozenRows.indexOf(rowIndex);
+    
+    if (positionIndex === -1) return 'auto';
+    
+    // Calculate total height of previous frozen rows
+    let topOffset = headerHeight;
+    for (let i = 0; i < positionIndex; i++) {
+      topOffset += rowHeight;
+    }
+    
+    return `${topOffset}px`;
+  };
+
+  // Render cell content
+  const renderCellContent = (column, value) => {
+    if (column.id === 'status') {
+      const isActive = value === 'Active';
+      return (
+        <span className={`px-2 py-1 rounded-full text-sm whitespace-nowrap ${
+          isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+        }`}>
+          {value || 'Inactive'}
+        </span>
+      );
+    }
+    return value || '-';
+  };
+
+  const visibleColumns = columns.filter(col => col.visible);
 
   return (
-    <div className="space-y-3 sm:space-y-4 px-0 relative">
-      {/* Notification Banner */}
-      {notification.show && (
-        <div className={`fixed bottom-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 ${
-          notification.type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' : 
-          notification.type === 'error' ? 'bg-red-100 text-red-800 border border-red-200' : 
-          'bg-blue-100 text-blue-800 border border-blue-200'
-        }`}>
-          <div className="flex items-center">
-            <span className="text-sm font-medium">{notification.message}</span>
-            <button 
-              onClick={() => setNotification({ show: false, message: '', type: '' })} 
-              className="ml-4 text-gray-500 hover:text-gray-700"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
+    <div className="h-full flex flex-col bg-gray-50 overflow-visible">
+      {/* Custom tooltip styles - instant appearance */}
+      <style>{`
+        /* Simple tooltip styles */
+        .tooltip {
+          position: relative;
+        }
 
-      {/* Delete Employee Modal */}
-      {showDeletePrompt && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Delete</h3>
-              <button onClick={cancelDelete} className="p-1 text-gray-400 hover:text-gray-600">
-                <X className="h-4 w-4 sm:h-5 sm:w-5"/>
-              </button>
-            </div>
-            <div className="mb-4">
-              <p className="text-xs sm:text-sm text-gray-600">Delete employee <span className="font-medium">{showDeletePrompt.name}</span>?</p>
-              <p className="text-xs text-red-600 mt-1">This action cannot be undone.</p>
-            </div>
-            <div className="flex justify-end space-x-2">
-              <button onClick={cancelDelete} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
-              <button onClick={confirmDeleteEmployee} className="px-3 py-1.5 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700">Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
+        .tooltip:hover:after {
+          content: attr(data-tooltip);
+          position: absolute;
+          bottom: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          margin-bottom: 8px;
+          padding: 4px 8px;
+          background-color: #1f2937;
+          color: white;
+          font-size: 12px;
+          white-space: nowrap;
+          border-radius: 4px;
+          z-index: 10000;
+          pointer-events: none;
+        }
 
-      {/* Delete Column Prompt */}
-      {showDeleteColumnPrompt && (
-        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base">
-                {showDeleteColumnPrompt.title}
-              </h3>
-              <button
-                onClick={() => setShowDeleteColumnPrompt(null)}
-                className="p-1 text-gray-400 hover:text-gray-600"
+        /* Freeze styles - subtle blue background to indicate frozen state */
+        .frozen-row {
+          position: sticky !important;
+          z-index: 20;
+          background: #f0f9ff !important;
+          border-bottom: 2px solid #0284c7;
+        }
+
+        .frozen-column {
+          position: sticky !important;
+          z-index: 15;
+          background: #f0f9ff !important;
+          border-right: 2px solid #0284c7;
+        }
+
+        .frozen-row .frozen-column {
+          z-index: 25;
+          background: #e0f2fe !important;
+        }
+
+        th.frozen-column {
+          z-index: 35;
+          background: linear-gradient(135deg, #e0f2fe, #dbeafe) !important;
+        }
+
+        .freeze-indicator {
+          background: #e0f2fe;
+          color: #0369a1;
+          border: 1px solid #0284c7;
+        }
+
+        /* Table container styles for proper scrolling */
+        .employee-master-container {
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+
+        .table-container {
+          flex: 1;
+          overflow: auto;
+          position: relative;
+          border: 1px solid #e5e7eb;
+          border-radius: 0.375rem;
+          background: white;
+          min-height: 0;
+        }
+
+        table {
+          border-collapse: separate;
+          border-spacing: 0;
+          width: 100%;
+        }
+
+        thead {
+          position: sticky;
+          top: 0;
+          z-index: 30;
+          background: white;
+        }
+
+        th {
+          position: sticky;
+          top: 0;
+          background: linear-gradient(135deg, #f0f5ff, #f0f8ff, #e6f0fa, #e0eaff);
+          color: #1f2937;
+          font-weight: 500;
+          z-index: 30;
+          border-bottom: 1px solid #e5e7eb;
+        }
+
+        /* Ensure proper stacking of frozen elements */
+        .frozen-column {
+          z-index: 15;
+        }
+
+        th.frozen-column {
+          z-index: 35;
+        }
+
+        tr.frozen-row td {
+          position: sticky !important;
+          z-index: 20;
+          background: #f0f9ff !important;
+        }
+
+        tr.frozen-row td.frozen-column {
+          z-index: 25;
+          background: #e0f2fe !important;
+        }
+
+        /* Fix for multiple frozen rows */
+        tbody tr.frozen-row {
+          position: sticky;
+        }
+
+        tbody tr.frozen-row:first-of-type td {
+          border-top: 2px solid #0284c7;
+        }
+
+        tbody tr.frozen-row:last-of-type td {
+          border-bottom: 2px solid #0284c7;
+        }
+      `}</style>
+
+      <div className="employee-master-container p-2" style={{ overflow: 'visible' }}>
+        {/* Notification Banner */}
+        {notification.show && (
+          <div className={`fixed bottom-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 ${
+            notification.type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' : 
+            notification.type === 'error' ? 'bg-red-100 text-red-800 border border-red-200' : 
+            'bg-blue-100 text-blue-800 border border-blue-200'
+          }`}>
+            <div className="flex items-center">
+              <span className="text-sm font-medium">{notification.message}</span>
+              <button 
+                onClick={() => setNotification({ show: false, message: '', type: '' })} 
+                className="ml-4 text-gray-500 hover:text-gray-700"
               >
-                <X className="h-4 w-4 sm:h-5 sm:w-5"/>
+                <X className="h-4 w-4" />
               </button>
             </div>
+          </div>
+        )}
 
-            <div className="mb-4">
-              {showDeleteColumnPrompt.type === 'warning' ? (
-                <p className="text-xs sm:text-sm text-gray-600">
-                  {showDeleteColumnPrompt.message}
-                </p>
-              ) : (
-                <>
+        {/* Delete Employee Prompt */}
+        {showDeletePrompt && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Delete</h3>
+                <button onClick={cancelDelete} className="p-1 text-gray-400 hover:text-gray-600">
+                  <X className="h-4 w-4 sm:h-5 sm:w-5"/>
+                </button>
+              </div>
+              <div className="mb-4">
+                <p className="text-xs sm:text-sm text-gray-600">Delete employee <span className="font-medium">{showDeletePrompt.name}</span>?</p>
+                <p className="text-xs text-red-600 mt-1">This action cannot be undone.</p>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button onClick={cancelDelete} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+                <button onClick={confirmDeleteEmployee} className="px-3 py-1.5 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700">Delete</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Column Prompt */}
+        {showDeleteColumnPrompt && (
+          <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-[60]">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">
+                  {showDeleteColumnPrompt.title}
+                </h3>
+                <button
+                  onClick={() => setShowDeleteColumnPrompt(null)}
+                  className="p-1 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4 sm:h-5 sm:w-5"/>
+                </button>
+              </div>
+
+              <div className="mb-4">
+                {showDeleteColumnPrompt.type === 'warning' ? (
                   <p className="text-xs sm:text-sm text-gray-600">
-                    Are you sure you want to delete column
-                    <span className="font-medium">
-                      {" "}{showDeleteColumnPrompt.columnLabel}
-                    </span>?
+                    {showDeleteColumnPrompt.message}
                   </p>
-                  <p className="text-xs text-red-600 mt-1">
-                    This action cannot be undone.
-                  </p>
-                </>
-              )}
-            </div>
-
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => setShowDeleteColumnPrompt(null)}
-                className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
-              >
-                {showDeleteColumnPrompt.type === 'warning' ? 'OK' : 'Cancel'}
-              </button>
-
-              {showDeleteColumnPrompt.type === 'delete' && (
-                <button
-                  onClick={confirmDeleteColumn}
-                  className="px-3 py-1.5 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700"
-                >
-                  Delete
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Delete Prompt */}
-      {showBulkDeletePrompt.show && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Bulk Delete</h3>
-              <button onClick={() => setShowBulkDeletePrompt({ show: false, count: 0 })} className="p-1 text-gray-400 hover:text-gray-600">
-                <X className="h-4 w-4 sm:h-5 sm:w-5"/>
-              </button>
-            </div>
-            <div className="mb-4">
-              <p className="text-xs sm:text-sm text-gray-600">
-                Are you sure you want to delete {showBulkDeletePrompt.count} selected employee{showBulkDeletePrompt.count > 1 ? 's' : ''}?
-              </p>
-              <p className="text-xs text-red-600 mt-1">This action cannot be undone.</p>
-            </div>
-            <div className="flex justify-end space-x-2">
-              <button onClick={() => setShowBulkDeletePrompt({ show: false, count: 0 })} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
-              <button onClick={confirmBulkDelete} className="px-3 py-1.5 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700">Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Edit Prompt */}
-      {showBulkEditPrompt.show && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Bulk Edit</h3>
-              <button onClick={() => setShowBulkEditPrompt({ show: false, count: 0 })} className="p-1 text-gray-400 hover:text-gray-600">
-                <X className="h-4 w-4 sm:h-5 sm:w-5"/>
-              </button>
-            </div>
-            <div className="mb-4">
-              <p className="text-xs sm:text-sm text-gray-600">
-                Are you sure you want to edit {showBulkEditPrompt.count} selected employee{showBulkEditPrompt.count > 1 ? 's' : ''}?
-              </p>
-            </div>
-            <div className="flex justify-end space-x-2">
-              <button onClick={() => setShowBulkEditPrompt({ show: false, count: 0 })} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
-              <button onClick={confirmBulkEdit} className="px-3 py-1.5 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Edit</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Column Prompt */}
-      {showAddColumnPrompt.show && (
-        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base">Add New Column</h3>
-              <button onClick={() => setShowAddColumnPrompt({ show: false, columnName: '' })} className="p-1 text-gray-400 hover:text-gray-600">
-                <X className="h-4 w-4 sm:h-5 sm:w-5"/>
-              </button>
-            </div>
-            <div className="mb-4">
-              <p className="text-xs sm:text-sm text-gray-600">
-                Are you sure you want to add column "<span className="font-medium">{showAddColumnPrompt.columnName}</span>"?
-              </p>
-            </div>
-            <div className="flex justify-end space-x-2">
-              <button onClick={() => setShowAddColumnPrompt({ show: false, columnName: '' })} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
-              <button onClick={handleAddColumn} className="px-3 py-1.5 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800">Add Column</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Export Confirmation Prompt */}
-      {showExportConfirmPrompt?.show && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Export</h3>
-              <button onClick={() => setShowExportConfirmPrompt(null)} className="p-1 text-gray-400 hover:text-gray-600">
-                <X className="h-4 w-4 sm:h-5 sm:w-5"/>
-              </button>
-            </div>
-            <div className="mb-4">
-              <p className="text-xs sm:text-sm text-gray-600">
-                Export {showExportConfirmPrompt.count} employee{showExportConfirmPrompt.count > 1 ? 's' : ''} as {showExportConfirmPrompt.format.toUpperCase()}?
-              </p>
-            </div>
-            <div className="flex justify-end space-x-2">
-              <button onClick={() => setShowExportConfirmPrompt(null)} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
-              <button onClick={() => {
-                handleExport(showExportConfirmPrompt.format);
-                setShowExportConfirmPrompt(null);
-              }} className="px-3 py-1.5 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Export</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Column Management Modal */}
-      {showColumnModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <div></div>
-              <button onClick={() => setShowColumnModal(false)} className="p-1 text-gray-400 hover:text-gray-600">
-                <X className="h-4 w-4 sm:h-5 sm:w-5" />
-              </button>
-            </div>
-           
-            <div className="mb-4 p-3 rounded">
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base -mt-5 mb-2">
-                <span className="bg-gray-200 px-2 py-0.5 rounded">
-                  Add New Custom Column
-                </span>
-              </h3>
-
-              <div className="flex flex-col sm:flex-row gap-2 mt-2">
-                <input
-                  type="text"
-                  placeholder="Column name (e.g., Phone Number)"
-                  value={newColumnName}
-                  onChange={(e) => setNewColumnName(e.target.value)}
-                  className="flex-grow px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded"
-                />
-                <button
-                  onClick={handleAddColumnClick}
-                  className="px-3 py-2 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800 whitespace-nowrap"
-                >
-                  Add Column
-                </button>
-              </div>
-            </div>            
-            
-            <div className="mb-4">
-              <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Available Columns</h4>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {availableColumns.map((column) => {
-                  const isFixedColumn = ['id', 'employeeId', 'name', 'email', 'status', 'department', 'role'].includes(column.id);
-                  const isEditing = editingColumn === column.id;
-                 
-                  return (
-                    <div key={column.id} className="flex items-center justify-between p-2 border border-gray-200 rounded">
-                      <div className="flex items-center space-x-2">
-                        {isEditing ? (
-                          <div className="flex items-center space-x-2">
-                            <input
-                              type="text"
-                              value={tempColumnName}
-                              onChange={(e) => setTempColumnName(e.target.value)}
-                              className="px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded"
-                            />
-                            <button
-                              onClick={() => saveEditColumn(column.id)}
-                              className="p-1 text-green-600 hover:text-green-800"
-                              title="Save"
-                            >
-                              <Check className="h-3 w-3 sm:h-4 sm:w-4" />
-                            </button>
-                            <button
-                              onClick={cancelEditColumn}
-                              className="p-1 text-red-600 hover:text-red-800"
-                              title="Cancel"
-                            >
-                              <X className="h-3 w-3 sm:h-4 sm:w-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            <span className="">{column.label}</span>
-                            {column.required && (
-                              <span className="">
-                                {/* Required */}
-                              </span>
-                            )}
-                            {isFixedColumn && (
-                              <span className="">
-                                {/* Fixed */}
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </div>
-                     
-                      <div className="flex items-center space-x-2">
-                        {/* View/Hide button */}
-                        <button
-                          onClick={() => toggleColumnVisibility(column.id)}
-                          className={`p-1 ${column.visible ? 'text-blue-600 hover:text-blue-800' : 'text-gray-400 hover:text-gray-600'}`}
-                          title={column.visible ? "Hide column" : "Show column"}
-                        >
-                          {column.visible ? <Eye className="h-3 w-3 sm:h-4 sm:w-4" /> : <EyeOff className="h-3 w-3 sm:h-4 sm:w-4" />}
-                        </button>
-
-                        {/* Edit button for all columns */}
-                        {!isEditing && (
-                          <button
-                            onClick={() => startEditColumn(column.id, column.label)}
-                            className="p-1 text-blue-600 hover:text-blue-800"
-                            title="Edit"
-                          >
-                            <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
-                          </button>
-                        )}
-                       
-                        {/* Delete button */}
-                        <button
-                          onClick={() => handleDeleteColumn(column.id)}
-                          className="p-1 text-red-600 hover:text-red-800"
-                          title="Delete"
-                        >
-                          <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-           
-           
-          </div>
-        </div>
-      )}
-
-      {/* Add Employee Modal */}
-      {showAddEmployeeModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base">
-                <span className="bg-gray-200 px-2 py-0.5 rounded">
-                  Add New Employee
-                </span>
-              </h3>
-              <button
-                onClick={cancelNewEmployee}
-                className="p-1 text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-4 w-4 sm:h-5 sm:w-5" />
-              </button>
-            </div>
-
-           
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-              {availableColumns.map((col) => (
-                <div key={col.id} className="col-span-1">
-                  {renderInput(col, newEmployee[col.id], (f, v) => handleInputChange(f, v), validationErrors[col.id], true)}
-                </div>
-              ))}
-            </div>
-           
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={cancelNewEmployee}
-                className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveNewEmployee}
-                className="px-4 py-2 text-sm bg-black text-white rounded hover:bg-gray-800"
-              >
-                Save Employee
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MAIN BORDER CONTAINER */}
-      <div className="bg-white border border-gray-300 rounded mx-0">
-       
-        {/* TOOLBAR SECTION */}
-        <div className="p-4 border-b border-gray-300">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-           
-            {/* LEFT SIDE */}
-            <div className="flex flex-1 flex-col sm:flex-row gap-2 sm:gap-2 items-start sm:items-center">
-              {/* Search */}
-              <div className="relative w-full sm:w-auto">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full sm:w-48 h-10 pl-9 pr-3 text-xs sm:text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black"
-                />
-              </div>
-            </div>
-
-            {/* RIGHT SIDE */}
-            <div className="flex gap-2 mt-2 sm:mt-0">
-              {/* Column Filter (replaces Department Filter) */}
-              <div className="relative">
-                <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Filter..."
-                  value={columnFilter}
-                  onChange={(e) => setColumnFilter(e.target.value)}
-                  className="h-10 pl-9 pr-3 text-xs sm:text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black w-full sm:w-48"
-                />
-                {columnFilter && (
-                  <button
-                    onClick={() => setColumnFilter('')}
-                    className="p-1 absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="h-3 w-3 sm:h-4 sm:w-4" />
-                  </button>
-                )}
-              </div>
-
-              {/* Add Column Button */}
-              <button
-                onClick={() => setShowColumnModal(true)}
-                className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50 whitespace-nowrap"
-              >
-                <Plus className="h-4 w-4" />
-                {/* <span>Add Column</span> */}
-              </button>
-
-              {/* Export Button with Dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowExportDropdown(!showExportDropdown)}
-                  className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
-                >
-                  <Download className="h-4 w-4" />
-                  {/* <span>Export</span> */}
-                </button>
-               
-                {/* Export Dropdown */}
-                {showExportDropdown && (
+                ) : (
                   <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setShowExportDropdown(false)}
-                    />
-                    <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-300 rounded shadow-lg z-50">
-                      <button
-                        onClick={() => handleExportClick('excel')}
-                        className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
-                      >
-                        Export as Excel
-                      </button>
-                      <button
-                        onClick={() => handleExportClick('csv')}
-                        className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
-                      >
-                        Export as CSV
-                      </button>
-                      <button
-                        onClick={() => handleExportClick('json')}
-                        className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
-                      >
-                        Export as JSON
-                      </button>
-                      <button
-                        onClick={() => handleExportClick('pdf')}
-                        className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
-                      >
-                        Export as PDF
-                      </button>
-                    </div>
+                    <p className="text-xs sm:text-sm text-gray-600">
+                      Are you sure you want to delete column
+                      <span className="font-medium">
+                        {" "}{showDeleteColumnPrompt.columnLabel}
+                      </span>?
+                    </p>
+                    <p className="text-xs text-red-600 mt-1">
+                      This action cannot be undone.
+                    </p>
                   </>
                 )}
               </div>
+
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => setShowDeleteColumnPrompt(null)}
+                  className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  {showDeleteColumnPrompt.type === 'warning' ? 'OK' : 'Cancel'}
+                </button>
+
+                {showDeleteColumnPrompt.type === 'delete' && (
+                  <button
+                    onClick={confirmDeleteColumn}
+                    className="px-3 py-1.5 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700"
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* TABLE SECTION with fixed footer buttons */}
-        <div className="relative">
-          <div className="overflow-auto max-h-[calc(100vh-300px)]">
-            <table className="min-w-full text-xs sm:text-sm border-collapse">
-              <thead className="bg-gray-100 sticky top-0 z-10">
-                <tr className="border-b border-gray-300">
+        {/* Bulk Delete Prompt */}
+        {showBulkDeletePrompt.show && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Bulk Delete</h3>
+                <button onClick={() => setShowBulkDeletePrompt({ show: false, count: 0 })} className="p-1 text-gray-400 hover:text-gray-600">
+                  <X className="h-4 w-4 sm:h-5 sm:w-5"/>
+                </button>
+              </div>
+              <div className="mb-4">
+                <p className="text-xs sm:text-sm text-gray-600">
+                  Are you sure you want to delete {showBulkDeletePrompt.count} selected employee{showBulkDeletePrompt.count > 1 ? 's' : ''}?
+                </p>
+                <p className="text-xs text-red-600 mt-1">This action cannot be undone.</p>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button onClick={() => setShowBulkDeletePrompt({ show: false, count: 0 })} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+                <button onClick={confirmBulkDelete} className="px-3 py-1.5 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700">Delete</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bulk Edit Prompt */}
+        {showBulkEditPrompt.show && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Bulk Edit</h3>
+                <button onClick={() => setShowBulkEditPrompt({ show: false, count: 0 })} className="p-1 text-gray-400 hover:text-gray-600">
+                  <X className="h-4 w-4 sm:h-5 sm:w-5"/>
+                </button>
+              </div>
+              <div className="mb-4">
+                <p className="text-xs sm:text-sm text-gray-600">
+                  Are you sure you want to edit {showBulkEditPrompt.count} selected employee{showBulkEditPrompt.count > 1 ? 's' : ''}?
+                </p>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button onClick={() => setShowBulkEditPrompt({ show: false, count: 0 })} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+                <button onClick={confirmBulkEdit} className="px-3 py-1.5 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Edit</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Column Prompt */}
+        {showColumnAddPrompt.show && (
+          <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-[60]">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">Add New Column</h3>
+                <button onClick={() => setShowColumnAddPrompt({ show: false, columnName: '' })} className="p-1 text-gray-400 hover:text-gray-600">
+                  <X className="h-4 w-4 sm:h-5 sm:w-5"/>
+                </button>
+              </div>
+              <div className="mb-4">
+                <p className="text-xs sm:text-sm text-gray-600">
+                  Are you sure you want to add column "<span className="font-medium">{showColumnAddPrompt.columnName}</span>"?
+                </p>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button onClick={() => setShowColumnAddPrompt({ show: false, columnName: '' })} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+                <button onClick={confirmAddColumn} className="px-3 py-1.5 text-xs sm:text-sm bg-gradient-to-r from-rose-400 to-amber-400 text-white rounded hover:opacity-90">Add Column</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Export Confirmation Prompt */}
+        {showExportConfirmPrompt?.show && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Export</h3>
+                <button onClick={() => setShowExportConfirmPrompt(null)} className="p-1 text-gray-400 hover:text-gray-600">
+                  <X className="h-4 w-4 sm:h-5 sm:w-5"/>
+                </button>
+              </div>
+              <div className="mb-4">
+                <p className="text-xs sm:text-sm text-gray-600">
+                  Export {showExportConfirmPrompt.count} employee{showExportConfirmPrompt.count > 1 ? 's' : ''} as {showExportConfirmPrompt.format.toUpperCase()}?
+                </p>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button onClick={() => setShowExportConfirmPrompt(null)} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+                <button onClick={() => {
+                  handleExport(showExportConfirmPrompt.format);
+                  setShowExportConfirmPrompt(null);
+                }} className="px-3 py-1.5 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Export</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Freeze Column Modal */}
+        {showFreezeColumnModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full mx-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">
+                  <span className="bg-gray-200 px-2 py-0.5 rounded">
+                    Freeze Columns
+                  </span>
+                </h3>
+                <button
+                  onClick={() => setShowFreezeColumnModal(false)}
+                  className="p-1 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4 sm:h-5 sm:w-5" />
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <p className="text-xs text-gray-600 mb-3">Select columns to freeze (they will remain visible while scrolling horizontally)</p>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {/* Checkbox column is always first */}
+                  <div className="flex items-center p-2 border border-gray-200 rounded bg-gray-50">
+                    <input
+                      type="checkbox"
+                      id="freeze-checkbox"
+                      checked={frozenColumns.includes(0)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setFrozenColumns([0, ...frozenColumns.filter(idx => idx !== 0)].sort((a, b) => a - b));
+                        } else {
+                          setFrozenColumns(frozenColumns.filter(idx => idx !== 0));
+                        }
+                      }}
+                      className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
+                    />
+                    <label htmlFor="freeze-checkbox" className="text-sm text-gray-700 cursor-pointer flex-1 font-medium">
+                      Checkbox Column
+                    </label>
+                    {frozenColumns.includes(0) && (
+                      <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">Frozen</span>
+                    )}
+                  </div>
+                  
+                  {visibleColumns.map((column, index) => {
+                    const actualColumnIndex = columns.findIndex(col => col.id === column.id);
+                    return (
+                      <div key={column.id} className="flex items-center p-2 border border-gray-200 rounded">
+                        <input
+                          type="checkbox"
+                          id={`freeze-${column.id}`}
+                          checked={frozenColumns.includes(actualColumnIndex)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFrozenColumns([...frozenColumns, actualColumnIndex].sort((a, b) => a - b));
+                            } else {
+                              setFrozenColumns(frozenColumns.filter(idx => idx !== actualColumnIndex));
+                            }
+                          }}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
+                        />
+                        <label htmlFor={`freeze-${column.id}`} className="text-sm text-gray-700 cursor-pointer flex-1">
+                          {column.label}
+                        </label>
+                        {frozenColumns.includes(actualColumnIndex) && (
+                          <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">Frozen</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => setShowFreezeColumnModal(false)}
+                  className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    handleFreezeColumns(frozenColumns);
+                  }}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Apply Freeze
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Freeze Row Modal */}
+        {showFreezeRowModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full mx-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">
+                  <span className="bg-gray-200 px-2 py-0.5 rounded">
+                    Freeze Rows
+                  </span>
+                </h3>
+                <button
+                  onClick={() => setShowFreezeRowModal(false)}
+                  className="p-1 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4 sm:h-5 sm:w-5" />
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <p className="text-xs text-gray-600 mb-3">Select rows to freeze (they will remain visible while scrolling vertically)</p>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {paginatedEmployees.map((emp, index) => {
+                    const actualRowIndex = (currentPage - 1) * pageSize + index;
+                    return (
+                      <div key={emp.id} className="flex items-center p-2 border border-gray-200 rounded">
+                        <input
+                          type="checkbox"
+                          id={`freeze-row-${emp.id}`}
+                          checked={frozenRows.includes(actualRowIndex)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFrozenRows([...frozenRows, actualRowIndex].sort((a, b) => a - b));
+                            } else {
+                              setFrozenRows(frozenRows.filter(idx => idx !== actualRowIndex));
+                            }
+                          }}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
+                        />
+                        <label htmlFor={`freeze-row-${emp.id}`} className="text-sm text-gray-700 cursor-pointer flex-1">
+                          Row {actualRowIndex + 1}: {emp.name} ({emp.id})
+                        </label>
+                        {frozenRows.includes(actualRowIndex) && (
+                          <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">Frozen</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => setShowFreezeRowModal(false)}
+                  className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    handleFreezeRows(frozenRows);
+                  }}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Apply Freeze
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Column Management Modal */}
+        {showColumnModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full mx-4">
+              <div className="flex items-center justify-between mb-4">
+                <div></div>
+                <button onClick={() => setShowColumnModal(false)} className="p-1 text-gray-400 hover:text-gray-600">
+                  <X className="h-4 w-4 sm:h-5 sm:w-5" />
+                </button>
+              </div>
+             
+              <div className="mb-4 p-3 rounded">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base -mt-5 mb-2">
+                  <span className="bg-gray-200 px-2 py-0.5 rounded">
+                    Add New Custom Column
+                  </span>
+                </h3>
+
+                <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                  <input
+                    type="text"
+                    placeholder="Column name (e.g., Phone Number)"
+                    value={newColumnName}
+                    onChange={(e) => setNewColumnName(e.target.value)}
+                    className="flex-grow px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded"
+                  />
+                  <button
+                    onClick={handleAddColumn}
+                    className="px-3 py-2 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700 whitespace-nowrap"
+                    >
+                    Add Column
+                  </button>
+                </div>
+              </div>            
+              
+              <div className="mb-4">
+                <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Available Columns</h4>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {columns.map((column) => {
+                    const isFixedColumn = ['id', 'name', 'email', 'department', 'role', 'status'].includes(column.id);
+                    const isEditing = editingColumn === column.id;
+                   
+                    return (
+                      <div key={column.id} className="flex items-center justify-between p-2 border border-gray-200 rounded">
+                        <div className="flex items-center space-x-2">
+                          {isEditing ? (
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="text"
+                                value={tempColumnName}
+                                onChange={(e) => setTempColumnName(e.target.value)}
+                                className="px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded"
+                              />
+                              <button
+                                onClick={() => saveEditColumn(column.id)}
+                                className="p-1 text-green-600 hover:text-green-800"
+                                title="Save"
+                              >
+                                <Check className="h-3 w-3 sm:h-4 sm:w-4" />
+                              </button>
+                              <button
+                                onClick={cancelEditColumn}
+                                className="p-1 text-red-600 hover:text-red-800"
+                                title="Cancel"
+                              >
+                                <X className="h-3 w-3 sm:h-4 sm:w-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="">{column.label}</span>
+                            </>
+                          )}
+                        </div>
+                       
+                        <div className="flex items-center space-x-2">
+                          {/* View/Hide button */}
+                          <button
+                            onClick={() => toggleColumnVisibility(column.id)}
+                            className={`p-1 ${column.visible ? 'text-blue-600 hover:text-blue-800' : 'text-gray-400 hover:text-gray-600'}`}
+                            title={column.visible ? "Hide column" : "Show column"}
+                          >
+                            {column.visible ? <Eye className="h-3 w-3 sm:h-4 sm:w-4" /> : <EyeOff className="h-3 w-3 sm:h-4 sm:w-4" />}
+                          </button>
+
+                          {/* Edit button for all columns */}
+                          {!isEditing && (
+                            <button
+                              onClick={() => startEditColumn(column.id, column.label)}
+                              className="p-1 text-blue-600 hover:text-blue-800"
+                              title="Edit column"
+                            >
+                              <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
+                            </button>
+                          )}
+                         
+                          {/* Delete button */}
+                          <button
+                            onClick={() => handleDeleteColumn(column.id)}
+                            className="p-1 text-red-600 hover:text-red-800"
+                            title="Delete column"
+                          >
+                            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Employee Modal */}
+        {showAddEmployeeModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">
+                  <span className="bg-gray-200 px-2 py-0.5 rounded">
+                    Add New Employee
+                  </span>
+                </h3>
+                <button
+                  onClick={cancelNewEmployee}
+                  className="p-1 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4 sm:h-5 sm:w-5" />
+                </button>
+              </div>
+
+              {/* Basic Information Section */}
+              <div className="mb-6">
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Basic Information</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">ID <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={newEmployee.id || ''}
+                      onChange={(e) => handleNewEmployeeChange('id', e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black"
+                      placeholder="Enter employee ID"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Name <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={newEmployee.name || ''}
+                      onChange={(e) => handleNewEmployeeChange('name', e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black"
+                      placeholder="Enter employee name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Email <span className="text-red-500">*</span></label>
+                    <input
+                      type="email"
+                      value={newEmployee.email || ''}
+                      onChange={(e) => handleNewEmployeeChange('email', e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black"
+                      placeholder="Enter employee email"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Department <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={newEmployee.department || ''}
+                      onChange={(e) => handleNewEmployeeChange('department', e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black"
+                      placeholder="Enter department"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Role <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={newEmployee.role || ''}
+                      onChange={(e) => handleNewEmployeeChange('role', e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black"
+                      placeholder="Enter role"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Status <span className="text-red-500">*</span></label>
+                    <select
+                      value={newEmployee.status || 'Active'}
+                      onChange={(e) => handleNewEmployeeChange('status', e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black"
+                    >
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+             
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={cancelNewEmployee}
+                  className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveNewEmployee}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Save Employee
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Employee Modal */}
+        {editingId && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">
+                  <span className="bg-gray-200 px-2 py-0.5 rounded">
+                    Edit Employee
+                  </span>
+                </h3>
+                <button
+                  onClick={cancelEdit}
+                  className="p-1 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4 sm:h-5 sm:w-5" />
+                </button>
+              </div>
+
+              {/* Basic Information Section */}
+              <div className="mb-6">
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Basic Information</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">ID</label>
+                    <input
+                      type="text"
+                      value={editForm.id || ''}
+                      disabled
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded bg-gray-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Name <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={editForm.name || ''}
+                      onChange={(e) => handleEditFormChange('name', e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Email <span className="text-red-500">*</span></label>
+                    <input
+                      type="email"
+                      value={editForm.email || ''}
+                      onChange={(e) => handleEditFormChange('email', e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Department <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={editForm.department || ''}
+                      onChange={(e) => handleEditFormChange('department', e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Role <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={editForm.role || ''}
+                      onChange={(e) => handleEditFormChange('role', e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Status <span className="text-red-500">*</span></label>
+                    <select
+                      value={editForm.status || 'Active'}
+                      onChange={(e) => handleEditFormChange('status', e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black"
+                    >
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+             
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={cancelEdit}
+                  className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveEdit}
+                  className="px-4 py-2 text-sm bg-black text-white rounded hover:bg-gray-800"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MAIN CONTENT CONTAINER */}
+        <div className="bg-white border border-gray-200 rounded shadow-sm flex flex-col h-full overflow-visible">
+         
+          {/* Loading / Error State */}
+          {loading && (
+              <div className="p-8 text-center text-gray-500">
+                  Loading data...
+              </div>
+          )}
+          
+          {error && (
+              <div className="p-8 text-center text-red-500">
+                  {error}
+              </div>
+          )}
+
+          {!loading && !error && (
+              <>
+          {/* TOOLBAR SECTION - FIXED */}
+          <div className="p-4 border-b border-gray-200 flex-shrink-0">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+             
+              {/* LEFT SIDE */}
+              <div className="flex flex-1 flex-col sm:flex-row gap-2 sm:gap-2 items-start sm:items-center">
+                {/* Search */}
+                <div className="relative w-full sm:w-auto">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="w-full sm:w-48 h-10 pl-9 pr-3 text-xs sm:text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black"
+                  />
+                </div>
+              </div>
+
+              {/* RIGHT SIDE - Reordered: Filter, +, Freeze, Export, Refresh */}
+              <div className="flex gap-2 mt-2 sm:mt-0">
+                {/* Single Column Filter */}
+                <div className="relative">
+                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Filter..."
+                    value={columnFilter}
+                    onChange={(e) => setColumnFilter(e.target.value)}
+                    className="h-10 pl-9 pr-3 text-xs sm:text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black w-full sm:w-48"
+                  />
+                  {columnFilter && (
+                    <button
+                      onClick={() => setColumnFilter('')}
+                      className="p-1 absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="h-3 w-3 sm:h-4 sm:w-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Add Column Button */}
+                <button
+                  onClick={() => setShowColumnModal(true)}
+                  className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50 whitespace-nowrap tooltip"
+                  data-tooltip="Add column"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+
+                {/* Freeze Column Button */}
+                <button
+                  onClick={toggleFreezeColumn}
+                  className={`flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border rounded whitespace-nowrap tooltip ${
+                    frozenColumns.length > 0 
+                      ? 'bg-blue-50 text-blue-700 border-blue-300' 
+                      : 'border-gray-300 hover:bg-gray-50 text-gray-700'
+                  }`}
+                  data-tooltip={frozenColumns.length > 0 ? "Unfreeze columns" : "Freeze columns"}
+                >
+                  <Snowflake className={`h-4 w-4 ${frozenColumns.length > 0 ? 'text-blue-600' : 'text-gray-600'}`} />
+                  {frozenColumns.length > 0 && <span className="ml-1 text-xs">{frozenColumns.length}</span>}
+                </button>
+
+                {/* Export Button with Dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowExportDropdown(!showExportDropdown)}
+                    className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50 tooltip"
+                    data-tooltip="Export data"
+                  >
+                    <Download className="h-4 w-4" />
+                  </button>
+                 
+                  {/* Export Dropdown */}
+                  {showExportDropdown && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setShowExportDropdown(false)}
+                      />
+                      <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-300 rounded shadow-lg z-50">
+                        <button
+                          onClick={() => handleExportClick('excel')}
+                          className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          Export as Excel
+                        </button>
+                        <button
+                          onClick={() => handleExportClick('csv')}
+                          className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          Export as CSV
+                        </button>
+                        <button
+                          onClick={() => handleExportClick('json')}
+                          className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          Export as JSON
+                        </button>
+                        <button
+                          onClick={() => handleExportClick('pdf')}
+                          className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          Export as PDF
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Refresh Button */}
+                <button
+                  onClick={handleRefresh}
+                  className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50 whitespace-nowrap tooltip"
+                  data-tooltip="Refresh data"
+                  disabled={loading}
+                >
+                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* TABLE SECTION - SCROLLABLE */}
+          <div className="table-container">
+            <table className="min-w-full text-base border-collapse">
+              <thead>
+                <tr className="border-b border-gray-200">
                   {/* Checkbox column */}
-                  <th className="text-left py-2 px-3 font-medium text-gray-700 cursor-pointer hover:bg-gray-200 whitespace-nowrap border-r border-gray-300 w-10">
+                  <th 
+                    className={`text-left py-3 px-8 font-medium cursor-pointer hover:opacity-80 whitespace-nowrap w-8 ${
+                      isColumnFrozen(0) ? 'frozen-column' : ''
+                    }`}
+                    style={{
+                      left: isColumnFrozen(0) ? '0' : 'auto',
+                      zIndex: isColumnFrozen(0) ? 35 : 30
+                    }}
+                  >
                     <div className="flex items-center justify-center">
                       <button
                         onClick={toggleSelectAll}
-                        className="p-1 text-gray-600 hover:text-gray-800"
+                        className="p-1 text-gray-700 hover:text-gray-900"
                       >
                         {selectAll ? (
                           <CheckSquare className="h-4 w-4" />
@@ -1238,96 +1617,127 @@ const EmployeeMaster = () => {
                       </button>
                     </div>
                   </th>
-                  {visibleColumns.map(col => (
-                    <th
-                      key={col.id}
-                      className="text-left py-2 px-3 font-medium text-gray-700 cursor-pointer hover:bg-gray-200 whitespace-nowrap border-r border-gray-300 last:border-r-0"
-                      onClick={() => col.sortable && handleSort(col.id)}
-                    >
-                      <div className="flex items-center space-x-1">
-                        <span>{col.label}</span>
-                        {col.required && <span className="text-red-500">*</span>}
-                        {col.sortable && getSortIcon(col.id)}
-                      </div>
-                    </th>
-                  ))}
+                  {visibleColumns.map((col, index) => {
+                    const actualColumnIndex = columns.findIndex(c => c.id === col.id);
+                    return (
+                      <th
+                        key={col.id}
+                        className={`text-left py-3 px-8 font-medium cursor-pointer hover:opacity-80 whitespace-nowrap ${
+                          isColumnFrozen(actualColumnIndex) ? 'frozen-column' : ''
+                        }`}
+                        onClick={() => col.sortable && handleSort(col.id)}
+                        style={{
+                          left: isColumnFrozen(actualColumnIndex) ? getFrozenColumnLeft(actualColumnIndex) : 'auto',
+                          zIndex: isColumnFrozen(actualColumnIndex) ? 35 : 30
+                        }}
+                      >
+                        <div className="flex items-center space-x-1">
+                          <span className="text-base">{col.label}</span>
+                          {col.required && <span className="text-red-300">*</span>}
+                          {col.sortable && getSortIcon(col.id)}
+                        </div>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
 
               <tbody>
-                {sortedEmployees.map(emp => (
-                  <tr
-                    key={emp.id}
-                    className="border-b border-gray-300 hover:bg-gray-50 transition-colors"
-                  >
-                    {/* Checkbox cell */}
-                    <td className="py-2 px-3 whitespace-nowrap border-r border-gray-300 w-10">
-                      <div className="flex items-center justify-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedEmployees.includes(emp.id)}
-                          onChange={() => toggleEmployeeSelection(emp.id)}
-                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                      </div>
+                {paginatedEmployees.map((emp, rowIndex) => {
+                  const actualRowIndex = (currentPage - 1) * pageSize + rowIndex;
+                  const isRowCurrentlyFrozen = isRowFrozen(actualRowIndex);
+                  
+                  return (
+                    <tr
+                      key={emp.id}
+                      className={`border-b border-gray-200 hover:bg-gray-50 transition-colors ${
+                        isRowCurrentlyFrozen ? 'frozen-row' : ''
+                      }`}
+                      style={{
+                        top: isRowCurrentlyFrozen ? getFrozenRowTop(actualRowIndex) : 'auto'
+                      }}
+                    >
+                      {/* Checkbox cell */}
+                      <td 
+                        className={`py-3 px-8 whitespace-nowrap w-4 ${
+                          isColumnFrozen(0) ? 'frozen-column' : ''
+                        }`}
+                        style={{
+                          left: isColumnFrozen(0) ? '0' : 'auto',
+                          zIndex: isColumnFrozen(0) ? (isRowCurrentlyFrozen ? 25 : 15) : 'auto'
+                        }}
+                      >
+                        <div className="flex items-center justify-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedEmployees.includes(emp.id)}
+                            onChange={() => toggleEmployeeSelection(emp.id)}
+                            className="h-4 w-4 text-gray-600 border-gray-300 rounded focus:ring-gray-500"
+                          />
+                        </div>
+                      </td>
+                      {visibleColumns.map((col) => {
+                        const actualColumnIndex = columns.findIndex(c => c.id === col.id);
+                        return (
+                          <td 
+                            key={col.id} 
+                            className={`py-3 px-8 whitespace-nowrap min-w-[160px] text-base ${
+                              isColumnFrozen(actualColumnIndex) ? 'frozen-column' : ''
+                            }`}
+                            style={{
+                              left: isColumnFrozen(actualColumnIndex) ? getFrozenColumnLeft(actualColumnIndex) : 'auto',
+                              zIndex: isColumnFrozen(actualColumnIndex) ? (isRowCurrentlyFrozen ? 25 : 15) : 'auto'
+                            }}
+                          >
+                            {renderCellContent(col, emp[col.id])}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+                
+                {/* Empty state */}
+                {paginatedEmployees.length === 0 && (
+                  <tr>
+                    <td colSpan={visibleColumns.length + 1} className="text-center py-8 text-gray-500">
+                      No employees found
                     </td>
-                    {editingId === emp.id ?
-                      visibleColumns.map(col => (
-                        <td key={col.id} className="py-2 px-3 whitespace-nowrap border-r border-gray-300 last:border-r-0">
-                          {renderInput(col, editForm[col.id], (f, v) => handleInputChange(f, v, true), validationErrors[col.id])}
-                        </td>
-                      )) :
-                      visibleColumns.map(col => (
-                        <td key={col.id} className="py-2 px-3 whitespace-nowrap border-r border-gray-300 last:border-r-0">
-                          {renderCellContent(col, emp[col.id])}
-                        </td>
-                      ))
-                    }
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
 
-          {/* Removed the fixed Add Column Button from here since it's now in the toolbar */}
-        </div>
-
-        {/* FOOTER SECTION with Add Employee and Action buttons on LEFT */}
-        <div className="px-4 py-3 border-t border-gray-300 text-xs text-gray-900 flex flex-col sm:flex-row items-center justify-between gap-2 bg-white relative">
-          {/* LEFT SIDE - Add Employee and Action Buttons */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleAddEmployeeClick}
-              className="flex items-center gap-1 h-10 px-3 text-xs border border-gray-300 rounded hover:bg-gray-50"
-            >
-              <Plus className="h-4 w-4" />
-              {/* <span>Add Employee</span> */}
-            </button>
-            
-            {/* Edit, Save and Cancel buttons - only show when employees are selected or editing */}
-            {selectedEmployees.length > 0 || editingId ? (
-              <div className="flex items-center gap-1 ml-1">
-                {editingId ? (
-                  <>
-                    {/* Save and Cancel buttons - same design as Edit button */}
-                    <button
-                      onClick={saveEdit}
-                      className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
-                      title="Save changes"
-                    >
-                      <Check className="h-4 w-4" />
-                      
-                    </button>
-                    <button
-                      onClick={cancelEdit}
-                      className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
-                      title="Cancel editing"
-                    >
-                      <X className="h-4 w-4" />
-                
-                    </button>
-                  </>
-                ) : (
+          {/* FOOTER SECTION - FIXED */}
+          <div className="px-4 py-3 border-t border-gray-200 text-xs text-gray-900 flex flex-col sm:flex-row items-center justify-between gap-2 bg-white flex-shrink-0">
+            {/* LEFT SIDE - Add Employee and Action Buttons */}
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1">
+                <button
+                  onClick={handleAddEmployeeClick}
+                  className="flex items-center gap-1 h-10 px-3 text-xs border border-gray-300 rounded hover:bg-gray-50 tooltip"
+                  data-tooltip="Add employee"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={toggleFreezeRow}
+                  className={`flex items-center gap-1 h-10 px-3 text-xs border rounded tooltip ${
+                    frozenRows.length > 0 
+                      ? 'bg-blue-50 text-blue-700 border-blue-300' 
+                      : 'border-gray-300 hover:bg-gray-50 text-gray-700'
+                  }`}
+                  data-tooltip={frozenRows.length > 0 ? "Unfreeze rows" : "Select rows to freeze"}
+                >
+                  <Snowflake className={`h-4 w-4 ${frozenRows.length > 0 ? 'text-blue-600' : 'text-gray-600'}`} />
+                  {frozenRows.length > 0 && <span className="ml-1 text-xs">{frozenRows.length}</span>}
+                </button>
+              </div>
+              
+              {/* Edit and Delete buttons - only show when employees are selected */}
+              {selectedEmployees.length > 0 ? (
+                <div className="flex items-center gap-1 ml-1">
                   <button
                     onClick={handleBulkEdit}
                     className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
@@ -1336,9 +1746,7 @@ const EmployeeMaster = () => {
                     <Edit className="h-4 w-4" />
                     {selectedEmployees.length > 1 && <span>Edit ({selectedEmployees.length})</span>}
                   </button>
-                )}
-                
-                {!editingId && (
+                  
                   <button
                     onClick={handleBulkDelete}
                     className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-red-50 hover:text-red-700 hover:border-red-300"
@@ -1347,28 +1755,95 @@ const EmployeeMaster = () => {
                     <Trash2 className="h-4 w-4" />
                     {selectedEmployees.length > 1 && <span>Delete ({selectedEmployees.length})</span>}
                   </button>
-                )}
+                </div>
+              ) : null}
+            </div>
+            
+            {/* RIGHT SIDE - Info, Pagination, and Column Count */}
+            <div className="flex items-center gap-4">
+              {/* Page Size Selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-gray-600">Show:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                  className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-500"
+                >
+                  {pageSizeOptions.map(size => (
+                    <option key={size} value={size}>{size}</option>
+                  ))}
+                </select>
               </div>
-            ) : null}
-          </div>
-          
-          {/* RIGHT SIDE - Info and Column Count */}
-          <div className="flex items-center gap-4">
-            <span>
-              Showing {sortedEmployees.length} of {employees.length} employees
-              {(columnFilter || statusFilter !== "All Status") &&
-                ` (Filtered${columnFilter ? ` by: ${columnFilter}` : ''}${statusFilter !== "All Status" ? ` by Status: ${statusFilter}` : ''})`
-              }
-            </span>
-            {selectedEmployees.length > 0 && (
-              <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
-                {selectedEmployees.length} selected
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className={`p-1 rounded ${
+                      currentPage === 1 
+                        ? 'text-gray-400 cursor-not-allowed' 
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  
+                  {getPageNumbers().map(pageNum => (
+                    <button
+                      key={pageNum}
+                      onClick={() => handlePageChange(pageNum)}
+                      className={`px-2 py-1 text-xs rounded ${
+                        currentPage === pageNum
+                          ? 'bg-gradient-to-r from-rose-400 to-amber-400 text-white'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  ))}
+                  
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className={`p-1 rounded ${
+                      currentPage === totalPages 
+                        ? 'text-gray-400 cursor-not-allowed' 
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+
+              <span className="text-gray-600">
+                Showing {paginatedEmployees.length} of {sortedEmployees.length} employees
+                {columnFilter &&
+                  ` (Filtered)`
+                }
               </span>
-            )}
-            <span className="text-blue-600">
-              ({visibleColumns.length} of {availableColumns.length} columns visible)
-            </span>
+              
+              {selectedEmployees.length > 0 && (
+                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
+                  {selectedEmployees.length} selected
+                </span>
+              )}
+              <span className="text-gray-600">
+                ({visibleColumns.length} of {columns.length} columns visible)
+              </span>
+              {(frozenRows.length > 0 || frozenColumns.length > 0) && (
+                <span className="px-2 py-1 freeze-indicator rounded text-xs flex items-center gap-1">
+                  <Snowflake className="h-3 w-3" />
+                  {frozenRows.length > 0 && frozenColumns.length > 0 ? `${frozenRows.length} row(s) & ${frozenColumns.length} col(s) frozen` : 
+                   frozenRows.length > 0 ? `${frozenRows.length} row(s) frozen` : `${frozenColumns.length} col(s) frozen`}
+                </span>
+              )}
+            </div>
           </div>
+          </>
+          )}
         </div>
       </div>
     </div>

@@ -1,6 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 from app.schemas.department import DepartmentCreate, DepartmentResponse, DepartmentUpdate
 from app.schemas.department_column import DepartmentColumnCreate, DepartmentColumnOut, DepartmentColumnUpdate
@@ -107,7 +111,15 @@ def update_department(department_id: int, dept: DepartmentUpdate, db: Session = 
 
 @router.delete("/{department_id}", response_model=DepartmentResponse)
 def delete_department(department_id: int, db: Session = Depends(get_db)):
-    db_dept = crud_department.delete_department(db, department_id)
-    if not db_dept:
-        raise HTTPException(status_code=404, detail="Department not found")
-    return db_dept
+    """Delete a department"""
+    logger.info(f"Deleting department with ID: {department_id}")
+    try:
+        db_dept = crud_department.delete_department(db, department_id)
+        if not db_dept:
+            logger.warning(f"Department with ID {department_id} not found")
+            raise HTTPException(status_code=404, detail="Department not found")
+        logger.info(f"Successfully deleted department with ID: {department_id}")
+        return db_dept
+    except Exception as e:
+        logger.error(f"Error deleting department {department_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

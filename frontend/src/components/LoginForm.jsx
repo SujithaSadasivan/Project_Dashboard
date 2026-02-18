@@ -1,9 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { FcGoogle } from 'react-icons/fc';
-import { FaGithub } from 'react-icons/fa';
 
-//fixed : login UI
 const LoginForm = () => {
   const { login } = useAuth();
   const [formData, setFormData] = useState({ 
@@ -15,42 +12,43 @@ const LoginForm = () => {
   const [loading, setLoading] = useState(false);
   const [longLoading, setLongLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  setError('');
-  setLoading(true);
-  setLongLoading(false);
 
-  // Timer to show message if it takes too long
-  const timer = setTimeout(() => {
-    setLongLoading(true);
-  }, 3000);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    setLongLoading(false);
 
-  // Use the actual values from formData, not the placeholder
-  const email = formData.email;
-  const password = formData.password === '**********' ? '' : formData.password;
+    // Timer to show message if it takes too long
+    const timer = setTimeout(() => {
+      setLongLoading(true);
+    }, 3000);
 
-  console.log('Logging in with:', email);
-  
-  const result = await login(email, password);
-  
-  clearTimeout(timer);
-  setLongLoading(false);
-  
-  console.log('Login result:', result);
-  
-  if (result.success) {
-    console.log('Redirecting to dashboard...');
-    // Force redirect after a small delay to ensure state updates
-    setTimeout(() => {
-      window.location.href = '/dashboard';
-    }, 100);
-  } else {
-    setError(result.error || 'Login failed. Please check your credentials.');
-  }
-  
-  setLoading(false);
-};
+    // Use the actual values from formData, not the placeholder
+    const email = formData.email;
+    const password = formData.password === '**********' ? '' : formData.password;
+
+    console.log('Logging in with:', email);
+    
+    const result = await login(email, password);
+    
+    clearTimeout(timer);
+    setLongLoading(false);
+    
+    console.log('Login result:', result);
+    
+    if (result.success) {
+      console.log('Redirecting to dashboard...');
+      // Force redirect after a small delay to ensure state updates
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 100);
+    } else {
+      setError(result.error || 'Login failed. Please check your credentials.');
+    }
+    
+    setLoading(false);
+  };
 
   const handleChange = (e) => {
     setFormData({
@@ -61,13 +59,11 @@ const handleSubmit = async (e) => {
 
   return (
     <div className="w-full">
-      {/* Header - Ghostlamp Style */}
+      {/* Header */}
       <div className="text-left mb-2">
-        <h1 className="text-3xl font-bold text-red-600 mb-1 tracking-tight">HAI</h1>
+        <h1 className="text-3xl font-bold text-red-600 mb-1 tracking-tight">CALDIM</h1>
         <h2 className="text-xl font-semibold text-gray-800 mb-2">Welcome Back :)</h2>
-        <p className="text-gray-600 text-sm leading-relaxed">
-   
-        </p>
+       
       </div>
 
       {/* Divider Line */}
@@ -89,7 +85,7 @@ const handleSubmit = async (e) => {
             onChange={handleChange}
             required
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all duration-200 text-gray-800"
-            placeholder="Justin@ghostlamp.io"
+            placeholder="sujitha@caldim.in"
           />
         </div>
 
@@ -144,14 +140,14 @@ const handleSubmit = async (e) => {
           </div>
         )}
 
-        {/* Long Loading Message */}
+        {/* Long Loading Message
         {longLoading && (
           <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-lg mt-2">
-             <p className="text-xs text-yellow-800 text-center">
-               Connecting to server... This might take up to a minute if the server is waking up.
-             </p>
+            <p className="text-xs text-yellow-800 text-center">
+              Connecting to server... This might take up to a minute if the server is waking up.
+            </p>
           </div>
-        )}
+        )} */}
 
         {/* Login Button */}
         <button
@@ -171,37 +167,20 @@ const handleSubmit = async (e) => {
             'Login Now'
           )}
         </button>
-
-        {/* Create Account Link */}
-        <div className="text-center">
-          <button
-            type="button"
-            className="text-red-600 hover:text-red-800 font-medium text-sm"
-          >
-            Create Account
-          </button>
-        </div>
       </form>
 
-      {/* Social Login Section */}
-      <div className="mt-6 pt-4 border-t border-gray-300">
-        <div className="text-center mb-4">
-          <span className="text-gray-600 text-sm font-medium">Or you can join with</span>
-        </div>
-
-        <div className="flex justify-center space-x-4">
-          <button
-            type="button"
-            className="flex items-center justify-center w-10 h-10 border-2 border-gray-300 rounded-full hover:border-red-300 hover:bg-red-50 transition-all duration-200"
-          >
-            <FcGoogle className="text-xl" />
-          </button>
-          <button
-            type="button"
-            className="flex items-center justify-center w-10 h-10 border-2 border-gray-300 rounded-full hover:border-red-300 hover:bg-red-50 transition-all duration-200"
-          >
-            <FaGithub className="text-xl text-gray-800" />
-          </button>
+      {/* Footer with Company Information */}
+      <div className="mt-8 pt-6 border-t border-gray-200">
+        <div className="text-center">
+          <p className="text-gray-600 text-xs mb-1">
+            © {new Date().getFullYear()} Caldim Engineering pvt Limited
+          </p>
+          <p className="text-gray-500 text-xs">
+            All rights reserved
+          </p>
+          <p className="text-gray-400 text-xs mt-2">
+            Secure login system v2.0
+          </p>
         </div>
       </div>
     </div>

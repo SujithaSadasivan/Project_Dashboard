@@ -1,5 +1,5 @@
 # models/dataset.py
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, UniqueConstraint
 from datetime import datetime
 from app.core.database import Base
 
@@ -12,3 +12,12 @@ class Dataset(Base):
     file_type = Column(String)
     row_count = Column(Integer)
     created_at = Column(DateTime, default=datetime.utcnow)
+    
+    project = Column(String, nullable=True)
+    department = Column(String, nullable=True)
+    uploaded_by = Column(String, nullable=True)
+    table_name = Column(String, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint('department', 'name', name='uq_department_filename'),
+    )

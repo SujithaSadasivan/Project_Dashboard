@@ -2,11 +2,14 @@
 
 from fastapi import APIRouter, UploadFile, Form, HTTPException, File, Depends
 from sqlalchemy.orm import Session
-from typing import Optional
+from sqlalchemy import text
+from typing import Optional, List, Any
 import pandas as pd
 from io import BytesIO
+from pydantic import BaseModel
+import re
 
-from app.core.database import get_db
+from app.core.database import get_db, engine
 from app.models.dataset import Dataset
 from app.models.dataset_column import DatasetColumn
 from app.models.dataset_row import DatasetRow
@@ -17,18 +20,34 @@ import json
 
 router = APIRouter(prefix="/datasets", tags=["Datasets"])
 
+def get_dataset_df(dataset: Dataset, db: Session) -> pd.DataFrame:
+    """Helper to get DataFrame from either dynamic table or legacy DatasetRow"""
+    if dataset.table_name:
+        try:
+            return pd.read_sql_table(dataset.table_name, engine.connect())
+        except Exception as e:
+            print(f"Error reading table {dataset.table_name}: {e}")
+            return pd.DataFrame()
+    else:
+        rows = db.query(DatasetRow).filter_by(dataset_id=dataset.id).all()
+        return pd.DataFrame([r.row_data for r in rows])
+
 @router.get("/")
 def list_datasets(db: Session = Depends(get_db)):
     datasets = db.query(Dataset).order_by(Dataset.id.desc()).all()
     return [
         {
             "id": d.id,
-            "name": d.name,
-            "type": d.file_type,
-            "size": None,
+            "project": d.project,
+            "department": d.department,
+            "employeeName": d.uploaded_by,
+            "fileName": d.name,
+            "uploadedBy": d.uploaded_by,
+            "uploadDate": d.created_at.strftime("%Y-%m-%d") if d.created_at else None,
+            "fileType": d.file_type,
+            "records": d.row_count,
             "status": "Completed",
-            "date": d.created_at.strftime("%Y-%m-%d") if d.created_at else None,
-            "records": d.row_count
+            "uploadDateISO": d.created_at.isoformat() if d.created_at else None
         }
         for d in datasets
     ]
@@ -47,17 +66,25 @@ def get_excel_view(dataset_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
-    rows = (
-        db.query(DatasetRow)
-        .filter(DatasetRow.dataset_id == dataset_id)
-        .all()
-    )
-
     headers = [c.column_name for c in columns]
-
-    data = []
-    for r in rows:
-        data.append([r.row_data.get(h, "") for h in headers])
+    df = get_dataset_df(dataset, db)
+    
+    if not df.empty:
+        # If headers logic is out of sync, trust the DF
+        if not headers:
+            headers = df.columns.tolist()
+        
+        # Ensure we only try to get columns that exist in DF
+        valid_headers = [h for h in headers if h in df.columns]
+        # Add any new columns in DF not in headers
+        extra_cols = [c for c in df.columns if c not in valid_headers]
+        final_headers = valid_headers + extra_cols
+        
+        df = df.fillna("")
+        data = df[final_headers].values.tolist()
+        headers = final_headers
+    else:
+        data = []
 
     return {
         "id": dataset.id,
@@ -65,7 +92,7 @@ def get_excel_view(dataset_id: int, db: Session = Depends(get_db)):
         "type": dataset.file_type,
         "size": dataset.row_count,
         "date": dataset.created_at.strftime("%Y-%m-%d"),
-        "uploadedBy": "System",
+        "uploadedBy": dataset.uploaded_by or "System",
         "fileData": {
             "sheets": [
                 {
@@ -78,29 +105,33 @@ def get_excel_view(dataset_id: int, db: Session = Depends(get_db)):
     }
 
 
-
-
-
 # 🔹 DOWNLOAD DATA AGAIN
 @router.get("/{dataset_id}/download")
-def download_dataset(dataset_id: int, db: Session = Depends(get_db)):
+def download_dataset(
+    dataset_id: int, 
+    format: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
     dataset = db.query(Dataset).filter_by(id=dataset_id).first()
-    rows = db.query(DatasetRow).filter_by(dataset_id=dataset_id).all()
-
     if not dataset:
         return {"error": "Not found"}
 
-    df = pd.DataFrame([r.row_data for r in rows])
+    df = get_dataset_df(dataset, db)
 
+    # Determine export format: use query param if provided, else use original file type
+    export_format = format.lower() if format else dataset.file_type.lower()
+    
     stream = BytesIO()
-    if dataset.file_type.lower() == "csv":
+    
+    if export_format == "csv":
         df.to_csv(stream, index=False)
         media_type = "text/csv"
-        filename = dataset.name
+        filename = f"{dataset.name.rsplit('.', 1)[0]}.csv"
     else:
+        # Default to Excel for xlsx, xls, or any other format
         df.to_excel(stream, index=False)
         media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        filename = dataset.name
+        filename = f"{dataset.name.rsplit('.', 1)[0]}.xlsx"
 
     stream.seek(0)
 
@@ -119,23 +150,19 @@ def get_chart_data(
     y: str = Query(...),
     db: Session = Depends(get_db),
 ):
-    rows = (
-        db.query(DatasetRow)
-        .filter_by(dataset_id=dataset_id)
-        .all()
-    )
+    dataset = db.query(Dataset).filter_by(id=dataset_id).first()
+    if not dataset:
+        return {"x": [], "y": [], "count": 0}
 
+    df = get_dataset_df(dataset, db)
     x_vals = []
     y_vals = []
 
-    for r in rows:
-        row = r.row_data
-        if x in row and y in row:
-            try:
-                x_vals.append(row[x])
-                y_vals.append(float(row[y]))
-            except:
-                pass  # skip invalid rows
+    if x in df.columns and y in df.columns:
+        # Filter for valid numeric Y values
+        df_valid = df[pd.to_numeric(df[y], errors='coerce').notna()]
+        x_vals = df_valid[x].tolist()
+        y_vals = df_valid[y].astype(float).tolist()
 
     return {
         "x": x_vals,
@@ -143,16 +170,90 @@ def get_chart_data(
         "count": len(x_vals)
     }
 
+class UpdateDatasetRequest(BaseModel):
+    headers: List[str]
+    data: List[List[Any]]
+
+@router.put("/{dataset_id}/data")
+def update_dataset_data(
+    dataset_id: int,
+    payload: UpdateDatasetRequest,
+    db: Session = Depends(get_db)
+):
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    # Update columns
+    # First, delete existing columns metadata
+    db.query(DatasetColumn).filter(DatasetColumn.dataset_id == dataset_id).delete()
+    
+    # Add new columns metadata
+    for col_name in payload.headers:
+        db.add(DatasetColumn(
+            dataset_id=dataset_id,
+            column_name=col_name,
+            data_type="string" 
+        ))
+
+    # Update rows
+    if dataset.table_name:
+        # Update dynamic table
+        try:
+            new_df = pd.DataFrame(payload.data, columns=payload.headers)
+            new_df.to_sql(dataset.table_name, engine, if_exists='replace', index=False)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to update table: {e}")
+    else:
+        # Legacy update
+        db.query(DatasetRow).filter(DatasetRow.dataset_id == dataset_id).delete()
+        new_rows = []
+        for row_data in payload.data:
+            row_dict = {}
+            for i, val in enumerate(row_data):
+                if i < len(payload.headers):
+                    row_dict[payload.headers[i]] = val
+            
+            new_rows.append(DatasetRow(
+                dataset_id=dataset_id,
+                row_data=row_dict
+            ))
+        db.bulk_save_objects(new_rows)
+    
+    # Update row count
+    dataset.row_count = len(payload.data)
+    
+    db.commit()
+    
+    return {"message": "Dataset updated successfully"}
+
+
 @router.post("/upload")
 async def upload_dataset(
     file: UploadFile = File(...),
-    industry: Optional[str] = Form(None),  # matches frontend form data
+    industry: Optional[str] = Form(None),
+    project: Optional[str] = Form(None),
+    department: Optional[str] = Form(None),
+    employeeName: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     """
     Accepts CSV or Excel file and stores dataset, columns, and rows in DB.
     Returns dataset metadata compatible with frontend.
     """
+
+    # 0️⃣ Check for duplicates
+    # "one department cannot upload duplicate tracker(excel)"
+    if department:
+        existing = db.query(Dataset).filter(
+            Dataset.department == department, 
+            Dataset.name == file.filename
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Dataset '{file.filename}' already uploaded for department '{department}'."
+            )
 
     # 1️⃣ Read file into DataFrame
     try:
@@ -169,6 +270,9 @@ async def upload_dataset(
     dataset = Dataset(
         name=file.filename,
         industry=industry,
+        project=project,
+        department=department,
+        uploaded_by=employeeName,
         file_type=file.filename.split(".")[-1].upper(),
         row_count=len(df)
     )
@@ -176,7 +280,24 @@ async def upload_dataset(
     db.commit()
     db.refresh(dataset)
 
-    # 3️⃣ Store column metadata
+    # 3️⃣ Create Dynamic Table and Insert Data
+    sanitized_name = re.sub(r'[^a-zA-Z0-9_]', '_', file.filename.split('.')[0]).lower()
+    table_name = f"tracker_{dataset.id}_{sanitized_name}"[:63] # Postgres limit 63 chars
+
+    try:
+        # Create table and insert data
+        df.to_sql(table_name, engine, if_exists='fail', index=False)
+        
+        # Update dataset with table_name
+        dataset.table_name = table_name
+        db.commit()
+    except Exception as e:
+        # Rollback metadata if table creation fails
+        db.delete(dataset)
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"Failed to create table: {e}")
+
+    # 4️⃣ Store column metadata (Keeping for consistency/schema endpoint)
     for col in df.columns:
         db.add(DatasetColumn(
             dataset_id=dataset.id,
@@ -185,21 +306,19 @@ async def upload_dataset(
         ))
     db.commit()
 
-    # 4️⃣ Bulk insert rows
-    rows = [
-        DatasetRow(dataset_id=dataset.id, row_data=row.to_dict())
-        for _, row in df.iterrows()
-    ]
-    db.bulk_save_objects(rows)
-    db.commit()
-
     # 5️⃣ Return metadata for frontend tracker
     return {
-        "dataset_id": dataset.id,
-        "rows": len(df),
-        "columns": list(df.columns),
-        "file_name": file.filename,
-        "file_type": file.filename.split(".")[-1].upper(),
+        "id": dataset.id,
+        "project": dataset.project,
+        "department": dataset.department,
+        "employeeName": dataset.uploaded_by,
+        "fileName": dataset.name,
+        "uploadedBy": dataset.uploaded_by,
+        "uploadDate": dataset.created_at.strftime("%Y-%m-%d"),
+        "fileType": dataset.file_type,
+        "records": dataset.row_count,
+        "status": "Completed",
+        "uploadDateISO": dataset.created_at.isoformat()
     }
 
 # ✅ THIS IS WHERE YOUR QUESTIONED CODE GOES
@@ -210,13 +329,39 @@ def get_schema(dataset_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{dataset_id}/data")
 def get_data(dataset_id: int, db: Session = Depends(get_db)):
-    rows = (
-        db.query(DatasetRow)
-        .filter_by(dataset_id=dataset_id)
-        .limit(1000)
-        .all()
-    )
-    return [r.row_data for r in rows]
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        return []
+    
+    df = get_dataset_df(dataset, db)
+    return df.head(1000).fillna("").to_dict(orient='records')
+
+class UpdateDatasetMetadataRequest(BaseModel):
+    project: Optional[str] = None
+    department: Optional[str] = None
+    employeeName: Optional[str] = None
+
+@router.put("/{dataset_id}")
+def update_dataset_metadata(
+    dataset_id: int,
+    payload: UpdateDatasetMetadataRequest,
+    db: Session = Depends(get_db)
+):
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    if payload.project is not None:
+        dataset.project = payload.project
+    if payload.department is not None:
+        dataset.department = payload.department
+    if payload.employeeName is not None:
+        dataset.uploaded_by = payload.employeeName
+    
+    db.commit()
+    db.refresh(dataset)
+    
+    return {"message": "Dataset metadata updated successfully"}
 
 @router.delete("/{dataset_id}")
 def delete_dataset(dataset_id: int, db: Session = Depends(get_db)):
@@ -225,7 +370,18 @@ def delete_dataset(dataset_id: int, db: Session = Depends(get_db)):
     if not dataset:
         return {"error": "Dataset not found"}
 
-    # Delete child rows first (FK safety)
+    # Drop dynamic table if exists
+    if dataset.table_name:
+        try:
+            # Use text() for raw SQL to drop table
+            # Sanitize or trust table_name since we generated it?
+            # We generated it, so it should be safe, but still good to be careful.
+            # However, table_name cannot be parameterized in DROP TABLE.
+            db.execute(text(f'DROP TABLE IF EXISTS "{dataset.table_name}"'))
+        except Exception as e:
+            print(f"Error dropping table {dataset.table_name}: {e}")
+
+    # Delete child rows first (FK safety) - for legacy data
     db.query(DatasetRow).filter(DatasetRow.dataset_id == dataset_id).delete()
     db.query(DatasetColumn).filter(DatasetColumn.dataset_id == dataset_id).delete()
 

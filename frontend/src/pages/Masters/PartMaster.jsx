@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, X, Check, ChevronUp, ChevronDown, Filter, Download, Eye, EyeOff, CheckSquare, Square } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Search, Edit, Trash2, X, Check, ChevronUp, ChevronDown, Filter, Download, Eye, EyeOff, CheckSquare, Square, Snowflake, ChevronLeft, ChevronRight } from 'lucide-react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -7,14 +7,14 @@ import 'jspdf-autotable';
 
 const PartMaster = () => {
   // Fixed columns matching backend Part model
-  const columns = [
-    { id: 'id', label: 'Part ID', sortable: true, type: 'text', required: true, visible: true },
-    { id: 'name', label: 'Part Name', sortable: true, type: 'text', required: true, visible: true },
-    { id: 'category', label: 'Category', sortable: true, type: 'text', required: false, visible: true },
-    { id: 'stock', label: 'Stock', sortable: true, type: 'number', required: true, visible: true },
-    { id: 'reorderLevel', label: 'Reorder Level', sortable: true, type: 'number', required: false, visible: true },
-    { id: 'price', label: 'Price', sortable: true, type: 'number', required: true, visible: true },
-    { id: 'status', label: 'Status', sortable: true, type: 'select', required: false, visible: true },
+  const initialColumns = [
+    { id: 'id', label: 'Part ID', visible: true, sortable: true, type: 'text', required: true, deletable: false },
+    { id: 'name', label: 'Part Name', visible: true, sortable: true, type: 'text', required: true, deletable: false },
+    { id: 'category', label: 'Category', visible: true, sortable: true, type: 'text', required: false, deletable: false },
+    { id: 'stock', label: 'Stock', visible: true, sortable: true, type: 'number', required: true, deletable: false },
+    { id: 'reorderLevel', label: 'Reorder Level', visible: true, sortable: true, type: 'number', required: false, deletable: false },
+    { id: 'price', label: 'Price', visible: true, sortable: true, type: 'number', required: true, deletable: false },
+    { id: 'status', label: 'Status', visible: true, sortable: true, type: 'select', required: false, deletable: false },
   ];
 
   // Status colors mapping
@@ -24,39 +24,58 @@ const PartMaster = () => {
     'Out of Stock': 'bg-red-100 text-red-800'
   };
 
-  // Load columns from backend (initial state is fixed columns)
-  const [availableColumns, setAvailableColumns] = useState(columns);
   const [parts, setParts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [newPart, setNewPart] = useState({});
-  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [showDeletePrompt, setShowDeletePrompt] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  // Set default sort to ID ascending
-  const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'ascending' });
-  const [columnFilter, setColumnFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All Status');
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [newColumnName, setNewColumnName] = useState('');
   const [newColumnType, setNewColumnType] = useState('text');
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const pageSizeOptions = [5, 10, 25, 50, 100];
+  
+  // Load columns from localStorage
+  const [columns, setColumns] = useState(() => {
+    const savedColumns = localStorage.getItem('part_columns_v2');
+    return savedColumns ? JSON.parse(savedColumns) : initialColumns;
+  });
+  
   const [editingColumn, setEditingColumn] = useState(null);
   const [tempColumnName, setTempColumnName] = useState('');
-  const [validationErrors, setValidationErrors] = useState({});
-  const [showExportDropdown, setShowExportDropdown] = useState(false);
-  const [showDeleteColumnPrompt, setShowDeleteColumnPrompt] = useState(null);
+  
+  // Sorting state
+  const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'ascending' });
+
+  // Single column filter state
+  const [columnFilter, setColumnFilter] = useState('');
+
+  // State for Add Part modal
   const [showAddPartModal, setShowAddPartModal] = useState(false);
-  const [notification, setNotification] = useState({ show: false, message: '', type: '' });
+  const [validationErrors, setValidationErrors] = useState({});
   
   // New state for checkboxes
   const [selectedParts, setSelectedParts] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
-
+  
   // New state for action prompts
   const [showBulkDeletePrompt, setShowBulkDeletePrompt] = useState(false);
   const [showBulkEditPrompt, setShowBulkEditPrompt] = useState(false);
+  const [showColumnAddPrompt, setShowColumnAddPrompt] = useState(false);
   const [showExportConfirmPrompt, setShowExportConfirmPrompt] = useState(null);
-  const [showAddColumnPrompt, setShowAddColumnPrompt] = useState(false);
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const [showDeleteColumnPrompt, setShowDeleteColumnPrompt] = useState(null);
+  const [notification, setNotification] = useState({ show: false, message: '', type: '' });
+  
+  // Freeze states
+  const [frozenRows, setFrozenRows] = useState(0);
+  const [frozenColumns, setFrozenColumns] = useState(0);
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
   const API_URL = `${API_BASE_URL}/parts`;
@@ -84,7 +103,8 @@ const PartMaster = () => {
       stock: stock,
       reorder_level: reorderLevel,
       price: parseFloat(partData.price) || 0,
-      status: stock <= reorderLevel ? 'Reorder' : 'In Stock'
+      status: stock <= reorderLevel ? 'Reorder' : 'In Stock',
+      custom_fields: {}
     };
 
     if (!isUpdate) {
@@ -93,7 +113,7 @@ const PartMaster = () => {
 
     Object.keys(partData).forEach(key => {
       if (!fixedColumnIds.includes(key) && key !== 'custom_fields' && key !== 'id') {
-        payload[key] = partData[key];
+        payload.custom_fields[key] = partData[key];
       }
     });
 
@@ -108,80 +128,49 @@ const PartMaster = () => {
     }, 3000);
   };
 
-  // Fetch parts from backend
+  // Fetch data on mount
   useEffect(() => {
-    fetchParts();
-    fetchColumns();
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        await fetchParts();
+      } catch (err) {
+        console.error("Error loading data:", err);
+        setError("Failed to load data. Please try again.");
+        showNotification('Failed to load data', 'error');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
   }, []);
 
-  const fetchParts = () => {
-    axios.get(API_URL)
-      .then(res => {
-        const flattenedParts = res.data.map(transformPartFromApi);
-        setParts(flattenedParts);
-        // Reset selection when parts are fetched
-        setSelectedParts([]);
-        setSelectAll(false);
-      })
-      .catch(err => console.error('Error fetching parts:', err));
+  const fetchParts = async () => {
+    try {
+      const res = await axios.get(API_URL);
+      const flattenedParts = res.data.map(transformPartFromApi);
+      setParts(flattenedParts);
+      setSelectedParts([]);
+      setSelectAll(false);
+    } catch (err) {
+      console.error('Error fetching parts:', err);
+      throw err;
+    }
   };
 
-  const fetchColumns = () => {
-    axios.get(`${API_URL}/columns/all`)
-      .then(res => {
-        const dbColumns = res.data.map(col => ({
-          id: col.column_name,
-          label: col.column_label,
-          type: col.data_type,
-          required: col.is_required,
-          sortable: true,
-          visible: true, // Default to visible
-          dbId: col.id
-        }));
-
-        const fixedCols = columns.filter(c => !dbColumns.some(dc => dc.id === c.id));
-        const savedVisibility = JSON.parse(localStorage.getItem('partColumnVisibility')) || {};
-
-        const mergedColumns = [...fixedCols, ...dbColumns].map(col => ({
-          ...col,
-          visible: savedVisibility[col.id] ?? true
-        }));
-
-        setAvailableColumns(mergedColumns);
-      })
-      .catch(err => console.error('Error fetching columns:', err));
-  };
-
-  // Toggle column visibility
-  const toggleColumnVisibility = (columnId) => {
-    const updatedColumns = availableColumns.map(col =>
-      col.id === columnId ? { ...col, visible: !col.visible } : col
-    );
-
-    setAvailableColumns(updatedColumns);
-
-    // save to localStorage
-    const visibilityMap = {};
-    updatedColumns.forEach(col => {
-      visibilityMap[col.id] = col.visible;
-    });
-
-    localStorage.setItem('partColumnVisibility', JSON.stringify(visibilityMap));
-    showNotification(`Column ${updatedColumns.find(c => c.id === columnId).visible ? 'shown' : 'hidden'} successfully`);
-  };
-
-  // Get visible columns for table
-  const visibleColumns = availableColumns.filter(col => col.visible);
+  // Save columns to localStorage
+  useEffect(() => {
+    localStorage.setItem('part_columns_v2', JSON.stringify(columns));
+  }, [columns]);
 
   // Checkbox Functions
   const toggleSelectAll = () => {
     if (selectAll) {
-      // Deselect all
       setSelectedParts([]);
       setSelectAll(false);
     } else {
-      // Select all currently visible parts
-      const allVisibleIds = sortedParts.map(part => part.id);
+      const allVisibleIds = paginatedParts.map(part => part.id);
       setSelectedParts(allVisibleIds);
       setSelectAll(true);
     }
@@ -190,15 +179,12 @@ const PartMaster = () => {
   const togglePartSelection = (partId) => {
     setSelectedParts(prev => {
       if (prev.includes(partId)) {
-        // Remove from selection
         const newSelection = prev.filter(id => id !== partId);
         setSelectAll(false);
         return newSelection;
       } else {
-        // Add to selection
         const newSelection = [...prev, partId];
-        // Check if all visible parts are now selected
-        const allVisibleIds = sortedParts.map(part => part.id);
+        const allVisibleIds = paginatedParts.map(part => part.id);
         if (newSelection.length === allVisibleIds.length) {
           setSelectAll(true);
         }
@@ -227,8 +213,6 @@ const PartMaster = () => {
         startEditing(part);
       }
     } else {
-      // For multiple selection, implement bulk edit logic here
-      // For now, just show a notification
       showNotification(`${selectedParts.length} parts marked for bulk edit`, 'info');
     }
     setShowBulkEditPrompt({ show: false, count: 0 });
@@ -247,14 +231,22 @@ const PartMaster = () => {
     });
   };
 
-  const confirmBulkDelete = () => {
-    // Implement bulk delete API call here
-    // For now, simulate success
+  const confirmBulkDelete = async () => {
     const count = selectedParts.length;
-    setSelectedParts([]);
-    setSelectAll(false);
-    setShowBulkDeletePrompt({ show: false, count: 0 });
-    showNotification(`${count} parts deleted successfully`);
+    try {
+      for (const id of selectedParts) {
+        await axios.delete(`${API_URL}/${id}`);
+      }
+      await fetchParts();
+      setSelectedParts([]);
+      setSelectAll(false);
+      setCurrentPage(1);
+      setShowBulkDeletePrompt({ show: false, count: 0 });
+      showNotification(`${count} parts deleted successfully`);
+    } catch (err) {
+      console.error(err);
+      showNotification('Error deleting parts', 'error');
+    }
   };
 
   // Column editing functions
@@ -265,31 +257,12 @@ const PartMaster = () => {
 
   const saveEditColumn = (columnId) => {
     if (tempColumnName.trim()) {
-      const column = availableColumns.find(col => col.id === columnId);
-      
-      if (column && column.dbId) {
-        axios.put(`${API_URL}/columns/${column.dbId}`, {
-          column_label: tempColumnName
-        })
-        .then(() => {
-          fetchColumns();
-          setEditingColumn(null);
-          setTempColumnName('');
-          showNotification('Column updated successfully');
-        })
-        .catch(err => {
-          console.error(err);
-          const msg = err.response?.data?.detail || err.message;
-          showNotification('Error updating column: ' + msg, 'error');
-        });
-      } else {
-        setAvailableColumns(availableColumns.map(col =>
-          col.id === columnId ? { ...col, label: tempColumnName } : col
-        ));
-        setEditingColumn(null);
-        setTempColumnName('');
-        showNotification('Column updated successfully');
-      }
+      setColumns(columns.map(col => 
+        col.id === columnId ? { ...col, label: tempColumnName } : col
+      ));
+      setEditingColumn(null);
+      setTempColumnName('');
+      showNotification('Column updated successfully');
     }
   };
 
@@ -299,7 +272,7 @@ const PartMaster = () => {
   };
 
   const handleDeleteColumn = (columnId) => {
-    const column = availableColumns.find(col => col.id === columnId);
+    const column = columns.find(col => col.id === columnId);
     const isFixedColumn = ['id', 'name', 'category', 'stock', 'reorderLevel', 'price', 'status'].includes(columnId);
    
     if (isFixedColumn) {
@@ -325,35 +298,10 @@ const PartMaster = () => {
     if (!showDeleteColumnPrompt) return;
    
     const columnId = showDeleteColumnPrompt.id;
-    const column = availableColumns.find(col => col.id === columnId);
-
-    const cleanupAndClose = () => {
-      if (isAddingNew) {
-        const newPartData = { ...newPart };
-        delete newPartData[columnId];
-        setNewPart(newPartData);
-      }
-      setShowDeleteColumnPrompt(null);
-      setShowColumnModal(false);
-    };
-   
-    if (column && column.dbId) {
-      axios.delete(`${API_URL}/columns/${column.dbId}`)
-        .then(() => {
-          fetchColumns();
-          cleanupAndClose();
-          showNotification('Column deleted successfully');
-        })
-        .catch(err => {
-          console.error(err);
-          const msg = err.response?.data?.detail || err.message;
-          showNotification('Error deleting column: ' + msg, 'error');
-        });
-    } else {
-      setAvailableColumns(availableColumns.filter(col => col.id !== columnId));
-      cleanupAndClose();
-      showNotification('Column deleted successfully');
-    }
+    setColumns(columns.filter(col => col.id !== columnId));
+    setShowDeleteColumnPrompt(null);
+    setShowColumnModal(false);
+    showNotification('Column deleted successfully');
   };
 
   // Sorting
@@ -361,6 +309,7 @@ const PartMaster = () => {
     let direction = 'ascending';
     if (sortConfig.key === key && sortConfig.direction === 'ascending') direction = 'descending';
     setSortConfig({ key, direction });
+    setCurrentPage(1);
   };
 
   const getSortIcon = (key) => {
@@ -371,7 +320,7 @@ const PartMaster = () => {
   // Validation
   const validatePartForm = (part) => {
     const errors = {};
-    for (const col of availableColumns) {
+    for (const col of columns) {
       if (col.required && !part[col.id]?.toString().trim()) {
         errors[col.id] = `${col.label} is required`;
       }
@@ -385,12 +334,89 @@ const PartMaster = () => {
     return errors;
   };
 
-  // Add Part Modal Functions
+  // Filter parts
+  const filteredParts = parts.filter(part => {
+    const matchesSearch = Object.values(part).some(value => 
+      String(value).toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    
+    const matchesColumnFilter = !columnFilter || Object.values(part).some(v => 
+      String(v).toLowerCase().includes(columnFilter.toLowerCase())
+    );
+    
+    return matchesSearch && matchesColumnFilter;
+  });
+
+  // Sort parts
+  const sortedParts = useMemo(() => {
+    if (!sortConfig.key) return filteredParts;
+
+    return [...filteredParts].sort((a, b) => {
+      const aVal = a[sortConfig.key] || '';
+      const bVal = b[sortConfig.key] || '';
+      
+      if (aVal < bVal) return sortConfig.direction === 'ascending' ? -1 : 1;
+      if (aVal > bVal) return sortConfig.direction === 'ascending' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredParts, sortConfig]);
+
+  // Pagination logic
+  const totalItems = sortedParts.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  
+  const paginatedParts = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return sortedParts.slice(startIndex, endIndex);
+  }, [sortedParts, currentPage, pageSize]);
+
+  // Handle page change
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+    setSelectedParts([]);
+    setSelectAll(false);
+  };
+
+  // Handle page size change
+  const handlePageSizeChange = (newSize) => {
+    setPageSize(newSize);
+    setCurrentPage(1);
+    setSelectedParts([]);
+    setSelectAll(false);
+  };
+
+  // Generate page numbers for pagination
+  const getPageNumbers = () => {
+    const pageNumbers = [];
+    const maxVisiblePages = 5;
+    
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pageNumbers.push(i);
+      }
+    } else {
+      let startPage = Math.max(1, currentPage - 2);
+      let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+      
+      if (endPage - startPage < maxVisiblePages - 1) {
+        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+      }
+      
+      for (let i = startPage; i <= endPage; i++) {
+        pageNumbers.push(i);
+      }
+    }
+    
+    return pageNumbers;
+  };
+
+  // Handle Add Part button click
   const handleAddPartClick = () => {
     setShowAddPartModal(true);
     setValidationErrors({});
     const initialPart = {};
-    availableColumns.forEach(col => {
+    columns.forEach(col => {
       if (col.id === 'status') {
         initialPart[col.id] = 'In Stock';
       } else if (col.type === 'number') {
@@ -402,160 +428,183 @@ const PartMaster = () => {
     setNewPart(initialPart);
   };
 
-  const saveNewPart = () => {
+  // Handle new part input change
+  const handleInputChange = (field, value, isEdit = false) => {
+    if (isEdit) {
+      const updatedForm = { ...editForm, [field]: value };
+      
+      // Auto-update status if stock or reorder level changes
+      if (field === 'stock' || field === 'reorderLevel') {
+        const stock = parseInt(updatedForm.stock) || 0;
+        const reorderLevel = parseInt(updatedForm.reorderLevel) || 0;
+        updatedForm.status = stock <= reorderLevel ? 'Reorder' : 'In Stock';
+      }
+      
+      setEditForm(updatedForm);
+    } else {
+      const updatedPart = { ...newPart, [field]: value };
+      
+      // Auto-update status if stock or reorder level changes
+      if (field === 'stock' || field === 'reorderLevel') {
+        const stock = parseInt(updatedPart.stock) || 0;
+        const reorderLevel = parseInt(updatedPart.reorderLevel) || 0;
+        updatedPart.status = stock <= reorderLevel ? 'Reorder' : 'In Stock';
+      }
+      
+      setNewPart(updatedPart);
+    }
+    
+    if (validationErrors[field]) {
+      setValidationErrors(prev => ({ ...prev, [field]: '' }));
+    }
+  };
+
+  // Save new part
+  const saveNewPart = async () => {
     const errors = validatePartForm(newPart);
     setValidationErrors(errors);
     
     if (Object.keys(errors).length > 0) {
-      return; // Don't submit if there are errors
+      return;
     }
 
-    const payload = transformPartForSave(newPart);
-    console.log('Saving part payload:', payload);
-
-    axios.post(API_URL, payload)
-      .then(() => {
-        fetchParts();
-        setShowAddPartModal(false);
-        setValidationErrors({});
-        // Reset form
-        const initialPart = {};
-        availableColumns.forEach(col => {
-          if (col.id === 'status') {
-            initialPart[col.id] = 'In Stock';
-          } else if (col.type === 'number') {
-            initialPart[col.id] = '0';
-          } else {
-            initialPart[col.id] = '';
-          }
-        });
-        setNewPart(initialPart);
-        showNotification('Part added successfully');
-      })
-      .catch(err => {
-        console.error(err);
-        const msg = err.response?.data?.detail || err.message;
-        showNotification('Error saving part: ' + msg, 'error');
-      });
+    try {
+      const payload = transformPartForSave(newPart);
+      await axios.post(API_URL, payload);
+      await fetchParts();
+      setShowAddPartModal(false);
+      setValidationErrors({});
+      setCurrentPage(1);
+      showNotification('Part added successfully');
+    } catch (err) {
+      console.error(err);
+      const msg = err.response?.data?.detail || err.message;
+      showNotification('Error saving part: ' + msg, 'error');
+    }
   };
 
+  // Cancel adding new part
   const cancelNewPart = () => {
     setShowAddPartModal(false);
     setValidationErrors({});
-    const initialPart = {};
-    availableColumns.forEach(col => {
-      if (col.id === 'status') {
-        initialPart[col.id] = 'In Stock';
-      } else if (col.type === 'number') {
-        initialPart[col.id] = '0';
-      } else {
-        initialPart[col.id] = '';
-      }
-    });
-    setNewPart(initialPart);
   };
 
-  // Edit Part
+  // Show delete prompt
+  const showDeleteConfirmation = (id, name) => {
+    setShowDeletePrompt({ id, name });
+  };
+
+  // Confirm delete part
+  const confirmDeletePart = async () => {
+    if (showDeletePrompt) {
+      try {
+        await axios.delete(`${API_URL}/${showDeletePrompt.id}`);
+        await fetchParts();
+        setShowDeletePrompt(null);
+        if (paginatedParts.length === 1 && currentPage > 1) {
+          setCurrentPage(currentPage - 1);
+        }
+        showNotification('Part deleted successfully');
+      } catch (err) {
+        console.error(err);
+        const msg = err.response?.data?.detail || err.message;
+        showNotification('Error deleting part: ' + msg, 'error');
+      }
+    }
+  };
+
+  // Cancel delete
+  const cancelDelete = () => {
+    setShowDeletePrompt(null);
+  };
+
+  // Start editing part
   const startEditing = (part) => {
-    if (isAddingNew) cancelNewPart();
+    setEditForm({ 
+      ...part
+    });
     setEditingId(part.id);
-    setEditForm({ ...part });
     setValidationErrors({});
   };
 
-  const saveEdit = () => {
+  // Save part edit
+  const saveEdit = async () => {
     const errors = validatePartForm(editForm);
     if (Object.keys(errors).length > 0) {
       setValidationErrors(errors);
       return;
     }
 
-    const payload = transformPartForSave(editForm, true);
-    console.log('Updating part payload:', payload);
-
-    axios.put(`${API_URL}/${editingId}`, payload)
-      .then(() => { 
-        fetchParts(); 
-        setEditingId(null); 
-        setEditForm({}); 
-        setValidationErrors({}); 
-        showNotification('Part updated successfully');
-      })
-      .catch(err => {
-        console.error(err);
-        const msg = err.response?.data?.detail || err.message;
-        showNotification('Error updating part: ' + msg, 'error');
-      });
+    try {
+      const payload = transformPartForSave(editForm, true);
+      await axios.put(`${API_URL}/${editingId}`, payload);
+      await fetchParts();
+      setEditingId(null);
+      setEditForm({});
+      setValidationErrors({});
+      showNotification('Part updated successfully');
+    } catch (err) {
+      console.error(err);
+      const msg = err.response?.data?.detail || err.message;
+      showNotification('Error updating part: ' + msg, 'error');
+    }
   };
 
-  const cancelEdit = () => { setEditingId(null); setEditForm({}); setValidationErrors({}); };
-
-  // Delete Part
-  const showDeleteConfirmation = (id, name) => setShowDeletePrompt({ id, name });
-
-  const confirmDeletePart = () => {
-    if (!showDeletePrompt) return;
-
-    axios.delete(`${API_URL}/${showDeletePrompt.id}`)
-      .then(() => { 
-        fetchParts(); 
-        setShowDeletePrompt(null); 
-        showNotification('Part deleted successfully');
-      })
-      .catch(err => {
-        console.error(err);
-        const msg = err.response?.data?.detail || err.message;
-        showNotification('Error deleting part: ' + msg, 'error');
-      });
+  // Cancel part edit
+  const cancelEdit = () => { 
+    setEditingId(null); 
+    setEditForm({}); 
+    setValidationErrors({}); 
   };
-
-  const cancelDelete = () => setShowDeletePrompt(null);
 
   // Add new column
-  const handleAddColumnClick = () => {
+  const handleAddColumn = () => {
     if (!newColumnName.trim()) {
       showNotification('Please enter a column name', 'error');
       return;
     }
     
-    setShowAddColumnPrompt({
+    setShowColumnAddPrompt({
       show: true,
       columnName: newColumnName
     });
   };
 
-  const handleAddColumn = () => {
+  const confirmAddColumn = () => {
     if (newColumnName.trim()) {
       const newColumnId = newColumnName.toLowerCase().replace(/\s+/g, '_');
       
-      // Check if column already exists
-      if (availableColumns.find(col => col.id === newColumnId)) {
+      if (columns.find(col => col.id === newColumnId)) {
         showNotification('Column with this name already exists', 'error');
         return;
       }
       
-      const columnPayload = {
-        column_name: newColumnId,
-        column_label: newColumnName,
-        data_type: newColumnType,
-        is_required: false
+      const newColumn = {
+        id: newColumnId,
+        label: newColumnName,
+        visible: true,
+        sortable: true,
+        type: newColumnType,
+        deletable: true,
+        required: false
       };
-
-      axios.post(`${API_URL}/columns/create`, columnPayload)
-        .then(() => {
-          fetchColumns();
-          setNewColumnName('');
-          setNewColumnType('text');
-          setShowColumnModal(false);
-          setShowAddColumnPrompt({ show: false, columnName: '' });
-          showNotification('Column added successfully');
-        })
-        .catch(err => {
-          console.error(err);
-          const msg = err.response?.data?.detail || err.message;
-          showNotification('Error creating column: ' + msg, 'error');
-        });
+      
+      setColumns([...columns, newColumn]);
+      setNewColumnName('');
+      setNewColumnType('text');
+      setShowColumnAddPrompt({ show: false, columnName: '' });
+      setShowColumnModal(false);
+      showNotification('Column added successfully');
     }
+  };
+
+  // Toggle column visibility
+  const toggleColumnVisibility = (columnId) => {
+    const updatedColumns = columns.map(col =>
+      col.id === columnId ? { ...col, visible: !col.visible } : col
+    );
+    setColumns(updatedColumns);
+    showNotification(`Column ${updatedColumns.find(c => c.id === columnId).visible ? 'shown' : 'hidden'} successfully`);
   };
 
   // Export functions
@@ -575,7 +624,7 @@ const PartMaster = () => {
   const handleExport = (format) => {
     const dataToExport = sortedParts.map(part => {
       const row = {};
-      availableColumns.forEach(col => {
+      columns.filter(col => col.visible).forEach(col => {
         row[col.label] = part[col.id] || '';
       });
       return row;
@@ -621,13 +670,14 @@ const PartMaster = () => {
    
     setShowExportDropdown(false);
     showNotification(`Export to ${format.toUpperCase()} completed successfully`);
+    setShowExportConfirmPrompt(null);
   };
 
   const exportToPDF = (data) => {
     const doc = new jsPDF();
-    const tableColumn = availableColumns.map(col => col.label);
+    const tableColumn = columns.filter(col => col.visible).map(col => col.label);
     const tableRows = data.map(part => 
-      availableColumns.map(col => part[col.label] || '')
+      columns.filter(col => col.visible).map(col => part[col.label] || '')
     );
 
     doc.autoTable({
@@ -658,38 +708,28 @@ const PartMaster = () => {
     return csvRows.join('\n');
   };
 
-  // Render Input Fields
-  const handleInputChange = (field, value, isEdit=false) => {
-    if (isEdit) {
-      const updatedForm = { ...editForm, [field]: value };
-      
-      // Auto-update status if stock or reorder level changes
-      if (field === 'stock' || field === 'reorderLevel') {
-        const stock = parseInt(updatedForm.stock) || 0;
-        const reorderLevel = parseInt(updatedForm.reorderLevel) || 0;
-        updatedForm.status = stock <= reorderLevel ? 'Reorder' : 'In Stock';
-      }
-      
-      setEditForm(updatedForm);
+  // Freeze functions
+  const toggleFreezeRow = () => {
+    if (frozenRows === 0) {
+      setFrozenRows(1);
+      showNotification('First row frozen');
     } else {
-      const updatedPart = { ...newPart, [field]: value };
-      
-      // Auto-update status if stock or reorder level changes
-      if (field === 'stock' || field === 'reorderLevel') {
-        const stock = parseInt(updatedPart.stock) || 0;
-        const reorderLevel = parseInt(updatedPart.reorderLevel) || 0;
-        updatedPart.status = stock <= reorderLevel ? 'Reorder' : 'In Stock';
-      }
-      
-      setNewPart(updatedPart);
-    }
-    
-    // Clear validation error for this field when user starts typing
-    if (validationErrors[field]) {
-      setValidationErrors(prev => ({ ...prev, [field]: '' }));
+      setFrozenRows(0);
+      showNotification('Rows unfrozen');
     }
   };
 
+  const toggleFreezeColumn = () => {
+    if (frozenColumns === 0) {
+      setFrozenColumns(1);
+      showNotification('First column frozen');
+    } else {
+      setFrozenColumns(0);
+      showNotification('Columns unfrozen');
+    }
+  };
+
+  // Render Input Fields
   const renderInput = (col, value, onChange, error, isModal = false) => {
     const inputClass = `w-full px-3 py-2 text-sm border ${error ? 'border-red-500' : 'border-gray-300'} rounded focus:outline-none focus:ring-1 focus:ring-black`;
     
@@ -700,7 +740,7 @@ const PartMaster = () => {
         <label className="block text-xs font-medium text-gray-700 mb-1">{col.label} {col.required && <span className="text-red-500">*</span>}</label>
         <select
           value={value||'In Stock'}
-          onChange={e=>onChange(col.id,e.target.value)}
+          onChange={e=>onChange(col.id, e.target.value)}
           className={inputClass}
         >
           {statusOptions.map(option => (
@@ -716,7 +756,7 @@ const PartMaster = () => {
         <input
           type="number"
           value={value||''}
-          onChange={e=>onChange(col.id,e.target.value)}
+          onChange={e=>onChange(col.id, e.target.value)}
           className={inputClass}
           min="0"
           step={col.id === 'price' ? "0.01" : "1"}
@@ -731,7 +771,7 @@ const PartMaster = () => {
         <input
           type="text"
           value={value||''}
-          onChange={e=>onChange(col.id,e.target.value)}
+          onChange={e=>onChange(col.id, e.target.value)}
           className={inputClass}
           placeholder={`Enter ${col.label.toLowerCase()}`}
         />
@@ -740,531 +780,693 @@ const PartMaster = () => {
     );
   };
 
-  // SIMPLIFIED: Show only plain data without any icons
+  // Render cell content
   const renderCellContent = (col, value) => {
     if (col.id === 'status') {
       return (
-        <span className={`px-2 py-1 rounded-full text-[10px] sm:text-xs ${statusColors[value] || 'bg-gray-100 text-gray-800'}`}>
+        <span className={`px-2 py-1 rounded-full text-sm whitespace-nowrap ${statusColors[value] || 'bg-gray-100 text-gray-800'}`}>
           {value||'-'}
         </span>
       );
-    } else if (col.id === 'price') {
-      return `$${(parseFloat(value) || 0).toFixed(2)}`;
-    } else if (col.id === 'category') {
-      return value||'-';
-    } else if (col.id === 'id') {
-      return value||'-';
     }
-    // For all other columns, just return the value
+    if (col.id === 'price') {
+      return `$${(parseFloat(value) || 0).toFixed(2)}`;
+    }
     return value||'-';
   };
 
-  // Filter & Sort
-  const uniqueCategories = [...new Set(parts.map(part=>part.category).filter(Boolean))];
-  const statusOptions = ['All Status', 'In Stock', 'Reorder', 'Out of Stock'];
-
-  const filteredParts = parts.filter(part => {
-    const matchesSearch = Object.values(part).some(v => String(v).toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesColumnFilter = !columnFilter || Object.values(part).some(v => 
-      String(v).toLowerCase().includes(columnFilter.toLowerCase())
-    );
-    const matchesStatus = statusFilter === 'All Status' || part.status === statusFilter;
-    return matchesSearch && matchesColumnFilter && matchesStatus;
-  });
-
-  const sortedParts = React.useMemo(() => {
-    if (!sortConfig.key) return filteredParts;
-    return [...filteredParts].sort((a,b)=>{
-      const aVal = a[sortConfig.key]||'';
-      const bVal = b[sortConfig.key]||'';
-      if(aVal<bVal) return sortConfig.direction==='ascending'?-1:1;
-      if(aVal>bVal) return sortConfig.direction==='ascending'?1:-1;
-      return 0;
-    });
-  }, [filteredParts, sortConfig]);
+  const visibleColumns = columns.filter(col => col.visible);
 
   return (
-    <div className="space-y-3 sm:space-y-4 px-0 relative">
-      {/* Notification Banner */}
-      {notification.show && (
-        <div className={`fixed bottom-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 ${
-          notification.type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' : 
-          notification.type === 'error' ? 'bg-red-100 text-red-800 border border-red-200' : 
-          'bg-blue-100 text-blue-800 border border-blue-200'
-        }`}>
-          <div className="flex items-center">
-            <span className="text-sm font-medium">{notification.message}</span>
-            <button 
-              onClick={() => setNotification({ show: false, message: '', type: '' })} 
-              className="ml-4 text-gray-500 hover:text-gray-700"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
+    <div className="h-full flex flex-col bg-gray-50 overflow-visible">
+      {/* Custom tooltip styles */}
+      <style>{`
+        /* Simple tooltip styles */
+        .tooltip {
+          position: relative;
+        }
 
-      {/* Delete Part Modal */}
-      {showDeletePrompt && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Delete</h3>
-              <button onClick={cancelDelete} className="p-1 text-gray-400 hover:text-gray-600">
-                <X className="h-4 w-4 sm:h-5 sm:w-5"/>
-              </button>
-            </div>
-            <div className="mb-4">
-              <p className="text-xs sm:text-sm text-gray-600">Delete part <span className="font-medium">{showDeletePrompt.name}</span>?</p>
-              <p className="text-xs text-red-600 mt-1">This action cannot be undone.</p>
-            </div>
-            <div className="flex justify-end space-x-2">
-              <button onClick={cancelDelete} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
-              <button onClick={confirmDeletePart} className="px-3 py-1.5 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700">Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
+        .tooltip:hover:after {
+          content: attr(data-tooltip);
+          position: absolute;
+          bottom: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          margin-bottom: 8px;
+          padding: 4px 8px;
+          background-color: #1f2937;
+          color: white;
+          font-size: 12px;
+          white-space: nowrap;
+          border-radius: 4px;
+          z-index: 10000;
+        }
 
-      {/* Delete Column Prompt */}
-      {showDeleteColumnPrompt && (
-        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base">
-                {showDeleteColumnPrompt.title}
-              </h3>
-              <button
-                onClick={() => setShowDeleteColumnPrompt(null)}
-                className="p-1 text-gray-400 hover:text-gray-600"
+        /* Freeze styles */
+        .frozen-row {
+          position: sticky;
+          top: 0;
+          z-index: 20;
+          background: #f0f9ff !important;
+          border-bottom: 2px solid #0284c7;
+        }
+
+        .frozen-column {
+          position: sticky;
+          left: 0;
+          z-index: 15;
+          background: #f0f9ff !important;
+          border-right: 2px solid #0284c7;
+        }
+
+        .frozen-row.frozen-column {
+          z-index: 25;
+          background: #e0f2fe !important;
+        }
+
+        .freeze-indicator {
+          background: #e0f2fe;
+          color: #0369a1;
+          border: 1px solid #0284c7;
+        }
+
+        /* Table container styles */
+        .part-master-container {
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+
+        .table-container {
+          flex: 1;
+          overflow: auto;
+          position: relative;
+          border: 1px solid #e5e7eb;
+          border-radius: 0.375rem;
+          background: white;
+          min-height: 0;
+        }
+
+        table {
+          border-collapse: separate;
+          border-spacing: 0;
+          width: 100%;
+        }
+
+        thead {
+          position: sticky;
+          top: 0;
+          z-index: 30;
+          background: white;
+        }
+
+        th {
+          position: sticky;
+          top: 0;
+          background: linear-gradient(135deg, #f0f5ff, #f0f8ff, #e6f0fa, #e0eaff);
+          color: #1f2937;
+          font-weight: 500;
+          z-index: 30;
+          border-bottom: 1px solid #e5e7eb;
+        }
+
+        th.frozen-column {
+          z-index: 35;
+        }
+
+        td.frozen-column {
+          z-index: 15;
+          background: white;
+        }
+
+        tr.frozen-row td {
+          position: sticky;
+          top: 42px;
+          z-index: 20;
+          background: #f0f9ff !important;
+        }
+
+        tr.frozen-row td.frozen-column {
+          z-index: 25;
+          background: #e0f2fe !important;
+        }
+      `}</style>
+
+      <div className="part-master-container p-2" style={{ overflow: 'visible' }}>
+        {/* Notification Banner */}
+        {notification.show && (
+          <div className={`fixed bottom-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 ${
+            notification.type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' : 
+            notification.type === 'error' ? 'bg-red-100 text-red-800 border border-red-200' : 
+            'bg-blue-100 text-blue-800 border border-blue-200'
+          }`}>
+            <div className="flex items-center">
+              <span className="text-sm font-medium">{notification.message}</span>
+              <button 
+                onClick={() => setNotification({ show: false, message: '', type: '' })} 
+                className="ml-4 text-gray-500 hover:text-gray-700"
               >
-                <X className="h-4 w-4 sm:h-5 sm:w-5"/>
+                <X className="h-4 w-4" />
               </button>
             </div>
+          </div>
+        )}
 
-            <div className="mb-4">
-              {showDeleteColumnPrompt.type === 'warning' ? (
-                <p className="text-xs sm:text-sm text-gray-600">
-                  {showDeleteColumnPrompt.message}
-                </p>
-              ) : (
-                <>
+        {/* Delete Part Prompt */}
+        {showDeletePrompt && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Delete</h3>
+                <button onClick={cancelDelete} className="p-1 text-gray-400 hover:text-gray-600">
+                  <X className="h-4 w-4 sm:h-5 sm:w-5"/>
+                </button>
+              </div>
+              <div className="mb-4">
+                <p className="text-xs sm:text-sm text-gray-600">Delete part <span className="font-medium">{showDeletePrompt.name}</span>?</p>
+                <p className="text-xs text-red-600 mt-1">This action cannot be undone.</p>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button onClick={cancelDelete} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+                <button onClick={confirmDeletePart} className="px-3 py-1.5 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700">Delete</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Column Prompt */}
+        {showDeleteColumnPrompt && (
+          <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-[60]">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">
+                  {showDeleteColumnPrompt.title}
+                </h3>
+                <button
+                  onClick={() => setShowDeleteColumnPrompt(null)}
+                  className="p-1 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4 sm:h-5 sm:w-5"/>
+                </button>
+              </div>
+
+              <div className="mb-4">
+                {showDeleteColumnPrompt.type === 'warning' ? (
                   <p className="text-xs sm:text-sm text-gray-600">
-                    Are you sure you want to delete column
-                    <span className="font-medium">
-                      {" "}{showDeleteColumnPrompt.columnLabel}
-                    </span>?
+                    {showDeleteColumnPrompt.message}
                   </p>
-                  <p className="text-xs text-red-600 mt-1">
-                    This action cannot be undone.
-                  </p>
-                </>
-              )}
-            </div>
-
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => setShowDeleteColumnPrompt(null)}
-                className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
-              >
-                {showDeleteColumnPrompt.type === 'warning' ? 'OK' : 'Cancel'}
-              </button>
-
-              {showDeleteColumnPrompt.type === 'delete' && (
-                <button
-                  onClick={confirmDeleteColumn}
-                  className="px-3 py-1.5 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700"
-                >
-                  Delete
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Delete Prompt */}
-      {showBulkDeletePrompt.show && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Bulk Delete</h3>
-              <button onClick={() => setShowBulkDeletePrompt({ show: false, count: 0 })} className="p-1 text-gray-400 hover:text-gray-600">
-                <X className="h-4 w-4 sm:h-5 sm:w-5"/>
-              </button>
-            </div>
-            <div className="mb-4">
-              <p className="text-xs sm:text-sm text-gray-600">
-                Are you sure you want to delete {showBulkDeletePrompt.count} selected part{showBulkDeletePrompt.count > 1 ? 's' : ''}?
-              </p>
-              <p className="text-xs text-red-600 mt-1">This action cannot be undone.</p>
-            </div>
-            <div className="flex justify-end space-x-2">
-              <button onClick={() => setShowBulkDeletePrompt({ show: false, count: 0 })} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
-              <button onClick={confirmBulkDelete} className="px-3 py-1.5 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700">Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Edit Prompt */}
-      {showBulkEditPrompt.show && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Bulk Edit</h3>
-              <button onClick={() => setShowBulkEditPrompt({ show: false, count: 0 })} className="p-1 text-gray-400 hover:text-gray-600">
-                <X className="h-4 w-4 sm:h-5 sm:w-5"/>
-              </button>
-            </div>
-            <div className="mb-4">
-              <p className="text-xs sm:text-sm text-gray-600">
-                Are you sure you want to edit {showBulkEditPrompt.count} selected part{showBulkEditPrompt.count > 1 ? 's' : ''}?
-              </p>
-            </div>
-            <div className="flex justify-end space-x-2">
-              <button onClick={() => setShowBulkEditPrompt({ show: false, count: 0 })} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
-              <button onClick={confirmBulkEdit} className="px-3 py-1.5 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Edit</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Column Prompt */}
-      {showAddColumnPrompt.show && (
-        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base">Add New Column</h3>
-              <button onClick={() => setShowAddColumnPrompt({ show: false, columnName: '' })} className="p-1 text-gray-400 hover:text-gray-600">
-                <X className="h-4 w-4 sm:h-5 sm:w-5"/>
-              </button>
-            </div>
-            <div className="mb-4">
-              <p className="text-xs sm:text-sm text-gray-600">
-                Are you sure you want to add column "<span className="font-medium">{showAddColumnPrompt.columnName}</span>"?
-              </p>
-            </div>
-            <div className="flex justify-end space-x-2">
-              <button onClick={() => setShowAddColumnPrompt({ show: false, columnName: '' })} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
-              <button onClick={handleAddColumn} className="px-3 py-1.5 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800">Add Column</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Export Confirmation Prompt */}
-      {showExportConfirmPrompt?.show && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Export</h3>
-              <button onClick={() => setShowExportConfirmPrompt(null)} className="p-1 text-gray-400 hover:text-gray-600">
-                <X className="h-4 w-4 sm:h-5 sm:w-5"/>
-              </button>
-            </div>
-            <div className="mb-4">
-              <p className="text-xs sm:text-sm text-gray-600">
-                Export {showExportConfirmPrompt.count} part{showExportConfirmPrompt.count > 1 ? 's' : ''} as {showExportConfirmPrompt.format.toUpperCase()}?
-              </p>
-            </div>
-            <div className="flex justify-end space-x-2">
-              <button onClick={() => setShowExportConfirmPrompt(null)} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
-              <button onClick={() => {
-                handleExport(showExportConfirmPrompt.format);
-                setShowExportConfirmPrompt(null);
-              }} className="px-3 py-1.5 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Export</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Column Management Modal */}
-      {showColumnModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <div></div>
-              <button onClick={() => setShowColumnModal(false)} className="p-1 text-gray-400 hover:text-gray-600">
-                <X className="h-4 w-4 sm:h-5 sm:w-5" />
-              </button>
-            </div>
-           
-            <div className="mb-4 p-3 rounded">
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base -mt-5 mb-2">
-                <span className="bg-gray-200 px-2 py-0.5 rounded">
-                  Add New Custom Column
-                </span>
-              </h3>
-
-              <div className="flex flex-col sm:flex-row gap-2 mt-2">
-                <input
-                  type="text"
-                  placeholder="Column name (e.g., Supplier)"
-                  value={newColumnName}
-                  onChange={(e) => setNewColumnName(e.target.value)}
-                  className="flex-grow px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded"
-                />
-                <button
-                  onClick={handleAddColumnClick}
-                  className="px-3 py-2 text-xs sm:text-sm bg-black text-white rounded hover:bg-gray-800 whitespace-nowrap"
-                >
-                  Add Column
-                </button>
-              </div>
-            </div>            
-            
-            <div className="mb-4">
-              <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Available Columns</h4>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {availableColumns.map((column) => {
-                  const isFixedColumn = ['id', 'name', 'category', 'stock', 'reorderLevel', 'price', 'status'].includes(column.id);
-                  const isEditing = editingColumn === column.id;
-                 
-                  return (
-                    <div key={column.id} className="flex items-center justify-between p-2 border border-gray-200 rounded">
-                      <div className="flex items-center space-x-2">
-                        {isEditing ? (
-                          <div className="flex items-center space-x-2">
-                            <input
-                              type="text"
-                              value={tempColumnName}
-                              onChange={(e) => setTempColumnName(e.target.value)}
-                              className="px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded"
-                            />
-                            <button
-                              onClick={() => saveEditColumn(column.id)}
-                              className="p-1 text-green-600 hover:text-green-800"
-                              title="Save"
-                            >
-                              <Check className="h-3 w-3 sm:h-4 sm:w-4" />
-                            </button>
-                            <button
-                              onClick={cancelEditColumn}
-                              className="p-1 text-red-600 hover:text-red-800"
-                              title="Cancel"
-                            >
-                              <X className="h-3 w-3 sm:h-4 sm:w-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            <span className="">{column.label}</span>
-                            {column.required && (
-                              <span className="">
-                                {/* Required */}
-                              </span>
-                            )}
-                            {isFixedColumn && (
-                              <span className="">
-                                {/* Fixed */}
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </div>
-                     
-                      <div className="flex items-center space-x-2">
-                        {/* View/Hide button */}
-                        <button
-                          onClick={() => toggleColumnVisibility(column.id)}
-                          className={`p-1 ${column.visible ? 'text-blue-600 hover:text-blue-800' : 'text-gray-400 hover:text-gray-600'}`}
-                          title={column.visible ? "Hide column" : "Show column"}
-                        >
-                          {column.visible ? <Eye className="h-3 w-3 sm:h-4 sm:w-4" /> : <EyeOff className="h-3 w-3 sm:h-4 sm:w-4" />}
-                        </button>
-
-                        {/* Edit button for all columns */}
-                        {!isEditing && (
-                          <button
-                            onClick={() => startEditColumn(column.id, column.label)}
-                            className="p-1 text-blue-600 hover:text-blue-800"
-                            title="Edit"
-                          >
-                            <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
-                          </button>
-                        )}
-                       
-                        {/* Delete button */}
-                        <button
-                          onClick={() => handleDeleteColumn(column.id)}
-                          className="p-1 text-red-600 hover:text-red-800"
-                          title="Delete"
-                        >
-                          <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-           
-           
-          </div>
-        </div>
-      )}
-
-      {/* Add Part Modal */}
-      {showAddPartModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-medium text-gray-900 text-sm sm:text-base">
-                <span className="bg-gray-200 px-2 py-0.5 rounded">
-                  Add New Part
-                </span>
-              </h3>
-              <button
-                onClick={cancelNewPart}
-                className="p-1 text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-4 w-4 sm:h-5 sm:w-5" />
-              </button>
-            </div>
-
-           
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-              {availableColumns.map((col) => (
-                <div key={col.id} className="col-span-1">
-                  {renderInput(col, newPart[col.id], (f, v) => handleInputChange(f, v), validationErrors[col.id], true)}
-                </div>
-              ))}
-            </div>
-           
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={cancelNewPart}
-                className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveNewPart}
-                className="px-4 py-2 text-sm bg-black text-white rounded hover:bg-gray-800"
-              >
-                Save Part
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MAIN BORDER CONTAINER */}
-      <div className="bg-white border border-gray-300 rounded mx-0">
-       
-        {/* TOOLBAR SECTION */}
-        <div className="p-4 border-b border-gray-300">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-           
-            {/* LEFT SIDE */}
-            <div className="flex flex-1 flex-col sm:flex-row gap-2 sm:gap-2 items-start sm:items-center">
-              {/* Search */}
-              <div className="relative w-full sm:w-auto">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full sm:w-48 h-10 pl-9 pr-3 text-xs sm:text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black"
-                />
-              </div>
-            </div>
-
-            {/* RIGHT SIDE */}
-            <div className="flex gap-2 mt-2 sm:mt-0">
-              {/* Column Filter */}
-              <div className="relative">
-                <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Filter..."
-                  value={columnFilter}
-                  onChange={(e) => setColumnFilter(e.target.value)}
-                  className="h-10 pl-9 pr-3 text-xs sm:text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black w-full sm:w-48"
-                />
-                {columnFilter && (
-                  <button
-                    onClick={() => setColumnFilter('')}
-                    className="p-1 absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="h-3 w-3 sm:h-4 sm:w-4" />
-                  </button>
-                )}
-              </div>
-
-              {/* Add Column Button */}
-              <button
-                onClick={() => setShowColumnModal(true)}
-                className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50 whitespace-nowrap"
-              >
-                <Plus className="h-4 w-4" />
-                {/* <span>Add Column</span> */}
-              </button>
-
-              {/* Export Button with Dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowExportDropdown(!showExportDropdown)}
-                  className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
-                >
-                  <Download className="h-4 w-4" />
-                  {/* <span>Export</span> */}
-                </button>
-               
-                {/* Export Dropdown */}
-                {showExportDropdown && (
+                ) : (
                   <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setShowExportDropdown(false)}
-                    />
-                    <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-300 rounded shadow-lg z-50">
-                      <button
-                        onClick={() => handleExportClick('excel')}
-                        className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
-                      >
-                        Export as Excel
-                      </button>
-                      <button
-                        onClick={() => handleExportClick('csv')}
-                        className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
-                      >
-                        Export as CSV
-                      </button>
-                      <button
-                        onClick={() => handleExportClick('json')}
-                        className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
-                      >
-                        Export as JSON
-                      </button>
-                      <button
-                        onClick={() => handleExportClick('pdf')}
-                        className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
-                      >
-                        Export as PDF
-                      </button>
-                    </div>
+                    <p className="text-xs sm:text-sm text-gray-600">
+                      Are you sure you want to delete column
+                      <span className="font-medium">
+                        {" "}{showDeleteColumnPrompt.columnLabel}
+                      </span>?
+                    </p>
+                    <p className="text-xs text-red-600 mt-1">
+                      This action cannot be undone.
+                    </p>
                   </>
                 )}
               </div>
+
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => setShowDeleteColumnPrompt(null)}
+                  className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  {showDeleteColumnPrompt.type === 'warning' ? 'OK' : 'Cancel'}
+                </button>
+
+                {showDeleteColumnPrompt.type === 'delete' && (
+                  <button
+                    onClick={confirmDeleteColumn}
+                    className="px-3 py-1.5 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700"
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* TABLE SECTION with fixed footer buttons */}
-        <div className="relative">
-          <div className="overflow-auto max-h-[calc(100vh-300px)]">
-            <table className="min-w-full text-xs sm:text-sm border-collapse">
-              <thead className="bg-gray-100 sticky top-0 z-10">
-                <tr className="border-b border-gray-300">
+        {/* Bulk Delete Prompt */}
+        {showBulkDeletePrompt.show && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Bulk Delete</h3>
+                <button onClick={() => setShowBulkDeletePrompt({ show: false, count: 0 })} className="p-1 text-gray-400 hover:text-gray-600">
+                  <X className="h-4 w-4 sm:h-5 sm:w-5"/>
+                </button>
+              </div>
+              <div className="mb-4">
+                <p className="text-xs sm:text-sm text-gray-600">
+                  Are you sure you want to delete {showBulkDeletePrompt.count} selected part{showBulkDeletePrompt.count > 1 ? 's' : ''}?
+                </p>
+                <p className="text-xs text-red-600 mt-1">This action cannot be undone.</p>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button onClick={() => setShowBulkDeletePrompt({ show: false, count: 0 })} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+                <button onClick={confirmBulkDelete} className="px-3 py-1.5 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700">Delete</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bulk Edit Prompt */}
+        {showBulkEditPrompt.show && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Bulk Edit</h3>
+                <button onClick={() => setShowBulkEditPrompt({ show: false, count: 0 })} className="p-1 text-gray-400 hover:text-gray-600">
+                  <X className="h-4 w-4 sm:h-5 sm:w-5"/>
+                </button>
+              </div>
+              <div className="mb-4">
+                <p className="text-xs sm:text-sm text-gray-600">
+                  Are you sure you want to edit {showBulkEditPrompt.count} selected part{showBulkEditPrompt.count > 1 ? 's' : ''}?
+                </p>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button onClick={() => setShowBulkEditPrompt({ show: false, count: 0 })} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+                <button onClick={confirmBulkEdit} className="px-3 py-1.5 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Edit</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Column Prompt */}
+        {showColumnAddPrompt.show && (
+          <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-[60]">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">Add New Column</h3>
+                <button onClick={() => setShowColumnAddPrompt({ show: false, columnName: '' })} className="p-1 text-gray-400 hover:text-gray-600">
+                  <X className="h-4 w-4 sm:h-5 sm:w-5"/>
+                </button>
+              </div>
+              <div className="mb-4">
+                <p className="text-xs sm:text-sm text-gray-600">
+                  Are you sure you want to add column "<span className="font-medium">{showColumnAddPrompt.columnName}</span>"?
+                </p>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button onClick={() => setShowColumnAddPrompt({ show: false, columnName: '' })} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+                <button onClick={confirmAddColumn} className="px-3 py-1.5 text-xs sm:text-sm bg-gradient-to-r from-rose-400 to-amber-400 text-white rounded hover:opacity-90">Add Column</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Export Confirmation Prompt */}
+        {showExportConfirmPrompt?.show && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Export</h3>
+                <button onClick={() => setShowExportConfirmPrompt(null)} className="p-1 text-gray-400 hover:text-gray-600">
+                  <X className="h-4 w-4 sm:h-5 sm:w-5"/>
+                </button>
+              </div>
+              <div className="mb-4">
+                <p className="text-xs sm:text-sm text-gray-600">
+                  Export {showExportConfirmPrompt.count} part{showExportConfirmPrompt.count > 1 ? 's' : ''} as {showExportConfirmPrompt.format.toUpperCase()}?
+                </p>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button onClick={() => setShowExportConfirmPrompt(null)} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+                <button onClick={() => {
+                  handleExport(showExportConfirmPrompt.format);
+                  setShowExportConfirmPrompt(null);
+                }} className="px-3 py-1.5 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Export</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Column Management Modal */}
+        {showColumnModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full mx-4">
+              <div className="flex items-center justify-between mb-4">
+                <div></div>
+                <button onClick={() => setShowColumnModal(false)} className="p-1 text-gray-400 hover:text-gray-600">
+                  <X className="h-4 w-4 sm:h-5 sm:w-5" />
+                </button>
+              </div>
+             
+              <div className="mb-4 p-3 rounded">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base -mt-5 mb-2">
+                  <span className="bg-gray-200 px-2 py-0.5 rounded">
+                    Add New Custom Column
+                  </span>
+                </h3>
+
+                <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                  <input
+                    type="text"
+                    placeholder="Column name (e.g., Supplier)"
+                    value={newColumnName}
+                    onChange={(e) => setNewColumnName(e.target.value)}
+                    className="flex-grow px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded"
+                  />
+                  <button
+                    onClick={handleAddColumn}
+                    className="px-3 py-2 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700 whitespace-nowrap"
+                  >
+                    Add Column
+                  </button>
+                </div>
+              </div>            
+              
+              <div className="mb-4">
+                <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Available Columns</h4>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {columns.map((column) => {
+                    const isFixedColumn = ['id', 'name', 'category', 'stock', 'reorderLevel', 'price', 'status'].includes(column.id);
+                    const isEditing = editingColumn === column.id;
+                   
+                    return (
+                      <div key={column.id} className="flex items-center justify-between p-2 border border-gray-200 rounded">
+                        <div className="flex items-center space-x-2">
+                          {isEditing ? (
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="text"
+                                value={tempColumnName}
+                                onChange={(e) => setTempColumnName(e.target.value)}
+                                className="px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded"
+                              />
+                              <button
+                                onClick={() => saveEditColumn(column.id)}
+                                className="p-1 text-green-600 hover:text-green-800"
+                                title="Save"
+                              >
+                                <Check className="h-3 w-3 sm:h-4 sm:w-4" />
+                              </button>
+                              <button
+                                onClick={cancelEditColumn}
+                                className="p-1 text-red-600 hover:text-red-800"
+                                title="Cancel"
+                              >
+                                <X className="h-3 w-3 sm:h-4 sm:w-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="">{column.label}</span>
+                              {column.required && (
+                                <span className="">
+                                  {/* Required */}
+                                </span>
+                              )}
+                              {isFixedColumn && (
+                                <span className="">
+                                  {/* Fixed */}
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </div>
+                       
+                        <div className="flex items-center space-x-2">
+                          {/* View/Hide button */}
+                          <button
+                            onClick={() => toggleColumnVisibility(column.id)}
+                            className={`p-1 ${column.visible ? 'text-blue-600 hover:text-blue-800' : 'text-gray-400 hover:text-gray-600'}`}
+                            title={column.visible ? "Hide column" : "Show column"}
+                          >
+                            {column.visible ? <Eye className="h-3 w-3 sm:h-4 sm:w-4" /> : <EyeOff className="h-3 w-3 sm:h-4 sm:w-4" />}
+                          </button>
+
+                          {/* Edit button for all columns */}
+                          {!isEditing && (
+                            <button
+                              onClick={() => startEditColumn(column.id, column.label)}
+                              className="p-1 text-blue-600 hover:text-blue-800"
+                              title="Edit column"
+                            >
+                              <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
+                            </button>
+                          )}
+                         
+                          {/* Delete button */}
+                          <button
+                            onClick={() => handleDeleteColumn(column.id)}
+                            className="p-1 text-red-600 hover:text-red-800"
+                            title="Delete column"
+                          >
+                            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Part Modal */}
+        {showAddPartModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">
+                  <span className="bg-gray-200 px-2 py-0.5 rounded">
+                    Add New Part
+                  </span>
+                </h3>
+                <button
+                  onClick={cancelNewPart}
+                  className="p-1 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4 sm:h-5 sm:w-5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                {columns.map((col) => (
+                  <div key={col.id} className="col-span-1">
+                    {renderInput(col, newPart[col.id], (f, v) => handleInputChange(f, v), validationErrors[col.id], true)}
+                  </div>
+                ))}
+              </div>
+             
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={cancelNewPart}
+                  className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveNewPart}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Save Part
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Part Modal */}
+        {editingId && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">
+                  <span className="bg-gray-200 px-2 py-0.5 rounded">
+                    Edit Part
+                  </span>
+                </h3>
+                <button
+                  onClick={cancelEdit}
+                  className="p-1 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4 sm:h-5 sm:w-5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                {columns.map((col) => (
+                  <div key={col.id} className="col-span-1">
+                    {renderInput(col, editForm[col.id], (f, v) => handleInputChange(f, v, true), validationErrors[col.id], true)}
+                  </div>
+                ))}
+              </div>
+             
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={cancelEdit}
+                  className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveEdit}
+                  className="px-4 py-2 text-sm bg-black text-white rounded hover:bg-gray-800"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MAIN CONTENT CONTAINER */}
+        <div className="bg-white border border-gray-200 rounded shadow-sm flex flex-col h-full overflow-visible">
+         
+          {/* Loading / Error State */}
+          {loading && (
+              <div className="p-8 text-center text-gray-500">
+                  Loading data...
+              </div>
+          )}
+          
+          {error && (
+              <div className="p-8 text-center text-red-500">
+                  {error}
+              </div>
+          )}
+
+          {!loading && !error && (
+              <>
+          {/* TOOLBAR SECTION - FIXED */}
+          <div className="p-4 border-b border-gray-200 flex-shrink-0">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+             
+              {/* LEFT SIDE */}
+              <div className="flex flex-1 flex-col sm:flex-row gap-2 sm:gap-2 items-start sm:items-center">
+                {/* Search */}
+                <div className="relative w-full sm:w-auto">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="w-full sm:w-48 h-10 pl-9 pr-3 text-xs sm:text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black"
+                  />
+                </div>
+              </div>
+
+              {/* RIGHT SIDE */}
+              <div className="flex gap-2 mt-2 sm:mt-0">
+                {/* Single Column Filter */}
+                <div className="relative">
+                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Filter..."
+                    value={columnFilter}
+                    onChange={(e) => setColumnFilter(e.target.value)}
+                    className="h-10 pl-9 pr-3 text-xs sm:text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black w-full sm:w-48"
+                  />
+                  {columnFilter && (
+                    <button
+                      onClick={() => setColumnFilter('')}
+                      className="p-1 absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="h-3 w-3 sm:h-4 sm:w-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Add Column Button with Freeze */}
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setShowColumnModal(true)}
+                    className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50 whitespace-nowrap tooltip"
+                    data-tooltip="Add column"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={toggleFreezeColumn}
+                    className={`flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border rounded whitespace-nowrap tooltip ${
+                      frozenColumns > 0 
+                        ? 'bg-blue-50 text-blue-700 border-blue-300' 
+                        : 'border-gray-300 hover:bg-gray-50 text-gray-700'
+                    }`}
+                    data-tooltip={frozenColumns > 0 ? "Unfreeze first column" : "Freeze first column"}
+                  >
+                    <Snowflake className={`h-4 w-4 ${frozenColumns > 0 ? 'text-blue-600' : 'text-gray-600'}`} />
+                    {frozenColumns > 0 && <span className="ml-1 text-xs">Frozen</span>}
+                  </button>
+                </div>
+
+                {/* Export Button with Dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowExportDropdown(!showExportDropdown)}
+                    className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50 tooltip"
+                    data-tooltip="Export data"
+                  >
+                    <Download className="h-4 w-4" />
+                  </button>
+                 
+                  {/* Export Dropdown */}
+                  {showExportDropdown && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setShowExportDropdown(false)}
+                      />
+                      <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-300 rounded shadow-lg z-50">
+                        <button
+                          onClick={() => handleExportClick('excel')}
+                          className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          Export as Excel
+                        </button>
+                        <button
+                          onClick={() => handleExportClick('csv')}
+                          className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          Export as CSV
+                        </button>
+                        <button
+                          onClick={() => handleExportClick('json')}
+                          className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          Export as JSON
+                        </button>
+                        <button
+                          onClick={() => handleExportClick('pdf')}
+                          className="block w-full text-left px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          Export as PDF
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* TABLE SECTION - SCROLLABLE */}
+          <div className="table-container">
+            <table className="min-w-full text-base border-collapse">
+              <thead>
+                <tr className="border-b border-gray-200">
                   {/* Checkbox column */}
-                  <th className="text-left py-2 px-3 font-medium text-gray-700 cursor-pointer hover:bg-gray-200 whitespace-nowrap border-r border-gray-300 w-10">
+                  <th 
+                    className={`text-left py-3 px-8 font-medium cursor-pointer hover:opacity-80 whitespace-nowrap w-8 ${
+                      frozenColumns > 0 ? 'frozen-column' : ''
+                    }`}
+                  >
                     <div className="flex items-center justify-center">
                       <button
                         onClick={toggleSelectAll}
-                        className="p-1 text-gray-600 hover:text-gray-800"
+                        className="p-1 text-gray-700 hover:text-gray-900"
                       >
                         {selectAll ? (
                           <CheckSquare className="h-4 w-4" />
@@ -1274,15 +1476,17 @@ const PartMaster = () => {
                       </button>
                     </div>
                   </th>
-                  {visibleColumns.map(col => (
+                  {visibleColumns.map((col, index) => (
                     <th
                       key={col.id}
-                      className="text-left py-2 px-3 font-medium text-gray-700 cursor-pointer hover:bg-gray-200 whitespace-nowrap border-r border-gray-300 last:border-r-0"
+                      className={`text-left py-3 px-8 font-medium cursor-pointer hover:opacity-80 whitespace-nowrap ${
+                        index < frozenColumns ? 'frozen-column' : ''
+                      }`}
                       onClick={() => col.sortable && handleSort(col.id)}
                     >
                       <div className="flex items-center space-x-1">
-                        <span>{col.label}</span>
-                        {col.required && <span className="text-red-500">*</span>}
+                        <span className="text-base">{col.label}</span>
+                        {col.required && <span className="text-red-300">*</span>}
                         {col.sortable && getSortIcon(col.id)}
                       </div>
                     </th>
@@ -1291,116 +1495,199 @@ const PartMaster = () => {
               </thead>
 
               <tbody>
-                {sortedParts.map(part => (
+                {paginatedParts.map((part, rowIndex) => (
                   <tr
                     key={part.id}
-                    className="border-b border-gray-300 hover:bg-gray-50 transition-colors"
+                    className={`border-b border-gray-200 hover:bg-gray-50 transition-colors ${
+                      rowIndex < frozenRows ? 'frozen-row' : ''
+                    }`}
                   >
                     {/* Checkbox cell */}
-                    <td className="py-2 px-3 whitespace-nowrap border-r border-gray-300 w-10">
+                    <td className={`py-3 px-8 whitespace-nowrap w-4 ${
+                      frozenColumns > 0 ? 'frozen-column' : ''
+                    }`}>
                       <div className="flex items-center justify-center">
                         <input
                           type="checkbox"
                           checked={selectedParts.includes(part.id)}
                           onChange={() => togglePartSelection(part.id)}
-                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          className="h-4 w-4 text-gray-600 border-gray-300 rounded focus:ring-gray-500"
                         />
                       </div>
                     </td>
-                    {editingId === part.id ?
-                      visibleColumns.map(col => (
-                        <td key={col.id} className="py-2 px-3 whitespace-nowrap border-r border-gray-300 last:border-r-0">
-                          {renderInput(col, editForm[col.id], (f, v) => handleInputChange(f, v, true), validationErrors[col.id])}
-                        </td>
-                      )) :
-                      visibleColumns.map(col => (
-                        <td key={col.id} className="py-2 px-3 whitespace-nowrap border-r border-gray-300 last:border-r-0">
-                          {renderCellContent(col, part[col.id])}
-                        </td>
-                      ))
-                    }
+                    {visibleColumns.map((col, colIndex) => (
+                      <td 
+                        key={col.id} 
+                        className={`py-3 px-8 whitespace-nowrap min-w-[160px] text-base ${
+                          colIndex < frozenColumns ? 'frozen-column' : ''
+                        }`}
+                      >
+                        {renderCellContent(col, part[col.id])}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
 
-        {/* FOOTER SECTION with Add Part and Action buttons on LEFT */}
-        <div className="px-4 py-3 border-t border-gray-300 text-xs text-gray-900 flex flex-col sm:flex-row items-center justify-between gap-2 bg-white relative">
-          {/* LEFT SIDE - Add Part and Action Buttons */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleAddPartClick}
-              className="flex items-center gap-1 h-10 px-3 text-xs border border-gray-300 rounded hover:bg-gray-50"
-            >
-              <Plus className="h-4 w-4" />
-              {/* <span>Add Part</span> */}
-            </button>
-            
-            {/* Edit, Save and Cancel buttons - only show when parts are selected or editing */}
-            {selectedParts.length > 0 || editingId ? (
-              <div className="flex items-center gap-1 ml-1">
-                {editingId ? (
-                  <>
-                    {/* Save and Cancel buttons - same design as Edit button */}
-                    <button
-                      onClick={saveEdit}
-                      className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
-                      title="Save changes"
-                    >
-                      <Check className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={cancelEdit}
-                      className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
-                      title="Cancel editing"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={handleBulkEdit}
-                    className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
-                    title={selectedParts.length === 1 ? "Edit selected part" : "Edit selected parts"}
-                  >
-                    <Edit className="h-4 w-4" />
-                    {selectedParts.length > 1 && <span>Edit ({selectedParts.length})</span>}
-                  </button>
-                )}
-                
-                {!editingId && (
-                  <button
-                    onClick={handleBulkDelete}
-                    className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-red-50 hover:text-red-700 hover:border-red-300"
-                    title={selectedParts.length === 1 ? "Delete selected part" : "Delete selected parts"}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    {selectedParts.length > 1 && <span>Delete ({selectedParts.length})</span>}
-                  </button>
-                )}
+          {/* FOOTER SECTION - FIXED */}
+          <div className="px-4 py-3 border-t border-gray-200 text-xs text-gray-900 flex flex-col sm:flex-row items-center justify-between gap-2 bg-white flex-shrink-0">
+            {/* LEFT SIDE - Add Part and Action Buttons */}
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1">
+                <button
+                  onClick={handleAddPartClick}
+                  className="flex items-center gap-1 h-10 px-3 text-xs border border-gray-300 rounded hover:bg-gray-50 tooltip"
+                  data-tooltip="Add part"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={toggleFreezeRow}
+                  className={`flex items-center gap-1 h-10 px-3 text-xs border rounded tooltip ${
+                    frozenRows > 0 
+                      ? 'bg-blue-50 text-blue-700 border-blue-300' 
+                      : 'border-gray-300 hover:bg-gray-50 text-gray-700'
+                  }`}
+                  data-tooltip={frozenRows > 0 ? "Unfreeze first row" : "Freeze first row"}
+                >
+                  <Snowflake className={`h-4 w-4 ${frozenRows > 0 ? 'text-blue-600' : 'text-gray-600'}`} />
+                  {frozenRows > 0 && <span className="ml-1">Frozen</span>}
+                </button>
               </div>
-            ) : null}
-          </div>
-          
-          {/* RIGHT SIDE - Info and Column Count */}
-          <div className="flex items-center gap-4">
-            <span>
-              Showing {sortedParts.length} of {parts.length} parts
-              {(columnFilter || statusFilter !== "All Status") &&
-                ` (Filtered${columnFilter ? ` by: ${columnFilter}` : ''}${statusFilter !== "All Status" ? ` by Status: ${statusFilter}` : ''})`
-              }
-            </span>
-            {selectedParts.length > 0 && (
-              <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
-                {selectedParts.length} selected
+              
+              {/* Edit, Save and Cancel buttons - only show when parts are selected or editing */}
+              {selectedParts.length > 0 || editingId ? (
+                <div className="flex items-center gap-1 ml-1">
+                  {editingId ? (
+                    <>
+                      {/* Save and Cancel buttons */}
+                      <button
+                        onClick={saveEdit}
+                        className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
+                        title="Save changes"
+                      >
+                        <Check className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={cancelEdit}
+                        className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
+                        title="Cancel editing"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={handleBulkEdit}
+                      className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
+                      title={selectedParts.length === 1 ? "Edit selected part" : "Edit selected parts"}
+                    >
+                      <Edit className="h-4 w-4" />
+                      {selectedParts.length > 1 && <span>Edit ({selectedParts.length})</span>}
+                    </button>
+                  )}
+                  
+                  {!editingId && (
+                    <button
+                      onClick={handleBulkDelete}
+                      className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-red-50 hover:text-red-700 hover:border-red-300"
+                      title={selectedParts.length === 1 ? "Delete selected part" : "Delete selected parts"}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      {selectedParts.length > 1 && <span>Delete ({selectedParts.length})</span>}
+                    </button>
+                  )}
+                </div>
+              ) : null}
+            </div>
+            
+            {/* RIGHT SIDE - Info, Pagination, and Column Count */}
+            <div className="flex items-center gap-4">
+              {/* Page Size Selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-gray-600">Show:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                  className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-500"
+                >
+                  {pageSizeOptions.map(size => (
+                    <option key={size} value={size}>{size}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className={`p-1 rounded ${
+                      currentPage === 1 
+                        ? 'text-gray-400 cursor-not-allowed' 
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  
+                  {getPageNumbers().map(pageNum => (
+                    <button
+                      key={pageNum}
+                      onClick={() => handlePageChange(pageNum)}
+                      className={`px-2 py-1 text-xs rounded ${
+                        currentPage === pageNum
+                          ? 'bg-gradient-to-r from-rose-400 to-amber-400 text-white'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  ))}
+                  
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className={`p-1 rounded ${
+                      currentPage === totalPages 
+                        ? 'text-gray-400 cursor-not-allowed' 
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+
+              <span className="text-gray-600">
+                Showing {paginatedParts.length} of {sortedParts.length} parts
+                {columnFilter &&
+                  ` (Filtered)`
+                }
               </span>
-            )}
-            <span className="text-blue-600">
-              ({visibleColumns.length} of {availableColumns.length} columns visible)
-            </span>
+              
+              {selectedParts.length > 0 && (
+                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
+                  {selectedParts.length} selected
+                </span>
+              )}
+              <span className="text-gray-600">
+                ({visibleColumns.length} of {columns.length} columns visible)
+              </span>
+              {(frozenRows > 0 || frozenColumns > 0) && (
+                <span className="px-2 py-1 freeze-indicator rounded text-xs flex items-center gap-1">
+                  <Snowflake className="h-3 w-3" />
+                  {frozenRows > 0 && frozenColumns > 0 ? 'Row 1 & Col 1 frozen' : 
+                   frozenRows > 0 ? 'Row 1 frozen' : 'Col 1 frozen'}
+                </span>
+              )}
+            </div>
           </div>
+          </>
+          )}
         </div>
       </div>
     </div>

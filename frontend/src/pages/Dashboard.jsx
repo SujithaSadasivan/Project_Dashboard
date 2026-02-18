@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   LogOut, 
@@ -9,16 +10,27 @@ import {
   Building,
   Upload,
   Settings,
-  Folder,
-  FileText,
-  ChevronRight,
-  ChevronDown,
-  LayoutDashboard,
   Database,
-  Briefcase,
   MessageSquare,
   ChevronLeft,
-  ChevronRight as ChevronRightIcon
+  ChevronRight as ChevronRightIcon,
+  Home,
+  FileText,
+  ChevronDown,
+  ChevronRight,
+  Bell,
+  Search,
+  Calendar,
+  Clock,
+  User,
+  Briefcase,
+  Layout,
+  Layers,
+  Grid,
+  FolderTree,
+  FileUp,
+  FileCog,
+  BarChart3
 } from 'lucide-react';
 
 import EmployeeMaster from "../pages/Masters/EmployeeMaster";
@@ -26,22 +38,33 @@ import EmployeeAccess from "../pages/Masters/EmployeeAccess";
 import ProjectMaster from "../pages/Masters/ProjectMaster";
 import PartMaster from "../pages/Masters/PartMaster";
 import DepartmentMaster from "../pages/Masters/DepartmentMaster";
-import ProjectDashboard from "../pages/Masters/ProjectDashboard";
-
+import Masters from "../pages/Masters/Masters";
+import ProjectDashboard from "./ProjectDashboard";
 import UploadTrackers from "../pages/Trackers/UploadTrackers";
 import SystemSettings from "../pages/Settings/SystemSettings";
-
 import MOMModule from "../pages/mom/MOMModule";
 
-
-// Utility function to manage sidebar modules
+// ============================================================================
+// SIDEBAR MANAGER
+// ============================================================================
 const sidebarManager = {
-  loadDynamicModules: () => {
+  loadUploadTrackerModules: () => {
     try {
-      const saved = localStorage.getItem('dynamic_modules');
+      const saved = localStorage.getItem('upload_tracker_modules');
       return saved ? JSON.parse(saved) : [];
     } catch (error) {
-      console.error('Error loading dynamic modules:', error);
+      console.error('Error loading upload tracker modules:', error);
+      return [];
+    }
+  },
+  
+  loadProjectDashboardModules: () => {
+    try {
+      const saved = localStorage.getItem('project_dashboard_modules');
+      const allModules = saved ? JSON.parse(saved) : [];
+      return Array.isArray(allModules) ? allModules.filter(m => m && m.type === 'project' && m.context === 'project-dashboard') : [];
+    } catch (error) {
+      console.error('Error loading project dashboard modules:', error);
       return [];
     }
   }
@@ -49,18 +72,42 @@ const sidebarManager = {
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
+  
+  // ==========================================================================
+  // DEFAULT STATE - PROJECT DASHBOARD SELECTED, ALL SUBMODULES CLOSED
+  // ==========================================================================
   const [activeModule, setActiveModule] = useState(() => {
-    return localStorage.getItem('active_module') || 'project-dashboard';
+    const saved = localStorage.getItem('active_module');
+    return saved || 'project-dashboard';
   });
-  const [isMobile, setIsMobile] = useState(false);
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
-  const [dynamicModules, setDynamicModules] = useState([]);
-  const [expandedModules, setExpandedModules] = useState({
-    'project-dashboard': true,
-    'masters': true
+  
+  // Dynamic modules
+  const [uploadTrackerModules, setUploadTrackerModules] = useState([]);
+  const [projectDashboardModules, setProjectDashboardModules] = useState([]);
+  
+  // ==========================================================================
+  // EXPANDED MODULES STATE - ALL CLOSED BY DEFAULT
+  // ==========================================================================
+  const [expandedModules, setExpandedModules] = useState(() => {
+    // Try to load from sessionStorage first, otherwise use defaults
+    const saved = sessionStorage.getItem('expanded_modules');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Error parsing expanded modules:', e);
+      }
+    }
+    return {
+      'project-dashboard': false,
+      'masters': false,
+      'upload-trackers': false
+    };
   });
+  
   const [selectedFileId, setSelectedFileId] = useState(() => {
     const saved = localStorage.getItem('selected_file_id');
     try {
@@ -69,34 +116,95 @@ const Dashboard = () => {
       return saved;
     }
   });
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    const saved = localStorage.getItem('sidebar_collapsed');
+    return saved ? JSON.parse(saved) : false;
+  });
+  
   const [sidebarHovered, setSidebarHovered] = useState(false);
-  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [notifications] = useState(3);
+  const [hoveredModule, setHoveredModule] = useState(null);
+  
   const profileMenuRef = useRef(null);
   const sidebarRef = useRef(null);
+  const [profileMenuPosition, setProfileMenuPosition] = useState({ top: 0, right: 0 });
 
-  // Load dynamic modules on component mount
+  // ==========================================================================
+  // HELPER FUNCTION TO CAPITALIZE FIRST LETTER
+  // ==========================================================================
+  const capitalizeFirstLetter = (string) => {
+    if (!string) return '';
+    return string.charAt(0).toUpperCase() + string.slice(1);
+  };
+
+  // ==========================================================================
+  // LOAD MODULES
+  // ==========================================================================
+  const loadDynamicModules = () => {
+    const uploadModules = sidebarManager.loadUploadTrackerModules();
+    const projectModules = sidebarManager.loadProjectDashboardModules();
+    
+    // Capitalize project names when loading
+    const capitalizedProjectModules = (Array.isArray(projectModules) ? projectModules : []).map(module => ({
+      ...module,
+      name: capitalizeFirstLetter(module.name || ''),
+      submodules: (module.submodules || []).map(sub => ({
+        ...sub,
+        displayName: capitalizeFirstLetter(sub.displayName || sub.name || '')
+      }))
+    }));
+    
+    const capitalizedUploadModules = (Array.isArray(uploadModules) ? uploadModules : []).map(module => ({
+      ...module,
+      name: capitalizeFirstLetter(module.name || ''),
+      submodules: (module.submodules || []).map(sub => ({
+        ...sub,
+        displayName: capitalizeFirstLetter(sub.displayName || sub.name || '')
+      }))
+    }));
+    
+    setUploadTrackerModules(capitalizedUploadModules);
+    setProjectDashboardModules(capitalizedProjectModules);
+  };
+
   useEffect(() => {
     loadDynamicModules();
-    
-    // Load expanded states from localStorage
-    const savedExpandedModules = localStorage.getItem('expanded_modules');
-    if (savedExpandedModules) {
-      setExpandedModules(JSON.parse(savedExpandedModules));
-    }
   }, []);
 
-  // Save expanded states when they change
+  // Storage listeners
   useEffect(() => {
-    localStorage.setItem('expanded_modules', JSON.stringify(expandedModules));
+    const handleUploadTrackerUpdate = () => loadDynamicModules();
+    const handleProjectDashboardUpdate = () => loadDynamicModules();
+    const handleStorageChange = (e) => {
+      if (e.key === 'upload_tracker_modules' || e.key === 'project_dashboard_modules') {
+        loadDynamicModules();
+      }
+    };
+
+    window.addEventListener('uploadTrackerUpdate', handleUploadTrackerUpdate);
+    window.addEventListener('projectDashboardUpdate', handleProjectDashboardUpdate);
+    window.addEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('uploadTrackerUpdate', handleUploadTrackerUpdate);
+      window.removeEventListener('projectDashboardUpdate', handleProjectDashboardUpdate);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
+  // Save expanded state to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem('expanded_modules', JSON.stringify(expandedModules));
   }, [expandedModules]);
 
-  // Save activeModule to localStorage whenever it changes
+  // Save active module to localStorage
   useEffect(() => {
     localStorage.setItem('active_module', activeModule);
   }, [activeModule]);
 
-  // Save selectedFileId to localStorage whenever it changes
+  // Save selected file ID to localStorage
   useEffect(() => {
     if (selectedFileId !== null) {
       localStorage.setItem('selected_file_id', JSON.stringify(selectedFileId));
@@ -105,24 +213,24 @@ const Dashboard = () => {
     }
   }, [selectedFileId]);
 
-  const loadDynamicModules = () => {
-    const modules = sidebarManager.loadDynamicModules();
-    setDynamicModules(modules);
-  };
+  // Save sidebar collapsed state
+  useEffect(() => {
+    localStorage.setItem('sidebar_collapsed', JSON.stringify(sidebarCollapsed));
+  }, [sidebarCollapsed]);
 
+  // DateTime
   useEffect(() => {
     const updateDateTime = () => {
       const now = new Date();
       setCurrentTime(now.toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
-        second: '2-digit',
         hour12: true
       }));
       setCurrentDate(now.toLocaleDateString('en-US', {
-        weekday: 'long',
+        weekday: 'short',
+        month: 'short',
         day: 'numeric',
-        month: 'long',
         year: 'numeric'
       }));
     };
@@ -131,19 +239,7 @@ const Dashboard = () => {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    const checkIsMobile = () => {
-      const mobile = window.innerWidth < 1024;
-      setIsMobile(mobile);
-      if (mobile) {
-        setSidebarCollapsed(true);
-      }
-    };
-    checkIsMobile();
-    window.addEventListener('resize', checkIsMobile);
-    return () => window.removeEventListener('resize', checkIsMobile);
-  }, []);
-
+  // Click outside for profile menu
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
@@ -154,155 +250,331 @@ const Dashboard = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Listen for sidebar update events
+  // Update profile menu position when opened
   useEffect(() => {
-    const handleSidebarUpdate = () => {
-      loadDynamicModules();
-    };
+    if (profileMenuOpen && profileMenuRef.current) {
+      const rect = profileMenuRef.current.getBoundingClientRect();
+      setProfileMenuPosition({
+        top: rect.bottom + 8,
+        right: window.innerWidth - rect.right
+      });
+    }
+  }, [profileMenuOpen]);
 
-    window.addEventListener('sidebarUpdate', handleSidebarUpdate);
-    
-    const handleStorageChange = (e) => {
-      if (e.key === 'dynamic_modules') {
-        loadDynamicModules();
+  // Handle window resize for profile menu
+  useEffect(() => {
+    const handleResize = () => {
+      if (profileMenuOpen && profileMenuRef.current) {
+        const rect = profileMenuRef.current.getBoundingClientRect();
+        setProfileMenuPosition({
+          top: rect.bottom + 8,
+          right: window.innerWidth - rect.right
+        });
       }
     };
-    
-    window.addEventListener('storage', handleStorageChange);
-    
-    return () => {
-      window.removeEventListener('sidebarUpdate', handleSidebarUpdate);
-      window.removeEventListener('storage', handleStorageChange);
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [profileMenuOpen]);
+
+  // Open master submodule
+  useEffect(() => {
+    const handleOpenMasterSubmodule = (event) => {
+      const { masterModuleId } = event.detail;
+      handleModuleClick(masterModuleId);
+      setExpandedModules(prev => ({ ...prev, 'masters': true }));
     };
+
+    window.addEventListener('openMasterSubmodule', handleOpenMasterSubmodule);
+    return () => window.removeEventListener('openMasterSubmodule', handleOpenMasterSubmodule);
   }, []);
 
-  // Define Masters submodules (icons removed from component objects)
+  // Handle project dashboard file open events
+  useEffect(() => {
+    const handleOpenProjectDashboardFile = (event) => {
+      const { trackerId, fileModule } = event.detail;
+      setSelectedFileId(trackerId);
+      
+      // Ensure project dashboard is active and expanded
+      if (activeModule !== 'project-dashboard') {
+        setActiveModule('project-dashboard');
+      }
+      setExpandedModules(prev => ({ ...prev, 'project-dashboard': true }));
+    };
+
+    window.addEventListener('openProjectDashboardFile', handleOpenProjectDashboardFile);
+    return () => window.removeEventListener('openProjectDashboardFile', handleOpenProjectDashboardFile);
+  }, [activeModule]);
+
+  // Masters submodules
   const mastersSubmodules = [
-    { id: 'employee-master', name: 'Employee Master', component: <EmployeeMaster /> },
-    { id: 'employee-access', name: 'Employee Access', component: <EmployeeAccess /> },
-    { id: 'project-master', name: 'Project Master', component: <ProjectMaster /> },
-    { id: 'part-master', name: 'Part Master', component: <PartMaster /> },
-    { id: 'department-master', name: 'Department Master', component: <DepartmentMaster /> },
+    { id: 'employee-master', name: 'Employee Master', component: <EmployeeMaster />, icon: <Users className="h-5 w-5" />, color: '#000000' },
+    { id: 'employee-access', name: 'Employee Access', component: <EmployeeAccess />, icon: <Shield className="h-5 w-5" />, color: '#1a1a1a' },
+    { id: 'project-master', name: 'Project Master', component: <ProjectMaster />, icon: <FolderKanban className="h-5 w-5" />, color: '#333333' },
+    { id: 'part-master', name: 'Part Master', component: <PartMaster />, icon: <Package className="h-5 w-5" />, color: '#4d4d4d' },
+    { id: 'department-master', name: 'Department Master', component: <DepartmentMaster />, icon: <Building className="h-5 w-5" />, color: '#666666' },
+  ];
+
+  const mastersModules = [
+    { id: 'masters-main', name: 'Masters', component: <Masters />, icon: <Database className="h-5 w-5" /> },
   ];
 
   const otherModules = [
-    { id: 'upload-trackers', name: 'Upload Trackers', component: <UploadTrackers selectedFileId={selectedFileId} onClearSelection={() => setSelectedFileId(null)} />, icon: <Upload className="h-5 w-5" /> },
-    { id: 'SystemSettings', name: 'Settings', component: <SystemSettings />, icon: <Settings className="h-5 w-5" /> },
+    { id: 'upload-trackers', name: 'Upload Trackers', component: <UploadTrackers selectedFileId={selectedFileId} onClearSelection={() => setSelectedFileId(null)} />, icon: <FileUp className="h-5 w-5" /> },
+    { id: 'system-settings', name: 'Settings', component: <SystemSettings />, icon: <Settings className="h-5 w-5" /> },
   ];
 
-  // Get active component with smooth transition
+  // Helper functions
+  const getUserInitial = () => {
+    if (user?.full_name) {
+      const names = user.full_name.split(' ');
+      if (names.length > 1) {
+        return `${names[0][0]}${names[1][0]}`.toUpperCase();
+      }
+      return user.full_name.charAt(0).toUpperCase();
+    }
+    return 'U';
+  };
+
+  const getAvatarColor = () => {
+    return 'bg-black';
+  };
+
   const getActiveComponent = () => {
-    const mastersModule = mastersSubmodules.find(m => m.id === activeModule);
-    if (mastersModule) return mastersModule.component;
+    // Check masters submodules first
+    const mastersSubmodule = mastersSubmodules.find(m => m.id === activeModule);
+    if (mastersSubmodule) return mastersSubmodule.component;
     
+    // Check masters main module
+    const masterModule = mastersModules.find(m => m.id === activeModule);
+    if (masterModule) return masterModule.component;
+    
+    // Check other modules
     const otherModule = otherModules.find(m => m.id === activeModule);
     if (otherModule) return otherModule.component;
     
-    if (activeModule === 'MOMModule') return <MOMModule />;
+    // Check MOM module
+    if (activeModule === 'mom-module') return <MOMModule />;
     
-    return <ProjectDashboard />;
+    // Default to Project Dashboard
+    return <ProjectDashboard selectedFileId={selectedFileId} />;
   };
 
-  // Get active module name for header
   const getActiveModuleName = () => {
     if (activeModule === 'project-dashboard') return 'Project Dashboard';
-    if (activeModule === 'masters') return 'Masters';
-    if (activeModule === 'MOMModule') return 'Minutes Of Meeting';
+    if (activeModule === 'masters-main') return 'Masters';
+    if (activeModule === 'mom-module') return 'Minutes of Meeting';
     
-    const allModules = [...mastersSubmodules, ...otherModules];
+    const allModules = [...mastersModules, ...mastersSubmodules, ...otherModules];
     const module = allModules.find(m => m.id === activeModule);
     return module ? module.name : 'Project Dashboard';
   };
 
   const getHeaderTitle = () => {
     if (activeModule === 'upload-trackers' && selectedFileId) {
-      for (const proj of dynamicModules) {
+      for (const proj of uploadTrackerModules) {
         const file = proj.submodules?.find(s => s.trackerId === selectedFileId);
         if (file) {
-          return (file.name || '').replace(/\.(xlsx|xls|csv|json|txt)$/i, '');
+          return capitalizeFirstLetter((file.displayName || file.name || '').replace(/\.(xlsx|xls|csv|json|txt)$/i, ''));
         }
       }
       return 'File Viewer';
     }
+    if (activeModule === 'project-dashboard' && selectedFileId) {
+      for (const proj of projectDashboardModules) {
+        const file = proj.submodules?.find(s => s.trackerId === selectedFileId);
+        if (file) {
+          return capitalizeFirstLetter((file.displayName || file.name || '').replace(/\.(xlsx|xls|csv|json|txt)$/i, ''));
+        }
+      }
+    }
     return getActiveModuleName();
   };
 
-  const getUserInitial = () =>
-    user?.full_name ? user.full_name.charAt(0).toUpperCase() : 'U';
-
-  // Smooth module transition handler
+  // ==========================================================================
+  // HANDLE MODULE CLICK
+  // ==========================================================================
   const handleModuleClick = (moduleId) => {
-    setIsTransitioning(true);
     setActiveModule(moduleId);
-    setSelectedFileId(null);
     
-    setTimeout(() => {
-      setIsTransitioning(false);
-    }, 300);
+    // Clear selected file ID when switching away from project-dashboard or upload-trackers
+    if (moduleId !== 'project-dashboard' && moduleId !== 'upload-trackers') {
+      setSelectedFileId(null);
+    }
+    
+    // For main modules with submodules, toggle expansion
+    if (moduleId === 'project-dashboard') {
+      setExpandedModules(prev => ({
+        ...prev,
+        'project-dashboard': !prev['project-dashboard']
+      }));
+    } else if (moduleId === 'masters-main') {
+      setExpandedModules(prev => ({
+        ...prev,
+        'masters': !prev['masters']
+      }));
+    } else if (moduleId === 'upload-trackers') {
+      setExpandedModules(prev => ({
+        ...prev,
+        'upload-trackers': !prev['upload-trackers']
+      }));
+    }
   };
 
+  // ==========================================================================
+  // TOGGLE MODULE EXPANSION
+  // ==========================================================================
   const toggleModuleExpansion = (moduleId, e) => {
-    if (e) e.stopPropagation();
-    setExpandedModules(prev => ({
-      ...prev,
-      [moduleId]: !prev[moduleId]
+    if (e) {
+      e.stopPropagation();
+    }
+    setExpandedModules(prev => ({ 
+      ...prev, 
+      [moduleId]: !prev[moduleId] 
     }));
   };
 
   const handleFileModuleClick = (fileModule) => {
-    setIsTransitioning(true);
     setActiveModule('upload-trackers');
     setSelectedFileId(fileModule.trackerId);
-    
-    setTimeout(() => {
-      setIsTransitioning(false);
-    }, 300);
   };
 
-  const handleClearFileSelection = () => {
-    setSelectedFileId(null);
+  const handleProjectFileClick = (fileModule) => {
+    // Set the selected file ID
+    setSelectedFileId(fileModule.trackerId);
+    
+    // Dispatch event for ProjectDashboard to handle
+    window.dispatchEvent(new CustomEvent('openProjectDashboardFile', { 
+      detail: { 
+        trackerId: fileModule.trackerId,
+        fileModule: fileModule,
+        projectName: fileModule.projectName || 'Unknown'
+      } 
+    }));
+    
+    // Ensure we're on project dashboard and it's expanded
+    if (activeModule !== 'project-dashboard') {
+      setActiveModule('project-dashboard');
+    }
+    setExpandedModules(prev => ({ ...prev, 'project-dashboard': true }));
   };
+
+  // ==========================================================================
+  // RENDER FUNCTIONS - ALL WITH BLACK TEXT
+  // ==========================================================================
 
   const renderProjectDashboardModule = () => {
     const isActive = activeModule === 'project-dashboard';
-    const isExpanded = expandedModules['project-dashboard'] || false;
-    const hasDynamicModules = dynamicModules.length > 0;
+    const isExpanded = expandedModules['project-dashboard'];
+    const hasDynamicModules = projectDashboardModules.length > 0;
+    const isHovered = hoveredModule === 'project-dashboard';
     
     return (
-      <div key="project-dashboard">
-        <button
+      <div key="project-dashboard" className="mb-1.5">
+        <div
+          onMouseEnter={() => setHoveredModule('project-dashboard')}
+          onMouseLeave={() => setHoveredModule(null)}
           onClick={() => handleModuleClick('project-dashboard')}
-          className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-3'} rounded-lg transition-all duration-200 ${
-            isActive
-              ? 'bg-white shadow-lg py-3 border-l-4 border-[#E30613]'
-              : 'hover:bg-gray-200 py-3'
+          className={`w-full flex items-center cursor-pointer transition-all duration-300 ${
+            sidebarCollapsed ? 'justify-center px-2 py-3.5' : 'justify-between px-4 py-3.5'
+          } rounded-xl ${
+            isActive 
+              ? 'bg-white shadow-md text-black' 
+              : isHovered 
+                ? 'bg-white/90 shadow-sm text-black' 
+                : 'hover:bg-white/70 text-black'
           }`}
         >
-          <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'}`}>
-            <div className={isActive ? 'text-[#E30613]' : 'text-gray-500'}>
-              <LayoutDashboard className="h-5 w-5" />
+          <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3.5'}`}>
+            <div className={`transition-colors ${
+              isActive ? 'text-black' : isHovered ? 'text-black' : 'text-black'
+            }`}>
+              <BarChart3 className={`${sidebarCollapsed ? 'h-5 w-5' : 'h-5 w-5'}`} />
             </div>
             {!sidebarCollapsed && (
-              <span className="font-semibold text-base truncate">Project Dashboard</span>
+              <span className={`font-semibold text-base ${
+                isActive ? 'text-black' : isHovered ? 'text-black' : 'text-black'
+              }`}>
+                Dashboard
+              </span>
             )}
           </div>
           {!sidebarCollapsed && hasDynamicModules && (
             <button
               onClick={(e) => toggleModuleExpansion('project-dashboard', e)}
-              className={`p-1 rounded hover:bg-gray-300 ${isActive ? 'text-[#E30613]' : 'text-gray-500'}`}
+              className={`p-1.5 rounded-lg ${
+                isActive ? 'hover:bg-gray-100 text-black' : 
+                isHovered ? 'hover:bg-white text-black' : 
+                'hover:bg-white/70 text-black'
+              }`}
             >
-              {isExpanded ? 
-                <ChevronDown className="h-4 w-4" /> : 
-                <ChevronRight className="h-4 w-4" />
-              }
+              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </button>
           )}
-        </button>
+        </div>
         
-        {/* Dynamic Project Modules under Project Dashboard */}
         {!sidebarCollapsed && isExpanded && hasDynamicModules && (
-          <div className="ml-6 mt-1 space-y-1">
-            {dynamicModules.map(projectModule => renderProjectModule(projectModule))}
+          <div className="ml-7 mt-1.5 space-y-1.5">
+            {projectDashboardModules.map(projectModule => renderProjectModule(projectModule, 'project-dashboard'))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderUploadTrackersModule = () => {
+    const isActive = activeModule === 'upload-trackers';
+    const isExpanded = expandedModules['upload-trackers'];
+    const hasDynamicModules = uploadTrackerModules.length > 0;
+    const isHovered = hoveredModule === 'upload-trackers';
+    
+    return (
+      <div key="upload-trackers" className="mb-1.5">
+        <div
+          onMouseEnter={() => setHoveredModule('upload-trackers')}
+          onMouseLeave={() => setHoveredModule(null)}
+          onClick={() => handleModuleClick('upload-trackers')}
+          className={`w-full flex items-center cursor-pointer transition-all duration-300 ${
+            sidebarCollapsed ? 'justify-center px-2 py-3.5' : 'justify-between px-4 py-3.5'
+          } rounded-xl ${
+            isActive 
+              ? 'bg-white shadow-md text-black' 
+              : isHovered 
+                ? 'bg-white/90 shadow-sm text-black' 
+                : 'hover:bg-white/70 text-black'
+          }`}
+        >
+          <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3.5'}`}>
+            <div className={`transition-colors ${
+              isActive ? 'text-black' : isHovered ? 'text-black' : 'text-black'
+            }`}>
+              <FileUp className={`${sidebarCollapsed ? 'h-5 w-5' : 'h-5 w-5'}`} />
+            </div>
+            {!sidebarCollapsed && (
+              <span className={`font-semibold text-base ${
+                isActive ? 'text-black' : isHovered ? 'text-black' : 'text-black'
+              }`}>
+                Upload Trackers
+              </span>
+            )}
+          </div>
+          {!sidebarCollapsed && hasDynamicModules && (
+            <button
+              onClick={(e) => toggleModuleExpansion('upload-trackers', e)}
+              className={`p-1.5 rounded-lg ${
+                isActive ? 'hover:bg-gray-100 text-black' : 
+                isHovered ? 'hover:bg-white text-black' : 
+                'hover:bg-white/70 text-black'
+              }`}
+            >
+              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            </button>
+          )}
+        </div>
+        
+        {!sidebarCollapsed && isExpanded && hasDynamicModules && (
+          <div className="ml-7 mt-1.5 space-y-1.5">
+            {uploadTrackerModules.map(projectModule => renderProjectModule(projectModule, 'upload-trackers'))}
           </div>
         )}
       </div>
@@ -310,168 +582,257 @@ const Dashboard = () => {
   };
 
   const renderMOMModule = () => {
-    const isActive = activeModule === 'MOMModule';
+    const isActive = activeModule === 'mom-module';
+    const isHovered = hoveredModule === 'mom-module';
     
     return (
       <button
-        key="MOMModule"
-        onClick={() => handleModuleClick('MOMModule')}
-        className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'px-3'} space-x-3 rounded-lg transition-all duration-200 py-3 ${
-          isActive
-            ? 'bg-white shadow-lg border-l-4 border-[#E30613]'
-            : 'hover:bg-gray-200'
+        key="mom-module"
+        onMouseEnter={() => setHoveredModule('mom-module')}
+        onMouseLeave={() => setHoveredModule(null)}
+        onClick={() => handleModuleClick('mom-module')}
+        className={`w-full flex items-center transition-all duration-300 ${
+          sidebarCollapsed ? 'justify-center px-2 py-3.5' : 'px-4 py-3.5 space-x-3.5'
+        } rounded-xl ${
+          isActive 
+            ? 'bg-white shadow-md text-black' 
+            : isHovered 
+              ? 'bg-white/90 shadow-sm text-black' 
+              : 'hover:bg-white/70 text-black'
         }`}
       >
-        <div className={isActive ? 'text-[#E30613]' : 'text-gray-500'}>
-          <MessageSquare className="h-5 w-5" />
+        <div className={`transition-colors ${
+          isActive ? 'text-black' : isHovered ? 'text-black' : 'text-black'
+        }`}>
+          <MessageSquare className={`${sidebarCollapsed ? 'h-5 w-5' : 'h-5 w-5'}`} />
         </div>
         {!sidebarCollapsed && (
-          <span className="font-semibold text-base truncate">Minutes Of Meeting</span>
+          <span className={`font-semibold text-base ${
+            isActive ? 'text-black' : isHovered ? 'text-black' : 'text-black'
+          }`}>
+            MOM
+          </span>
         )}
       </button>
     );
   };
 
   const renderMastersModule = () => {
-    const isActive = activeModule === 'masters';
-    const isExpanded = expandedModules['masters'] || false;
+    const isExpanded = expandedModules['masters'];
+    const isActive = activeModule === 'masters-main' || mastersSubmodules.some(s => s.id === activeModule);
+    const isHovered = hoveredModule === 'masters-main';
     
     return (
-      <div key="masters" className="mt-2">
+      <div key="masters" className="mb-1.5">
         <div
-          onClick={() => handleModuleClick('masters')}
-          className={`w-full flex items-center cursor-pointer ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-3'} rounded-lg transition-all duration-200 ${
-            isActive
-              ? 'bg-white shadow-lg py-3 border-l-4 border-[#E30613]'
-              : 'hover:bg-gray-200 py-3'
+          onMouseEnter={() => setHoveredModule('masters-main')}
+          onMouseLeave={() => setHoveredModule(null)}
+          onClick={() => handleModuleClick('masters-main')}
+          className={`w-full flex items-center cursor-pointer transition-all duration-300 ${
+            sidebarCollapsed ? 'justify-center px-2 py-3.5' : 'justify-between px-4 py-3.5'
+          } rounded-xl ${
+            isActive 
+              ? 'bg-white shadow-md text-black' 
+              : isHovered 
+                ? 'bg-white/90 shadow-sm text-black' 
+                : 'hover:bg-white/70 text-black'
           }`}
         >
-          <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'}`}>
-            <div className={isActive ? 'text-[#E30613]' : 'text-gray-500'}>
-              <Briefcase className="h-5 w-5" />
+          <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3.5'}`}>
+            <div className={`transition-colors ${
+              isActive ? 'text-black' : isHovered ? 'text-black' : 'text-black'
+            }`}>
+              <FolderTree className={`${sidebarCollapsed ? 'h-5 w-5' : 'h-5 w-5'}`} />
             </div>
             {!sidebarCollapsed && (
-              <span className="font-semibold text-base truncate">Masters</span>
+              <span className={`font-semibold text-base ${
+                isActive ? 'text-black' : isHovered ? 'text-black' : 'text-black'
+              }`}>
+                Masters
+              </span>
             )}
           </div>
           {!sidebarCollapsed && (
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleModuleExpansion('masters', e);
-              }}
-              className={`p-1 rounded hover:bg-gray-300 ${isActive ? 'text-[#E30613]' : 'text-gray-500'}`}
+              onClick={(e) => toggleModuleExpansion('masters', e)}
+              className={`p-1.5 rounded-lg ${
+                isActive ? 'hover:bg-gray-100 text-black' : 
+                isHovered ? 'hover:bg-white text-black' : 
+                'hover:bg-white/70 text-black'
+              }`}
             >
-              {isExpanded ? 
-                <ChevronDown className="h-4 w-4" /> : 
-                <ChevronRight className="h-4 w-4" />
-              }
+              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </button>
           )}
         </div>
         
-        {/* Masters submodules - icons removed */}
         {!sidebarCollapsed && isExpanded && (
-          <div className="ml-6 mt-1 space-y-1">
-            {mastersSubmodules.map(submodule => (
-              <button
-                key={submodule.id}
-                onClick={() => handleModuleClick(submodule.id)}
-                className={`w-full flex items-center space-x-3 rounded-lg transition-all duration-200 p-2 text-left ${
-                  activeModule === submodule.id
-                    ? 'bg-blue-100 border-l-2 border-blue-500'
-                    : 'hover:bg-gray-200'
-                }`}
-              >
-                {/* Icon removed - only text */}
-                <span className={`font-medium text-base truncate ml-2 ${activeModule === submodule.id ? 'text-blue-600 font-semibold' : ''}`}>
-                  {submodule.name}
-                </span>
-              </button>
-            ))}
+          <div className="ml-7 mt-1.5 space-y-1.5">
+            {mastersSubmodules.map((submodule, index) => {
+              const isSubmoduleActive = activeModule === submodule.id;
+              const isSubmoduleHovered = hoveredModule === submodule.id;
+              
+              return (
+                <button
+                  key={submodule.id}
+                  onMouseEnter={() => setHoveredModule(submodule.id)}
+                  onMouseLeave={() => setHoveredModule(null)}
+                  onClick={() => handleModuleClick(submodule.id)}
+                  className={`w-full flex items-center space-x-3.5 rounded-lg px-3 py-2.5 transition-all duration-300 ${
+                    isSubmoduleActive 
+                      ? 'bg-white shadow-sm text-black' 
+                      : isSubmoduleHovered 
+                        ? 'bg-white/90 shadow-sm text-black' 
+                        : 'hover:bg-white/70 text-black'
+                  }`}
+                >
+                  <div className={`${
+                    isSubmoduleActive ? 'text-black' : 
+                    isSubmoduleHovered ? 'text-black' : 
+                    'text-black'
+                  }`}>
+                    {submodule.icon}
+                  </div>
+                  <span className={`text-sm font-medium truncate ${
+                    isSubmoduleActive ? 'text-black' : 
+                    isSubmoduleHovered ? 'text-black' : 
+                    'text-black'
+                  }`}>
+                    {submodule.name}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
     );
   };
 
-  const renderProjectModule = (projectModule) => {
-    const isExpanded = expandedModules[projectModule.id] || false;
-    const hasFiles = projectModule.submodules && projectModule.submodules.length > 0;
+  const renderProjectModule = (projectModule, context) => {
+    const uniqueId = `${context}-${projectModule.id}`;
+    const isExpanded = expandedModules[uniqueId] || false;
+    const hasFiles = projectModule.submodules?.length > 0;
+    const isHovered = hoveredModule === uniqueId;
     
     return (
-      <div key={projectModule.id} className="mt-1">
+      <div key={uniqueId} className="group">
         <div className="flex items-center justify-between">
-          <button
-            onClick={(e) => toggleModuleExpansion(projectModule.id, e)}
-            className="flex-1 flex items-center space-x-2 rounded-lg p-2 hover:bg-gray-200 transition-all duration-200 text-left"
+          <div
+            onMouseEnter={() => setHoveredModule(uniqueId)}
+            onMouseLeave={() => setHoveredModule(null)}
+            onClick={(e) => toggleModuleExpansion(uniqueId, e)}
+            className={`flex-1 flex items-center space-x-2.5 rounded-lg px-3 py-2.5 transition-all duration-300 cursor-pointer ${
+              isHovered 
+                ? 'bg-white/90 text-black shadow-sm' 
+                : 'hover:bg-white/70 text-black'
+            }`}
           >
-            {/* Folder icon removed from project modules */}
-            <span className="font-medium text-base truncate ml-2">{projectModule.name}</span>
-          </button>
+            <Layers className={`h-5 w-5 ${
+              isHovered ? 'text-black' : 'text-black'
+            }`} />
+            <span className={`text-sm font-medium truncate ${
+              isHovered ? 'text-black' : 'text-black'
+            }`}>
+              {projectModule.name}
+            </span>
+          </div>
           {hasFiles && (
             <button
-              onClick={(e) => toggleModuleExpansion(projectModule.id, e)}
-              className="p-1 rounded hover:bg-gray-300 text-gray-500 ml-1"
+              onClick={(e) => toggleModuleExpansion(uniqueId, e)}
+              className={`p-1.5 rounded-lg ${
+                isHovered ? 'hover:bg-white/90 text-black' : 'hover:bg-white/70 text-black'
+              }`}
             >
-              {isExpanded ? 
-                <ChevronDown className="h-3 w-3" /> : 
-                <ChevronRight className="h-3 w-3" />
-              }
+              {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
             </button>
           )}
         </div>
         
-        {/* File submodules - icons removed */}
         {isExpanded && hasFiles && (
-          <div className="ml-4 mt-1 space-y-1">
-            {projectModule.submodules.map(fileModule => renderFileModule(fileModule))}
+          <div className="ml-7 mt-1.5 space-y-1">
+            {projectModule.submodules.map(fileModule => renderFileModule(fileModule, context))}
           </div>
         )}
       </div>
     );
   };
 
-  const renderFileModule = (fileModule) => {
-    const isSelected = selectedFileId === fileModule.trackerId;
+  const renderFileModule = (fileModule, context) => {
+    const isSelected = (context === 'upload-trackers' || context === 'project-dashboard') && 
+                       selectedFileId === fileModule.trackerId;
+    const fileId = `${context}-${fileModule.id}`;
+    const isHovered = hoveredModule === fileId;
     
     return (
       <button
-        key={fileModule.id}
-        onClick={() => handleFileModuleClick(fileModule)}
-        className={`w-full flex items-center space-x-2 rounded-lg p-2 transition-all duration-200 text-left ${
+        key={fileId}
+        onMouseEnter={() => setHoveredModule(fileId)}
+        onMouseLeave={() => setHoveredModule(null)}
+        onClick={() => {
+          if (context === 'upload-trackers') {
+            handleFileModuleClick(fileModule);
+          } else if (context === 'project-dashboard') {
+            handleProjectFileClick(fileModule);
+          }
+        }}
+        className={`w-full flex items-center space-x-2.5 rounded-lg px-3 py-2 transition-all duration-300 ${
           isSelected 
-            ? 'bg-blue-100 border-l-2 border-blue-500' 
-            : 'hover:bg-gray-200'
+            ? 'bg-white shadow-sm text-black'
+            : isHovered 
+              ? 'bg-white/90 text-black shadow-sm' 
+              : 'hover:bg-white/70 text-black'
         }`}
       >
-        {/* FileText icon removed from file modules */}
-        <span className={`font-normal text-base truncate ml-2 ${isSelected ? 'text-blue-600 font-medium' : ''}`}>
-          {(fileModule.name || '').replace(/\.(xlsx|xls|csv)$/i, '')}
+        <span className={`text-sm truncate ${
+          isSelected 
+            ? 'font-medium text-black'
+            : isHovered 
+              ? 'text-black' 
+              : 'text-black'
+        }`}>
+          {fileModule.displayName || (fileModule.name || '').replace(/\.(xlsx|xls|csv|json|txt)$/i, '')}
         </span>
       </button>
     );
   };
 
   const renderOtherModules = () => {
-    return otherModules.map(module => {
+    return otherModules.filter(module => module.id !== 'upload-trackers').map((module, index) => {
       const isActive = activeModule === module.id;
+      const isHovered = hoveredModule === module.id;
       
       return (
         <button
           key={module.id}
+          onMouseEnter={() => setHoveredModule(module.id)}
+          onMouseLeave={() => setHoveredModule(null)}
           onClick={() => handleModuleClick(module.id)}
-          className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'px-3'} space-x-3 rounded-lg transition-all duration-200 py-3 ${
-            isActive
-              ? 'bg-white shadow-lg border-l-4 border-[#E30613]'
-              : 'hover:bg-gray-200'
+          className={`w-full flex items-center transition-all duration-300 ${
+            sidebarCollapsed ? 'justify-center px-2 py-3.5' : 'px-4 py-3.5 space-x-3.5'
+          } rounded-xl ${
+            isActive 
+              ? 'bg-white shadow-md text-black' 
+              : isHovered 
+                ? 'bg-white/90 shadow-sm text-black' 
+                : 'hover:bg-white/70 text-black'
           }`}
         >
-          <div className={isActive ? 'text-[#E30613]' : 'text-gray-500'}>
+          <div className={`transition-colors ${
+            isActive ? 'text-black' : 
+            isHovered ? 'text-black' : 
+            'text-black'
+          }`}>
             {module.icon}
           </div>
           {!sidebarCollapsed && (
-            <span className="font-semibold text-base truncate">{module.name}</span>
+            <span className={`font-semibold text-base ${
+              isActive ? 'text-black' : 
+              isHovered ? 'text-black' : 
+              'text-black'
+            }`}>
+              {module.name}
+            </span>
           )}
         </button>
       );
@@ -479,125 +840,218 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-gray-50">
+    <div className="h-screen flex flex-col overflow-hidden bg-white">
+      {/* Global styles */}
+      <style>{`
+        * {
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        
+        ::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+        }
+        
+        ::-webkit-scrollbar-track {
+          background: #F3F4F6;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+          background: #D1D5DB;
+          border-radius: 3px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+          background: #9CA3AF;
+        }
+      `}</style>
+
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar - Hover-triggered toggle */}
+        {/* Sidebar - Original gradient background preserved */}
         <div 
           ref={sidebarRef}
           className={`
-            fixed lg:relative inset-y-0 left-0 z-30 
-            ${sidebarCollapsed ? 'w-20' : 'w-64'}
-            bg-gray-100
-            transform transition-all duration-300 ease-in-out lg:transform-none
+            fixed lg:relative inset-y-0 left-0 z-30
+            ${sidebarCollapsed ? 'w-16' : 'w-60'}
+            bg-gradient-to-b from-rose-100/70 via-pink-50/60 via-blue-50/60 to-sky-100/70
+            transform transition-all duration-200 ease-in-out lg:transform-none
             flex flex-col
-            group
+            shadow-sm
+            backdrop-blur-[1px]
+            relative overflow-hidden
           `}
           onMouseEnter={() => setSidebarHovered(true)}
           onMouseLeave={() => setSidebarHovered(false)}
         >
-          {/* Sidebar Header */}
-          <div className="pt-4 px-3 relative">
-            {/* Logo Section - Full logo when expanded, mini when collapsed */}
+          {/* Pink overlay at top - GRADUAL fade, not a hard patch */}
+          <div className="absolute top-0 right-0 w-64 h-48 pointer-events-none bg-gradient-to-bl from-rose-100/50 via-pink-50/30 to-transparent"></div>
+          
+          {/* Sparkle effect - very subtle */}
+          <div className="absolute inset-0 pointer-events-none opacity-5" 
+               style={{
+                 backgroundImage: `radial-gradient(circle at 90% 10%, rgba(255, 182, 193, 0.2) 0%, transparent 60%),
+                                   radial-gradient(circle at 30% 40%, rgba(135, 206, 235, 0.1) 0%, transparent 50%)`
+               }}>
+          </div>
+
+          {/* Logo Section */}
+          <div className="relative px-4 py-6 z-10">
             {!sidebarCollapsed ? (
-              <div className="flex justify-center">
-                <img 
-                  // src="/TM2.png" 
-                  className="h-36 w-auto object-contain"
-                  // alt="Company Logo"
-                  // onError={(e) => {
-                  //   e.target.onerror = null;
-                  //   e.target.src =
-                  //     'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjYwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiNlMzA2MTMiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0IiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkNvbXBhbnkgTG9nbzwvdGV4dD48L3N2Zz4=';
-                  // }}
-                />
+              <div className="flex justify-center items-center">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-gradient-to-r from-rose-200/30 to-sky-200/30 blur-xl rounded-full"></div>
+                  <img 
+                    src="/caldimlogo.png" 
+                    className="h-26 w-auto object-contain relative"  
+                    alt="Company Logo"
+                  />
+                </div>
               </div>
             ) : (
               <div className="flex justify-center py-2">
-                <div className="h-8 w-8 rounded-full bg-[#E30613] flex items-center justify-center">
-                  <span className="text-white font-bold text-xs">TM</span>
+                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-rose-400 to-sky-400 flex items-center justify-center shadow-md">
+                  <span className="text-white font-bold text-sm">CD</span>
                 </div>
               </div>
             )}
-            
-            {/* Hover-triggered Toggle Button */}
-            {(sidebarHovered || isMobile) && (
-              <button
-                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className={`
-                  absolute top-6 -right-3
-                  bg-white hover:bg-gray-100 
-                  rounded-full p-1.5 
-                  shadow-lg border border-gray-300
-                  transition-all duration-200
-                  z-40
-                  flex items-center justify-center
-                `}
-              >
-                {sidebarCollapsed ? (
-                  <ChevronRightIcon className="h-4 w-4 text-gray-700" />
-                ) : (
-                  <ChevronLeft className="h-4 w-4 text-gray-700" />
-                )}
-              </button>
-            )}
           </div>
 
-          {/* Navigation Modules */}
-          <div className="flex-1 overflow-y-auto px-2 space-y-1 mt-0">
-            {/* 1. Project Dashboard Module */}
-            <div className="mt-0">
-              {renderProjectDashboardModule()}
-            </div>
-            
-            {/* 2. Minutes Of Meeting Module */}
+          {/* Collapse Button - Moved outside logo section but still in sidebar */}
+          {sidebarHovered && (
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="absolute top-6 bg-white hover:bg-gradient-to-r hover:from-rose-50 hover:to-sky-50 rounded-full p-1.5 shadow-md border border-indigo-200 z-50"
+              style={{
+                left: sidebarCollapsed ? '52px' : '220px',
+                transform: 'translateX(-50%)',
+                zIndex: 9999
+              }}
+            >
+              {sidebarCollapsed ? (
+                <ChevronRightIcon className="h-4 w-4 text-indigo-400" />
+              ) : (
+                <ChevronLeft className="h-4 w-4 text-indigo-400" />
+              )}
+            </button>
+          )}
+
+          {/* Navigation */}
+          <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1.5 relative z-10">
+            {renderProjectDashboardModule()}
             {renderMOMModule()}
-            
-            {/* 3. Masters Module with submodules */}
             {renderMastersModule()}
             
-            {/* Other Modules (Upload Trackers, Settings) */}
-            <div className="mt-2 space-y-1">
+            <div className="space-y-1.5">
+              {renderUploadTrackersModule()}
               {renderOtherModules()}
             </div>
           </div>
         </div>
 
         {/* Main Content Area */}
-        <div className={`flex-1 flex flex-col min-h-0 overflow-hidden transition-all duration-300 ${isTransitioning ? 'opacity-50' : 'opacity-100'}`}>
-          {/* Header */}
-          <header className="hidden lg:block bg-gray-100 flex-shrink-0">
-            <div className="px-4 py-4 flex items-center justify-center relative">
-              {/* Centered Module Name */}
-              <h1 className="text-2xl font-bold text-gray-900 text-center">
-                {getHeaderTitle()}
-              </h1>
-              
-              {/* Right-aligned User Profile */}
-              <div className="absolute right-4 top-1/2 transform -translate-y-1/2 flex items-center">
-                <div className="text-right mr-4">
-                  <p className="text-lg font-semibold text-gray-900">{currentTime}</p>
-                  <p className="text-sm text-gray-600">{currentDate}</p>
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-white">
+          {/* Header - Original gradient restored */}
+          <header className="bg-gradient-to-br from-rose-100/70 via-pink-50/60 via-blue-50/60 to-sky-100/70 backdrop-blur-[1px] flex-shrink-0 sticky top-0 z-20 relative overflow-hidden">
+            {/* Dual-tone overlay */}
+            <div className="absolute inset-0 pointer-events-none bg-gradient-to-tr from-rose-100/20 via-transparent to-sky-100/20"></div>
+            
+            {/* Balanced sparkle effect */}
+            <div className="absolute inset-0 pointer-events-none opacity-10" 
+                 style={{
+                   backgroundImage: `radial-gradient(circle at 30% 40%, rgba(255, 182, 193, 0.3) 0%, transparent 30%),
+                                     radial-gradient(circle at 70% 60%, rgba(135, 206, 235, 0.3) 0%, transparent 30%),
+                                     radial-gradient(circle at 40% 80%, rgba(255, 192, 203, 0.3) 0%, transparent 30%),
+                                     radial-gradient(circle at 60% 20%, rgba(176, 224, 230, 0.3) 0%, transparent 30%)`
+                 }}>
+            </div>
+            
+            <div className="px-6 py-4 flex items-center justify-between relative z-10">
+              {/* Left side - Empty for centering */}
+              <div className="w-48"></div>
+
+              {/* Center - Title */}
+              <div className="flex-1 flex justify-center items-center">
+                <h1 className="text-2xl font-bold text-black tracking-tight">
+                  {getHeaderTitle()}
+                </h1>
+                
+                {(activeModule === 'upload-trackers' || activeModule === 'project-dashboard') && selectedFileId && (
+                  <button
+                    onClick={() => setSelectedFileId(null)}
+                    className="ml-4 flex items-center space-x-1.5 px-4 py-2 bg-white hover:bg-gradient-to-r hover:from-rose-50 hover:to-sky-50 rounded-lg text-sm font-medium text-black transition-colors border border-indigo-200"
+                  >
+                    <span>Clear Selection</span>
+                    <ChevronRight className="h-4 w-4 text-indigo-400" />
+                  </button>
+                )}
+              </div>
+
+              {/* Right side - Date/Time and Profile */}
+              <div className="flex items-center space-x-6 min-w-[300px] justify-end">
+                {/* Date and Time - No icons, black text */}
+                <div className="flex items-center space-x-3 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-lg shadow-sm border border-indigo-100">
+                  <span className="text-sm font-medium text-black tabular-nums">{currentTime}</span>
+                  <span className="text-indigo-200">|</span>
+                  <span className="text-sm font-medium text-black">{currentDate}</span>
                 </div>
+
+                {/* Profile Menu with black background */}
                 <div className="relative" ref={profileMenuRef}>
                   <button
                     onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                    className="flex items-center justify-center w-12 h-12 rounded-full bg-[#E30613] text-white font-semibold text-lg"
+                    className="bg-black w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-base shadow-md hover:shadow-lg transition-all"
                   >
                     {getUserInitial()}
                   </button>
+
                   {profileMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
-                      <div className="px-4 py-3 border-b border-gray-100">
-                        <p className="font-semibold text-gray-900 truncate">{user?.full_name || 'User'}</p>
-                        <p className="text-sm text-gray-600 capitalize">{user?.role || 'User'}</p>
+                    <div 
+                      className="fixed z-[9999] w-72 bg-white rounded-xl shadow-lg border border-gray-200 py-2"
+                      style={{
+                        position: 'fixed',
+                        top: `${profileMenuPosition.top}px`,
+                        right: `${profileMenuPosition.right}px`
+                      }}
+                    >
+                      <div className="px-5 py-4">
+                        <div className="flex items-center space-x-4">
+                          <div className="bg-black w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-md flex-shrink-0">
+                            {getUserInitial()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-black text-lg truncate">{user?.full_name || 'User'}</p>
+                            <p className="text-sm text-gray-500 mt-1 truncate">{user?.email || 'user@example.com'}</p>
+                            <span className="inline-block mt-2 px-2.5 py-1 bg-gray-100 rounded-full text-xs font-medium text-gray-700 capitalize">
+                              {user?.role || 'User'}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <button
-                        onClick={() => { logout(); setProfileMenuOpen(false); }}
-                        className="w-full px-4 py-3 text-left text-gray-700 hover:bg-gray-100 flex items-center space-x-2"
-                      >
-                        <LogOut className="h-4 w-4" />
-                        <span>Logout</span>
-                      </button>
+                      
+                      {/* Menu Items */}
+                      <div className="py-2 border-t border-gray-100">
+                        <button className="w-full px-5 py-3 text-left text-sm text-black hover:bg-gray-50 flex items-center space-x-3">
+                          <User className="h-5 w-5 text-gray-500" />
+                          <span className="font-medium">Profile Settings</span>
+                        </button>
+                        <button className="w-full px-5 py-3 text-left text-sm text-black hover:bg-gray-50 flex items-center space-x-3">
+                          <Settings className="h-5 w-5 text-gray-500" />
+                          <span className="font-medium">Account Settings</span>
+                        </button>
+                      </div>
+                      
+                      <div className="border-t border-gray-100 py-2">
+                        <button
+                          onClick={() => { 
+                            logout(); 
+                            setProfileMenuOpen(false); 
+                          }}
+                          className="w-full px-5 py-3 text-left text-sm text-black hover:bg-gray-50 flex items-center space-x-3"
+                        >
+                          <LogOut className="h-5 w-5 text-gray-500" />
+                          <span className="font-semibold">Logout</span>
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -605,17 +1059,12 @@ const Dashboard = () => {
             </div>
           </header>
 
-          {/* Content Container */}
-          <main className={`flex-1 min-h-0 overflow-auto p-2 transition-opacity duration-300 ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}>
-            <div className="bg-white rounded-lg min-h-full w-full p-2">
-              {activeModule === 'upload-trackers' ? (
-                <UploadTrackers 
-                  selectedFileId={selectedFileId}
-                  onClearSelection={handleClearFileSelection}
-                />
-              ) : (
-                getActiveComponent()
-              )}
+          {/* Main Content */}
+          <main className="flex-1 min-h-0 overflow-hidden bg-white">
+            <div className={activeModule === 'project-dashboard' ? 'pl-6 pr-0.5 py-6 h-full' : 'p-6 h-full'}>
+              <div className="bg-white rounded-lg h-full overflow-auto">
+                {getActiveComponent()}
+              </div>
             </div>
           </main>
         </div>
