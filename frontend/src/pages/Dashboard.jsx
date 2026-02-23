@@ -306,6 +306,23 @@ const Dashboard = () => {
     return () => window.removeEventListener('openProjectDashboardFile', handleOpenProjectDashboardFile);
   }, [activeModule]);
 
+  // Handle upload tracker file open events
+  useEffect(() => {
+    const handleOpenUploadTrackerFile = (event) => {
+      const { trackerId, fileModule } = event.detail;
+      setSelectedFileId(trackerId);
+      
+      // Ensure upload trackers is active and expanded
+      if (activeModule !== 'upload-trackers') {
+        setActiveModule('upload-trackers');
+      }
+      setExpandedModules(prev => ({ ...prev, 'upload-trackers': true }));
+    };
+
+    window.addEventListener('openUploadTrackerFile', handleOpenUploadTrackerFile);
+    return () => window.removeEventListener('openUploadTrackerFile', handleOpenUploadTrackerFile);
+  }, [activeModule]);
+
   // Masters submodules
   const mastersSubmodules = [
     { id: 'employee-master', name: 'Employee Master', component: <EmployeeMaster />, icon: <Users className="h-5 w-5" />, color: '#000000' },
@@ -392,9 +409,41 @@ const Dashboard = () => {
   };
 
   // ==========================================================================
-  // HANDLE MODULE CLICK
+  // HANDLE MODULE CLICK - FIXED VERSION
   // ==========================================================================
   const handleModuleClick = (moduleId) => {
+    // Check if it's a project file/module first
+    for (const proj of projectDashboardModules) {
+      // Check if it's a file within a project
+      const file = proj.submodules?.find(s => s.id === moduleId || s.trackerId === moduleId);
+      if (file) {
+        handleProjectFileClick(file);
+        return;
+      }
+      
+      // Check if it's a project module itself
+      if (proj.id === moduleId) {
+        toggleModuleExpansion(`project-dashboard-${proj.id}`);
+        return;
+      }
+    }
+
+    // Check upload tracker files
+    for (const proj of uploadTrackerModules) {
+      const file = proj.submodules?.find(s => s.id === moduleId || s.trackerId === moduleId);
+      if (file) {
+        handleFileModuleClick(file);
+        return;
+      }
+      
+      // Check if it's a project module itself
+      if (proj.id === moduleId) {
+        toggleModuleExpansion(`upload-trackers-${proj.id}`);
+        return;
+      }
+    }
+
+    // If not found in dynamic modules, handle as regular module
     setActiveModule(moduleId);
     
     // Clear selected file ID when switching away from project-dashboard or upload-trackers
@@ -437,6 +486,17 @@ const Dashboard = () => {
   const handleFileModuleClick = (fileModule) => {
     setActiveModule('upload-trackers');
     setSelectedFileId(fileModule.trackerId);
+    
+    // Dispatch event for UploadTrackers to handle
+    window.dispatchEvent(new CustomEvent('openUploadTrackerFile', { 
+      detail: { 
+        trackerId: fileModule.trackerId,
+        fileModule: fileModule
+      } 
+    }));
+    
+    // Ensure upload trackers is expanded
+    setExpandedModules(prev => ({ ...prev, 'upload-trackers': true }));
   };
 
   const handleProjectFileClick = (fileModule) => {
@@ -453,10 +513,14 @@ const Dashboard = () => {
     }));
     
     // Ensure we're on project dashboard and it's expanded
-    if (activeModule !== 'project-dashboard') {
-      setActiveModule('project-dashboard');
-    }
+    setActiveModule('project-dashboard');
     setExpandedModules(prev => ({ ...prev, 'project-dashboard': true }));
+  };
+
+  const handleProjectModuleClick = (projectModule, context) => {
+    // Just toggle expansion, don't change active module
+    const uniqueId = `${context}-${projectModule.id}`;
+    toggleModuleExpansion(uniqueId);
   };
 
   // ==========================================================================
@@ -721,7 +785,10 @@ const Dashboard = () => {
           <div
             onMouseEnter={() => setHoveredModule(uniqueId)}
             onMouseLeave={() => setHoveredModule(null)}
-            onClick={(e) => toggleModuleExpansion(uniqueId, e)}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleProjectModuleClick(projectModule, context);
+            }}
             className={`flex-1 flex items-center space-x-2.5 rounded-lg px-3 py-2.5 transition-all duration-300 cursor-pointer ${
               isHovered 
                 ? 'bg-white/90 text-black shadow-sm' 

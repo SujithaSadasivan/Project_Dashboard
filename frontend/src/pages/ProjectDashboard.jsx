@@ -23,23 +23,23 @@ import {
 
 import FileContentViewer from './Trackers/FileContentViewer';
 
-// Dummy data for milestones - Updated structure with Plan and Actual/Outlook
+// Updated dummy data for milestones - Now with L0drg and L1 drg
 const DUMMY_MILESTONES = [
-  { id: 1, name: 'Requirements Gathering', plan: '2024-03-15', actual: '2024-03-14', outlook: 'Completed', status: 'Completed' },
-  { id: 2, name: 'Design Phase', plan: '2024-04-01', actual: '2024-03-28', outlook: '2024-04-05', status: 'Ahead' },
-  { id: 3, name: 'Development Sprint 1', plan: '2024-04-30', actual: 'In Progress', outlook: '2024-05-05', status: 'At Risk' },
-  { id: 4, name: 'QA Testing', plan: '2024-05-15', actual: 'Not Started', outlook: '2024-05-20', status: 'Pending' },
-  { id: 5, name: 'User Acceptance Testing', plan: '2024-05-30', actual: 'Not Started', outlook: '2024-06-05', status: 'Pending' },
-  { id: 6, name: 'Production Release', plan: '2024-06-15', actual: 'Not Started', outlook: '2024-06-20', status: 'Planned' },
+  { id: 1, name: 'Requirements Gathering', l0drg: '2024-03-15', l1drg: '2024-03-14', actual: '2024-03-14', outlook: 'Completed', status: 'Completed' },
+  { id: 2, name: 'Design Phase', l0drg: '2024-04-01', l1drg: '2024-03-28', actual: '2024-03-28', outlook: '2024-04-05', status: 'Ahead' },
+  { id: 3, name: 'Development Sprint 1', l0drg: '2024-04-30', l1drg: '2024-05-05', actual: 'In Progress', outlook: '2024-05-05', status: 'At Risk' },
+  { id: 4, name: 'QA Testing', l0drg: '2024-05-15', l1drg: '2024-05-20', actual: 'Not Started', outlook: '2024-05-20', status: 'Pending' },
+  { id: 5, name: 'User Acceptance Testing', l0drg: '2024-05-30', l1drg: '2024-06-05', actual: 'Not Started', outlook: '2024-06-05', status: 'Pending' },
+  { id: 6, name: 'Production Release', l0drg: '2024-06-15', l1drg: '2024-06-20', actual: 'Not Started', outlook: '2024-06-20', status: 'Planned' },
 ];
 
-// Dummy data for critical issues
+// Updated dummy data for critical issues - New structure
 const DUMMY_ISSUES = [
-  { id: 1, title: 'Database connection timeout', severity: 'High', status: 'In Progress', assignee: 'John Doe', dueDate: '2024-03-20' },
-  { id: 2, title: 'API rate limiting exceeded', severity: 'Critical', status: 'Open', assignee: 'Jane Smith', dueDate: '2024-03-18' },
-  { id: 3, title: 'Memory leak in production', severity: 'Critical', status: 'In Progress', assignee: 'Mike Johnson', dueDate: '2024-03-19' },
-  { id: 4, title: 'UI rendering issue on mobile', severity: 'Medium', status: 'Open', assignee: 'Sarah Wilson', dueDate: '2024-03-25' },
-  { id: 5, title: 'Security vulnerability in auth', severity: 'Critical', status: 'Open', assignee: 'Security Team', dueDate: '2024-03-17' },
+  { id: 1, sno: 1, issue: 'Database connection timeout', resp: 'John Doe', supportRequired: 'Database team assistance', fromWhom: 'DBA Team', status: 'In Progress' },
+  { id: 2, sno: 2, issue: 'API rate limiting exceeded', resp: 'Jane Smith', supportRequired: 'API gateway configuration', fromWhom: 'Infra Team', status: 'Open' },
+  { id: 3, sno: 3, issue: 'Memory leak in production', resp: 'Mike Johnson', supportRequired: 'Memory profiling tools', fromWhom: 'DevOps', status: 'In Progress' },
+  { id: 4, sno: 4, issue: 'UI rendering issue on mobile', resp: 'Sarah Wilson', supportRequired: 'Mobile testing devices', fromWhom: 'QA Team', status: 'Open' },
+  { id: 5, sno: 5, issue: 'Security vulnerability in auth', resp: 'Security Team', supportRequired: 'Security audit', fromWhom: 'External Consultant', status: 'Open' },
 ];
 
 // Enhanced Custom Tooltip with better formatting
@@ -79,7 +79,7 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
-// MODIFIED: Stage Configuration Modal - Now accepts stage-specific columns
+// Stage Configuration Modal - Now accepts stage-specific columns
 const StageConfigModal = ({ stage, isOpen, onClose, departmentColumns, stageSpecificColumns, onSave, currentConfig }) => {
   const [xAxis, setXAxis] = useState(currentConfig?.xAxis || '');
   const [yAxis, setYAxis] = useState(currentConfig?.yAxis || '');
@@ -436,14 +436,14 @@ const MiniChart = ({ chartData, statusDistribution, chartType = 'bar' }) => {
   );
 };
 
-// FIXED: Dashboard Configuration Modal - Now starts with all options unselected
+// Dashboard Configuration Modal - Now starts with all options unselected
 const DashboardConfigModal = ({ isOpen, onClose, onApply, selectedProject, projectStages, currentConfig }) => {
   const [showMilestones, setShowMilestones] = useState(false);
   const [showCriticalIssues, setShowCriticalIssues] = useState(false);
   const [showMetrics, setShowMetrics] = useState(false);
   const [selectedMetrics, setSelectedMetrics] = useState([]);
 
-  // FIXED: Always reset to unselected when modal opens
+  // Always reset to unselected when modal opens
   React.useEffect(() => {
     if (isOpen) {
       // Always reset to unchecked when modal opens
@@ -452,7 +452,7 @@ const DashboardConfigModal = ({ isOpen, onClose, onApply, selectedProject, proje
       setShowMetrics(false);
       setSelectedMetrics([]);
     }
-  }, [isOpen]); // Removed currentConfig dependency to ensure it always resets
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -819,15 +819,11 @@ const ProjectDashboard = () => {
     return rows;
   };
 
-  // ==========================================================================
-  // UPDATED: Extract headers from the table display (what user sees in UI)
-  // This now prioritizes the displayHeaders which come from the "Add New Column" and "Manage Columns" UI
-  // ==========================================================================
+  // Extract headers from the table display (what user sees in UI)
   const extractHeadersFromFileData = (fileData) => {
     console.log('📊 Extracting headers from table display for:', fileData?.fileName);
     
     // PRIORITY 1: Get headers from the table display (what user configured in UI)
-    // This comes from the columns that are visible in the table after "Add New Column" and "Manage Columns"
     if (fileData.displayHeaders && Array.isArray(fileData.displayHeaders)) {
       console.log('✅ Using display headers from table UI:', fileData.displayHeaders);
       const cleanedHeaders = fileData.displayHeaders
@@ -1122,7 +1118,7 @@ const ProjectDashboard = () => {
     }
   };
 
-  // FIXED: handleProjectSelect function - Now resets dashboard config to all unselected
+  // handleProjectSelect function - Now resets dashboard config to all unselected
   const handleProjectSelect = (projectId) => {
     const project = projectModules.find(p => p.id === projectId);
     setSelectedProjectId(projectId);
@@ -1152,7 +1148,7 @@ const ProjectDashboard = () => {
       
       console.log('Dynamic stages created:', dynamicStages);
       
-      // FIXED: Reset dashboard config to all unchecked when selecting a new project
+      // Reset dashboard config to all unchecked when selecting a new project
       setDashboardConfig({
         milestones: false,
         criticalIssues: false,
@@ -1195,7 +1191,7 @@ const ProjectDashboard = () => {
       const columns = extractColumnsFromFiles(files);
       setDepartmentColumns(columns);
       
-      // CRITICAL FIX: Extract columns for each specific stage
+      // Extract columns for each specific stage
       const stageColumnsMap = {};
       
       // Now dynamicStages is accessible here because we declared it outside
@@ -1316,7 +1312,7 @@ const ProjectDashboard = () => {
     setStageChartTypes({});
     setSelectedEmployees([]);
     
-    // FIXED: Reset dashboard config to all unchecked
+    // Reset dashboard config to all unchecked
     setDashboardConfig({
       milestones: false,
       criticalIssues: false,
@@ -1394,7 +1390,7 @@ const ProjectDashboard = () => {
     const columns = extractColumnsFromFiles(updatedFiles);
     setDepartmentColumns(columns);
     
-    // FIXED: Update stage-specific columns for the affected file
+    // Update stage-specific columns for the affected file
     const updatedStageColumns = { ...stageSpecificColumns };
     Object.keys(stageSpecificColumns).forEach(stageId => {
       const stage = projectStages.find(s => s.id === stageId);
@@ -1576,7 +1572,7 @@ const ProjectDashboard = () => {
     });
   };
 
-  // FIXED: Handle save file data - update stage-specific columns
+  // Handle save file data - update stage-specific columns
   const handleSaveFileData = (trackerId, updatedFileData) => {
     console.log('💾 SAVING FILE DATA - Tracker:', trackerId);
     console.log('Updated display headers:', updatedFileData?.displayHeaders);
@@ -1612,7 +1608,7 @@ const ProjectDashboard = () => {
       const columns = extractColumnsFromFiles(files);
       setDepartmentColumns(columns);
       
-      // FIXED: Update stage-specific columns for the affected file
+      // Update stage-specific columns for the affected file
       const updatedStageColumns = { ...stageSpecificColumns };
       Object.keys(stageSpecificColumns).forEach(stageId => {
         const stage = projectStages.find(s => s.id === stageId);
@@ -1746,29 +1742,30 @@ const ProjectDashboard = () => {
 
                 {/* Content Area - Conditionally rendered based on dashboard config */}
                 <div className="p-6 space-y-8">
-                  {/* Milestones Section */}
+                  {/* UPDATED: Milestones Section with New Table Format */}
                   {dashboardConfig.milestones && (
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                        Major Milestones
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                        <span>Major Milestones</span>
+                        <span className="ml-4 text-sm font-normal text-gray-500">(as of March 2024)</span>
                       </h3>
-                      <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                      <div className="overflow-x-auto border border-gray-200 rounded-lg shadow-sm">
                         <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-blue-50">
+                          <thead className="bg-gray-100">
                             <tr>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider w-1/4">Milestone</th>
-                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider w-1/4">Plan</th>
-                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider w-1/4">Actual/Outlook</th>
-                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider w-1/4">Status</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200 w-1/4">Major Milestones</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200 w-1/4">L0 drg</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200 w-1/4">L1 drg</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider w-1/4">Status</th>
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
                             {DUMMY_MILESTONES.map((milestone) => (
                               <tr key={milestone.id} className="hover:bg-gray-50">
-                                <td className="px-4 py-3 text-sm text-gray-900 font-medium">{milestone.name}</td>
-                                <td className="px-4 py-3 text-sm text-gray-600 text-center">{milestone.plan}</td>
-                                <td className="px-4 py-3 text-sm text-gray-600 text-center">{milestone.actual}</td>
-                                <td className="px-4 py-3 text-center">
+                                <td className="px-4 py-3 text-sm font-medium text-gray-900 border-r border-gray-200">{milestone.name}</td>
+                                <td className="px-4 py-3 text-sm text-gray-600 border-r border-gray-200">{milestone.l0drg}</td>
+                                <td className="px-4 py-3 text-sm text-gray-600 border-r border-gray-200">{milestone.l1drg}</td>
+                                <td className="px-4 py-3">
                                   <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium
                                     ${milestone.status === 'Completed' ? 'bg-green-100 text-green-800' : 
                                       milestone.status === 'Ahead' ? 'bg-blue-100 text-blue-800' :
@@ -1783,51 +1780,55 @@ const ProjectDashboard = () => {
                           </tbody>
                         </table>
                       </div>
+                      {/* Empty attached table placeholder */}
+                      <div className="mt-4 border border-gray-200 rounded-lg bg-gray-50 p-4 text-center text-gray-400 text-sm">
+                        <Table className="h-5 w-5 mx-auto mb-1 text-gray-300" />
+                        <span>Additional data table placeholder</span>
+                      </div>
                     </div>
                   )}
 
-                  {/* Critical Issues Section */}
+                  {/* UPDATED: Critical Issues Section with New Table Format */}
                   {dashboardConfig.criticalIssues && (
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                        Critical Issues
-                      </h3>
-                      <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Critical Issues</h3>
+                      <div className="overflow-x-auto border border-gray-200 rounded-lg shadow-sm">
                         <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-blue-50">
+                          <thead className="bg-gray-100">
                             <tr>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Issue</th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Severity</th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Status</th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Assignee</th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Due Date</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200 w-12">S.No.</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200">Issues</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200 w-32">Resp</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200">Support Required</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200 w-32">From whom</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider w-24">Status</th>
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
                             {DUMMY_ISSUES.map((issue) => (
                               <tr key={issue.id} className="hover:bg-gray-50">
-                                <td className="px-4 py-3 text-sm text-gray-900">{issue.title}</td>
-                                <td className="px-4 py-3">
-                                                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium
-                                    ${issue.severity === 'Critical' ? 'bg-red-100 text-red-800' : 
-                                      issue.severity === 'High' ? 'bg-orange-100 text-orange-800' :
-                                      'bg-yellow-100 text-yellow-800'}`}>
-                                    {issue.severity}
-                                  </span>
-                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600 border-r border-gray-200">{issue.sno}</td>
+                                <td className="px-4 py-3 text-sm text-gray-900 border-r border-gray-200">{issue.issue}</td>
+                                <td className="px-4 py-3 text-sm text-gray-600 border-r border-gray-200">{issue.resp}</td>
+                                <td className="px-4 py-3 text-sm text-gray-600 border-r border-gray-200">{issue.supportRequired}</td>
+                                <td className="px-4 py-3 text-sm text-gray-600 border-r border-gray-200">{issue.fromWhom}</td>
                                 <td className="px-4 py-3">
                                   <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium
                                     ${issue.status === 'In Progress' ? 'bg-blue-100 text-blue-800' : 
+                                      issue.status === 'Open' ? 'bg-orange-100 text-orange-800' :
                                       'bg-gray-100 text-gray-800'}`}>
                                     {issue.status}
                                   </span>
                                 </td>
-                                <td className="px-4 py-3 text-sm text-gray-600">{issue.assignee}</td>
-                                <td className="px-4 py-3 text-sm text-gray-600">{issue.dueDate}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
+                      </div>
+                      {/* Empty attached table placeholder */}
+                      <div className="mt-4 border border-gray-200 rounded-lg bg-gray-50 p-4 text-center text-gray-400 text-sm">
+                        <Table className="h-5 w-5 mx-auto mb-1 text-gray-300" />
+                        <span>Additional data table placeholder</span>
                       </div>
                     </div>
                   )}
@@ -1973,7 +1974,7 @@ const ProjectDashboard = () => {
         />
       )}
 
-      {/* FIXED: Stage Configuration Modal - Now passes stage-specific columns */}
+      {/* Stage Configuration Modal - Now passes stage-specific columns */}
       {configuringStage && (
         <StageConfigModal
           stage={configuringStage}
