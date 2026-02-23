@@ -24,7 +24,8 @@ def get_dataset_df(dataset: Dataset, db: Session) -> pd.DataFrame:
     """Helper to get DataFrame from either dynamic table or legacy DatasetRow"""
     if dataset.table_name:
         try:
-            return pd.read_sql_table(dataset.table_name, engine.connect())
+            with engine.begin() as conn:
+                return pd.read_sql_table(dataset.table_name, conn)
         except Exception as e:
             print(f"Error reading table {dataset.table_name}: {e}")
             return pd.DataFrame()
@@ -67,7 +68,19 @@ def get_excel_view(dataset_id: int, db: Session = Depends(get_db)):
     )
 
     headers = [c.column_name for c in columns]
-    df = get_dataset_df(dataset, db)
+    if dataset.table_name:
+        try:
+            with engine.begin() as conn:
+                df = pd.read_sql_query(text(f'SELECT * FROM "{dataset.table_name}" LIMIT 1000'), conn)
+        except Exception as e:
+            print(f"Error reading table {dataset.table_name}: {e}")
+            df = pd.DataFrame()
+    else:
+        rows = db.query(DatasetRow).filter_by(dataset_id=dataset_id).limit(1000).all()
+        if rows:
+            df = pd.DataFrame([r.row_data for r in rows])
+        else:
+            df = pd.DataFrame()
     
     if not df.empty:
         # If headers logic is out of sync, trust the DF
@@ -154,11 +167,22 @@ def get_chart_data(
     if not dataset:
         return {"x": [], "y": [], "count": 0}
 
-    df = get_dataset_df(dataset, db)
     x_vals = []
     y_vals = []
+    
+    if dataset.table_name:
+        try:
+            with engine.begin() as conn:
+                # Need to quote the column names in case they have spaces
+                query = text(f'SELECT "{x}", "{y}" FROM "{dataset.table_name}"')
+                df = pd.read_sql_query(query, conn)
+        except Exception as e:
+            print(f"Error fetching chart data: {e}")
+            df = pd.DataFrame()
+    else:
+        df = get_dataset_df(dataset, db)
 
-    if x in df.columns and y in df.columns:
+    if not df.empty and x in df.columns and y in df.columns:
         # Filter for valid numeric Y values
         df_valid = df[pd.to_numeric(df[y], errors='coerce').notna()]
         x_vals = df_valid[x].tolist()
@@ -333,8 +357,23 @@ def get_data(dataset_id: int, db: Session = Depends(get_db)):
     if not dataset:
         return []
     
-    df = get_dataset_df(dataset, db)
-    return df.head(1000).fillna("").to_dict(orient='records')
+    # For dynamic tables, query only the first 1000 rows from the database directly
+    if dataset.table_name:
+        try:
+            with engine.begin() as conn:
+                query = text(f'SELECT * FROM "{dataset.table_name}" LIMIT 1000')
+                df = pd.read_sql_query(query, conn)
+                return df.fillna("").to_dict(orient='records')
+        except Exception as e:
+            print(f"Error fetching data: {e}")
+            return []
+
+    # Fallback for legacy datasets
+    rows = db.query(DatasetRow).filter_by(dataset_id=dataset_id).limit(1000).all()
+    if rows:
+        df = pd.DataFrame([r.row_data for r in rows])
+        return df.fillna("").to_dict(orient='records')
+    return []
 
 class UpdateDatasetMetadataRequest(BaseModel):
     project: Optional[str] = None
