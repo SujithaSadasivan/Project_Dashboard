@@ -102,7 +102,7 @@ const FileContentViewer = ({ fileData, trackerInfo, onClose, onSaveData }) => {
                     {selectAll ? (
                       <Check className="h-4 w-4 text-white" />
                     ) : (
-                      <Square className="h-4 w-4 text-white" />
+                      <div className="h-4 w-4 border border-white rounded" />
                     )}
                   </button>
                 )}
@@ -123,7 +123,7 @@ const FileContentViewer = ({ fileData, trackerInfo, onClose, onSaveData }) => {
                       {selectedRows.has(rowIndex) ? (
                         <Check className="h-4 w-4 text-blue-600" />
                       ) : (
-                        <Square className="h-4 w-4 text-gray-400" />
+                        <div className="h-4 w-4 border border-gray-300 rounded" />
                       )}
                     </button>
                   )}
@@ -229,40 +229,21 @@ const FileContentViewer = ({ fileData, trackerInfo, onClose, onSaveData }) => {
   );
 };
 
-// Helper function to get icon for each master module
+// Helper function to get icon for each master module - keeping gray icons
 const getMasterIcon = (masterName) => {
   const iconMap = {
-    'Employee Master': <Users className="h-5 w-5" />,
-    'Employee Access': <UserCog className="h-5 w-5" />,
-    'Project Master': <Briefcase className="h-5 w-5" />,
-    'Part Master': <Package className="h-5 w-5" />,
-    'Department Master': <Building className="h-5 w-5" />
+    'Employee Master': <Users className="h-5 w-5 text-gray-600" />,
+    'Employee Access': <UserCog className="h-5 w-5 text-gray-600" />,
+    'Project Master': <Briefcase className="h-5 w-5 text-gray-600" />,
+    'Part Master': <Package className="h-5 w-5 text-gray-600" />,
+    'Department Master': <Building className="h-5 w-5 text-gray-600" />
   };
-  return iconMap[masterName] || <Database className="h-5 w-5" />;
+  return iconMap[masterName] || <Database className="h-5 w-5 text-gray-600" />;
 };
 
-// Helper function to get gradient colors
-const getMasterGradient = (masterName) => {
-  const gradientMap = {
-    'Employee Master': 'from-blue-500 to-indigo-600',
-    'Employee Access': 'from-purple-500 to-purple-700',
-    'Project Master': 'from-emerald-500 to-teal-600',
-    'Part Master': 'from-amber-500 to-orange-600',
-    'Department Master': 'from-rose-500 to-pink-600'
-  };
-  return gradientMap[masterName] || 'from-gray-600 to-gray-800';
-};
-
-// Helper function to get accent color for each master module
-const getMasterAccentColor = (masterName) => {
-  const colorMap = {
-    'Employee Master': 'blue',
-    'Employee Access': 'purple',
-    'Project Master': 'emerald',
-    'Part Master': 'amber',
-    'Department Master': 'rose'
-  };
-  return colorMap[masterName] || 'gray';
+// Helper function to get light blue gradient for headers and buttons
+const getLightBlueGradient = () => {
+  return 'from-blue-50 to-blue-100';
 };
 
 // Main Masters Component
@@ -289,9 +270,6 @@ const Masters = () => {
       id: 1,
       name: 'Employee Master',
       masterModuleId: 'employee-master',
-      color: 'bg-blue-600',
-      gradient: 'from-blue-600 to-indigo-700',
-      accentColor: 'blue',
       type: 'master',
       description: 'Manage employee information and records'
     },
@@ -299,9 +277,6 @@ const Masters = () => {
       id: 2,
       name: 'Employee Access',
       masterModuleId: 'employee-access',
-      color: 'bg-purple-600',
-      gradient: 'from-purple-600 to-purple-800',
-      accentColor: 'purple',
       type: 'master',
       description: 'Configure employee access permissions'
     },
@@ -309,9 +284,6 @@ const Masters = () => {
       id: 3,
       name: 'Project Master',
       masterModuleId: 'project-master',
-      color: 'bg-emerald-600',
-      gradient: 'from-emerald-600 to-teal-700',
-      accentColor: 'emerald',
       type: 'master',
       description: 'Manage project portfolios and timelines'
     },
@@ -319,9 +291,6 @@ const Masters = () => {
       id: 4,
       name: 'Part Master',
       masterModuleId: 'part-master',
-      color: 'bg-amber-600',
-      gradient: 'from-amber-600 to-orange-700',
-      accentColor: 'amber',
       type: 'master',
       description: 'Catalog parts and inventory items'
     },
@@ -329,9 +298,6 @@ const Masters = () => {
       id: 5,
       name: 'Department Master',
       masterModuleId: 'department-master',
-      color: 'bg-rose-600',
-      gradient: 'from-rose-600 to-pink-700',
-      accentColor: 'rose',
       type: 'master',
       description: 'Organize departmental structures'
     }
@@ -512,14 +478,14 @@ const Masters = () => {
     const ext = fileName.split('.').pop().toLowerCase();
     switch(ext) {
       case 'csv':
-        return <FileSpreadsheet className="h-4 w-4 text-emerald-600" />;
+        return <FileSpreadsheet className="h-4 w-4 text-gray-600" />;
       case 'xlsx':
       case 'xls':
-        return <FileSpreadsheet className="h-4 w-4 text-green-600" />;
+        return <FileSpreadsheet className="h-4 w-4 text-gray-600" />;
       case 'json':
-        return <Database className="h-4 w-4 text-purple-600" />;
+        return <Database className="h-4 w-4 text-gray-600" />;
       default:
-        return <FileText className="h-4 w-4 text-blue-600" />;
+        return <FileText className="h-4 w-4 text-gray-600" />;
     }
   };
 
@@ -566,11 +532,11 @@ const Masters = () => {
         </div>
       )}
       
-      {/* Masters Grid - Movable Cards */}
+      {/* Masters Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {dynamicModules.map((master, index) => {
-          const accentColor = master.accentColor;
           const fileCount = master.submodules?.length || 0;
+          const lightBlueGradient = getLightBlueGradient();
           
           return (
             <div
@@ -578,7 +544,7 @@ const Masters = () => {
               className={`
                 draggable-module group relative bg-white rounded-xl shadow-sm border border-gray-200 
                 overflow-hidden transition-all duration-300 cursor-move
-                ${hoveredModule === master.id ? 'shadow-lg ring-2 ring-gray-200' : ''}
+                ${hoveredModule === master.id ? 'shadow-md ring-1 ring-gray-300' : ''}
                 ${draggedModule === index ? 'opacity-50 scale-95' : ''}
               `}
               draggable={true}
@@ -590,111 +556,46 @@ const Masters = () => {
               onMouseLeave={() => setHoveredModule(null)}
             >
               {/* Drag Handle */}
-              <div className="absolute top-2 left-2 p-1 bg-gray-100/50 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                <GripVertical className="h-4 w-4 text-gray-500" />
+              <div className="absolute top-2 left-2 p-1 bg-white/80 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                <GripVertical className="h-4 w-4 text-gray-600" />
               </div>
 
-              {/* Master Header - Clickable */}
-              <div 
-                className={`relative bg-gradient-to-r ${master.gradient} p-4 cursor-pointer hover:opacity-90 transition-opacity overflow-hidden`}
-                onClick={() => handleModuleClick(master)}
-              >
-                {/* Animated background pattern */}
-                <div className="absolute inset-0 opacity-10">
-                  <div className="absolute -right-8 -top-8 w-32 h-32 bg-white rounded-full"></div>
-                  <div className="absolute -right-4 -bottom-8 w-40 h-40 bg-white rounded-full"></div>
-                  <div className="absolute left-4 top-4 w-16 h-16 bg-white rounded-full"></div>
-                </div>
-                
-                <div className="relative flex items-start justify-between">
+              {/* Master Header - Light blue gradient */}
+              <div className={`bg-gradient-to-r ${lightBlueGradient} p-4 border-b border-gray-200`}>
+                <div className="flex items-start">
                   <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <div className="p-1.5 bg-white/20 rounded-lg backdrop-blur-sm">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-white rounded-lg shadow-sm">
                         {getMasterIcon(master.name)}
                       </div>
-                      <h3 className="text-lg font-bold text-white tracking-tight">
-                        {master.name}
-                      </h3>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-800">
+                          {master.name}
+                        </h3>
+                        {master.description && (
+                          <p className="text-gray-500 text-xs mt-0.5">
+                            {master.description}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    {master.description && (
-                      <p className="text-white/80 text-xs mt-1 line-clamp-1">
-                        {master.description}
-                      </p>
-                    )}
                   </div>
                 </div>
               </div>
               
-              {/* Content - Files List */}
+              {/* Action Button - Now also in light blue gradient */}
               <div className="p-4 bg-white">
-                {fileCount > 0 ? (
-                  <div className="space-y-2">
-                    {master.submodules.slice(0, 3).map((file) => (
-                      <div
-                        key={file.id}
-                        onClick={(e) => handleFileClick(file, e)}
-                        className={`flex items-center justify-between p-2 bg-gray-50 rounded-lg hover:bg-${accentColor}-50 transition-colors cursor-pointer group/file`}
-                      >
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <div className={`p-1.5 bg-white rounded group-hover/file:bg-${accentColor}-100 transition-colors`}>
-                            {getFileIcon(file.name)}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">
-                              {file.name.replace(/\.[^/.]+$/, '')}
-                            </p>
-                          </div>
-                        </div>
-                        <Eye className={`h-4 w-4 text-gray-400 group-hover/file:text-${accentColor}-600 flex-shrink-0`} />
-                      </div>
-                    ))}
-                    
-                    {fileCount > 3 && (
-                      <div 
-                        className="relative"
-                        onClick={() => handleModuleClick(master)}
-                      >
-                        <button 
-                          className="w-full mt-1 px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg text-xs font-medium text-gray-700 transition-colors flex items-center justify-center"
-                        >
-                          View all {fileCount} files
-                          <ChevronRight className="h-3 w-3 ml-1" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-6 bg-gray-50 rounded-lg">
-                    {/* Empty state */}
-                  </div>
-                )}
-                
-                {/* Action Button */}
-                <div className="flex items-center justify-between pt-3 mt-2 border-t border-gray-100">
-                  <div className="flex items-center space-x-2">
-                    <div className={`w-1.5 h-1.5 rounded-full bg-${accentColor}-500`}></div>
-                    <span className="text-xs text-gray-500">
-                      Last: {fileCount > 0 ? formatDate(master.submodules[0]?.uploadDate) : 'Never'}
-                    </span>
-                  </div>
-                  
+                <div className="flex justify-end">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       handleOpenModule(master.masterModuleId);
                     }}
-                    className={`
-                      inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium 
-                      transition-all duration-200 hover:scale-105
-                      ${fileCount > 0 
-                        ? `bg-${accentColor}-50 text-${accentColor}-700 hover:bg-${accentColor}-100 border border-${accentColor}-200` 
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
-                      }
-                    `}
+                    className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-gradient-to-r ${lightBlueGradient} text-gray-700 hover:opacity-90 border border-gray-200`}
                   >
-                    <FolderOpen className="h-3 w-3 mr-1" />
-                    Open
-                    <ChevronRight className="h-3 w-3 ml-0.5 opacity-70" />
+                    <FolderOpen className="h-4 w-4 mr-2 text-gray-600" />
+                    Open Module
+                    <ChevronRight className="h-4 w-4 ml-1 text-gray-600" />
                   </button>
                 </div>
               </div>

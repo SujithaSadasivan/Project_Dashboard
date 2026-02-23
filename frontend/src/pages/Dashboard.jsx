@@ -165,8 +165,8 @@ const Dashboard = () => {
       }))
     }));
     
-    setUploadTrackerModules(capitalizedUploadModules);
     setProjectDashboardModules(capitalizedProjectModules);
+    setUploadTrackerModules(capitalizedUploadModules);
   };
 
   useEffect(() => {
@@ -306,6 +306,23 @@ const Dashboard = () => {
     return () => window.removeEventListener('openProjectDashboardFile', handleOpenProjectDashboardFile);
   }, [activeModule]);
 
+  // Handle upload tracker file open events
+  useEffect(() => {
+    const handleOpenUploadTrackerFile = (event) => {
+      const { trackerId, fileModule } = event.detail;
+      setSelectedFileId(trackerId);
+      
+      // Ensure upload trackers is active and expanded
+      if (activeModule !== 'upload-trackers') {
+        setActiveModule('upload-trackers');
+      }
+      setExpandedModules(prev => ({ ...prev, 'upload-trackers': true }));
+    };
+
+    window.addEventListener('openUploadTrackerFile', handleOpenUploadTrackerFile);
+    return () => window.removeEventListener('openUploadTrackerFile', handleOpenUploadTrackerFile);
+  }, [activeModule]);
+
   // Masters submodules
   const mastersSubmodules = [
     { id: 'employee-master', name: 'Employee Master', component: <EmployeeMaster />, icon: <Users className="h-5 w-5" />, color: '#000000' },
@@ -392,9 +409,41 @@ const Dashboard = () => {
   };
 
   // ==========================================================================
-  // HANDLE MODULE CLICK
+  // HANDLE MODULE CLICK - FIXED VERSION
   // ==========================================================================
   const handleModuleClick = (moduleId) => {
+    // Check if it's a project file/module first
+    for (const proj of projectDashboardModules) {
+      // Check if it's a file within a project
+      const file = proj.submodules?.find(s => s.id === moduleId || s.trackerId === moduleId);
+      if (file) {
+        handleProjectFileClick(file);
+        return;
+      }
+      
+      // Check if it's a project module itself
+      if (proj.id === moduleId) {
+        toggleModuleExpansion(`project-dashboard-${proj.id}`);
+        return;
+      }
+    }
+
+    // Check upload tracker files
+    for (const proj of uploadTrackerModules) {
+      const file = proj.submodules?.find(s => s.id === moduleId || s.trackerId === moduleId);
+      if (file) {
+        handleFileModuleClick(file);
+        return;
+      }
+      
+      // Check if it's a project module itself
+      if (proj.id === moduleId) {
+        toggleModuleExpansion(`upload-trackers-${proj.id}`);
+        return;
+      }
+    }
+
+    // If not found in dynamic modules, handle as regular module
     setActiveModule(moduleId);
     
     // Clear selected file ID when switching away from project-dashboard or upload-trackers
@@ -437,6 +486,17 @@ const Dashboard = () => {
   const handleFileModuleClick = (fileModule) => {
     setActiveModule('upload-trackers');
     setSelectedFileId(fileModule.trackerId);
+    
+    // Dispatch event for UploadTrackers to handle
+    window.dispatchEvent(new CustomEvent('openUploadTrackerFile', { 
+      detail: { 
+        trackerId: fileModule.trackerId,
+        fileModule: fileModule
+      } 
+    }));
+    
+    // Ensure upload trackers is expanded
+    setExpandedModules(prev => ({ ...prev, 'upload-trackers': true }));
   };
 
   const handleProjectFileClick = (fileModule) => {
@@ -453,10 +513,14 @@ const Dashboard = () => {
     }));
     
     // Ensure we're on project dashboard and it's expanded
-    if (activeModule !== 'project-dashboard') {
-      setActiveModule('project-dashboard');
-    }
+    setActiveModule('project-dashboard');
     setExpandedModules(prev => ({ ...prev, 'project-dashboard': true }));
+  };
+
+  const handleProjectModuleClick = (projectModule, context) => {
+    // Just toggle expansion, don't change active module
+    const uniqueId = `${context}-${projectModule.id}`;
+    toggleModuleExpansion(uniqueId);
   };
 
   // ==========================================================================
@@ -721,7 +785,10 @@ const Dashboard = () => {
           <div
             onMouseEnter={() => setHoveredModule(uniqueId)}
             onMouseLeave={() => setHoveredModule(null)}
-            onClick={(e) => toggleModuleExpansion(uniqueId, e)}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleProjectModuleClick(projectModule, context);
+            }}
             className={`flex-1 flex items-center space-x-2.5 rounded-lg px-3 py-2.5 transition-all duration-300 cursor-pointer ${
               isHovered 
                 ? 'bg-white/90 text-black shadow-sm' 
@@ -839,6 +906,62 @@ const Dashboard = () => {
     });
   };
 
+  // Profile Menu Component rendered with Portal
+  const ProfileMenu = () => {
+    if (!profileMenuOpen) return null;
+    
+    return ReactDOM.createPortal(
+      <div 
+        className="fixed z-[9999] w-72 bg-white rounded-xl shadow-lg border border-gray-200 py-2"
+        style={{
+          top: `${profileMenuPosition.top}px`,
+          right: `${profileMenuPosition.right}px`,
+        }}
+      >
+        <div className="px-5 py-4">
+          <div className="flex items-center space-x-4">
+            <div className="bg-black w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-md flex-shrink-0">
+              {getUserInitial()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-black text-lg truncate">{user?.full_name || 'User'}</p>
+              <p className="text-sm text-gray-500 mt-1 truncate">{user?.email || 'user@example.com'}</p>
+              <span className="inline-block mt-2 px-2.5 py-1 bg-gray-100 rounded-full text-xs font-medium text-gray-700 capitalize">
+                {user?.role || 'User'}
+              </span>
+            </div>
+          </div>
+        </div>
+        
+        {/* Menu Items */}
+        <div className="py-2 border-t border-gray-100">
+          <button className="w-full px-5 py-3 text-left text-sm text-black hover:bg-gray-50 flex items-center space-x-3">
+            <User className="h-5 w-5 text-gray-500" />
+            <span className="font-medium">Profile Settings</span>
+          </button>
+          <button className="w-full px-5 py-3 text-left text-sm text-black hover:bg-gray-50 flex items-center space-x-3">
+            <Settings className="h-5 w-5 text-gray-500" />
+            <span className="font-medium">Account Settings</span>
+          </button>
+        </div>
+        
+        <div className="border-t border-gray-100 py-2">
+          <button
+            onClick={() => { 
+              logout(); 
+              setProfileMenuOpen(false); 
+            }}
+            className="w-full px-5 py-3 text-left text-sm text-black hover:bg-gray-50 flex items-center space-x-3"
+          >
+            <LogOut className="h-5 w-5 text-gray-500" />
+            <span className="font-semibold">Logout</span>
+          </button>
+        </div>
+      </div>,
+      document.body
+    );
+  };
+
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-white">
       {/* Global styles */}
@@ -896,24 +1019,24 @@ const Dashboard = () => {
 
           {/* Logo Section */}
           <div className="relative px-4 py-6 z-10">
-            {!sidebarCollapsed ? (
-              <div className="flex justify-center items-center">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-gradient-to-r from-rose-200/30 to-sky-200/30 blur-xl rounded-full"></div>
-                  <img 
-                    src="/caldimlogo.png" 
-                    className="h-26 w-auto object-contain relative"  
-                    alt="Company Logo"
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="flex justify-center py-2">
-                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-rose-400 to-sky-400 flex items-center justify-center shadow-md">
-                  <span className="text-white font-bold text-sm">CD</span>
-                </div>
-              </div>
-            )}
+           {!sidebarCollapsed ? (
+  <div className="flex justify-center items-center">
+    <div className="relative">
+      <div className="absolute inset-0 bg-gradient-to-r from-rose-200/30 to-sky-200/30 blur-xl rounded-full"></div>
+      <img 
+        src="/caldimlogo.png" 
+        className="h-26 w-auto object-contain relative"  
+        alt="Company Logo"
+      />
+    </div>
+  </div>
+) : (
+  <div className="flex justify-center py-2">
+    <div className="h-10 w-10 rounded-xl bg-black flex items-center justify-center shadow-md">
+      <span className="text-white font-bold text-sm">CD</span>
+    </div>
+  </div>
+)}
           </div>
 
           {/* Collapse Button - Moved outside logo section but still in sidebar */}
@@ -975,15 +1098,7 @@ const Dashboard = () => {
                   {getHeaderTitle()}
                 </h1>
                 
-                {(activeModule === 'upload-trackers' || activeModule === 'project-dashboard') && selectedFileId && (
-                  <button
-                    onClick={() => setSelectedFileId(null)}
-                    className="ml-4 flex items-center space-x-1.5 px-4 py-2 bg-white hover:bg-gradient-to-r hover:from-rose-50 hover:to-sky-50 rounded-lg text-sm font-medium text-black transition-colors border border-indigo-200"
-                  >
-                    <span>Clear Selection</span>
-                    <ChevronRight className="h-4 w-4 text-indigo-400" />
-                  </button>
-                )}
+               
               </div>
 
               {/* Right side - Date/Time and Profile */}
@@ -1003,57 +1118,6 @@ const Dashboard = () => {
                   >
                     {getUserInitial()}
                   </button>
-
-                  {profileMenuOpen && (
-                    <div 
-                      className="fixed z-[9999] w-72 bg-white rounded-xl shadow-lg border border-gray-200 py-2"
-                      style={{
-                        position: 'fixed',
-                        top: `${profileMenuPosition.top}px`,
-                        right: `${profileMenuPosition.right}px`
-                      }}
-                    >
-                      <div className="px-5 py-4">
-                        <div className="flex items-center space-x-4">
-                          <div className="bg-black w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-md flex-shrink-0">
-                            {getUserInitial()}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-black text-lg truncate">{user?.full_name || 'User'}</p>
-                            <p className="text-sm text-gray-500 mt-1 truncate">{user?.email || 'user@example.com'}</p>
-                            <span className="inline-block mt-2 px-2.5 py-1 bg-gray-100 rounded-full text-xs font-medium text-gray-700 capitalize">
-                              {user?.role || 'User'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Menu Items */}
-                      <div className="py-2 border-t border-gray-100">
-                        <button className="w-full px-5 py-3 text-left text-sm text-black hover:bg-gray-50 flex items-center space-x-3">
-                          <User className="h-5 w-5 text-gray-500" />
-                          <span className="font-medium">Profile Settings</span>
-                        </button>
-                        <button className="w-full px-5 py-3 text-left text-sm text-black hover:bg-gray-50 flex items-center space-x-3">
-                          <Settings className="h-5 w-5 text-gray-500" />
-                          <span className="font-medium">Account Settings</span>
-                        </button>
-                      </div>
-                      
-                      <div className="border-t border-gray-100 py-2">
-                        <button
-                          onClick={() => { 
-                            logout(); 
-                            setProfileMenuOpen(false); 
-                          }}
-                          className="w-full px-5 py-3 text-left text-sm text-black hover:bg-gray-50 flex items-center space-x-3"
-                        >
-                          <LogOut className="h-5 w-5 text-gray-500" />
-                          <span className="font-semibold">Logout</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -1069,6 +1133,9 @@ const Dashboard = () => {
           </main>
         </div>
       </div>
+
+      {/* Profile Menu Portal - Rendered at the root level */}
+      <ProfileMenu />
     </div>
   );
 };

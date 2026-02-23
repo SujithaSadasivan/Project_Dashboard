@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  File, User, ChevronRight, FileSpreadsheet, 
+  File, User, ChevronRight, 
   AlertCircle, X, Eye, ChevronDown, ChevronUp,
   BarChart2, PieChart, TrendingUp, Mail, Send,
   CheckSquare, Filter, Download, RefreshCw, Folder,
@@ -9,7 +9,9 @@ import {
   Grid, List, Activity, Radar, ScatterChart as ScatterIcon,
   AreaChart as AreaIcon, Merge, Columns, Plus, Minus,
   Table, Layers, CheckCircle, Clock, AlertTriangle,
-  Circle, DollarSign, Percent, TrendingDown
+  Circle, DollarSign, Percent, TrendingDown, Flag,
+  Calendar, Target, Shield, GitBranch, Users, Award,
+  Settings2, Minimize2, Sliders
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -21,21 +23,52 @@ import {
 
 import FileContentViewer from './Trackers/FileContentViewer';
 
-// Enhanced Custom Tooltip
+// Updated dummy data for milestones - Now with L0drg and L1 drg
+const DUMMY_MILESTONES = [
+  { id: 1, name: 'Requirements Gathering', l0drg: '2024-03-15', l1drg: '2024-03-14', actual: '2024-03-14', outlook: 'Completed', status: 'Completed' },
+  { id: 2, name: 'Design Phase', l0drg: '2024-04-01', l1drg: '2024-03-28', actual: '2024-03-28', outlook: '2024-04-05', status: 'Ahead' },
+  { id: 3, name: 'Development Sprint 1', l0drg: '2024-04-30', l1drg: '2024-05-05', actual: 'In Progress', outlook: '2024-05-05', status: 'At Risk' },
+  { id: 4, name: 'QA Testing', l0drg: '2024-05-15', l1drg: '2024-05-20', actual: 'Not Started', outlook: '2024-05-20', status: 'Pending' },
+  { id: 5, name: 'User Acceptance Testing', l0drg: '2024-05-30', l1drg: '2024-06-05', actual: 'Not Started', outlook: '2024-06-05', status: 'Pending' },
+  { id: 6, name: 'Production Release', l0drg: '2024-06-15', l1drg: '2024-06-20', actual: 'Not Started', outlook: '2024-06-20', status: 'Planned' },
+];
+
+// Updated dummy data for critical issues - New structure
+const DUMMY_ISSUES = [
+  { id: 1, sno: 1, issue: 'Database connection timeout', resp: 'John Doe', supportRequired: 'Database team assistance', fromWhom: 'DBA Team', status: 'In Progress' },
+  { id: 2, sno: 2, issue: 'API rate limiting exceeded', resp: 'Jane Smith', supportRequired: 'API gateway configuration', fromWhom: 'Infra Team', status: 'Open' },
+  { id: 3, sno: 3, issue: 'Memory leak in production', resp: 'Mike Johnson', supportRequired: 'Memory profiling tools', fromWhom: 'DevOps', status: 'In Progress' },
+  { id: 4, sno: 4, issue: 'UI rendering issue on mobile', resp: 'Sarah Wilson', supportRequired: 'Mobile testing devices', fromWhom: 'QA Team', status: 'Open' },
+  { id: 5, sno: 5, issue: 'Security vulnerability in auth', resp: 'Security Team', supportRequired: 'Security audit', fromWhom: 'External Consultant', status: 'Open' },
+];
+
+// Enhanced Custom Tooltip with better formatting
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-white px-4 py-3 border border-gray-200 rounded-lg shadow-lg max-w-xs">
         <p className="font-medium text-gray-900 mb-2 border-b pb-1">{label}</p>
         {payload.map((entry, index) => {
-          const valueColor = entry.color || '#2563eb';
+          const valueColor = entry.color || entry.fill || '#2563eb';
+          const value = entry.value;
+          
+          // Format value based on type
+          let formattedValue = value;
+          if (typeof value === 'number') {
+            if (Number.isInteger(value)) {
+              formattedValue = value.toLocaleString();
+            } else {
+              formattedValue = value.toFixed(2);
+            }
+          }
+          
           return (
             <div key={index} className="flex items-center justify-between text-sm mb-1">
               <span style={{ color: valueColor }} className="font-medium">
                 {entry.name}:
               </span>
               <span className="ml-4 font-mono font-semibold" style={{ color: valueColor }}>
-                {typeof entry.value === 'number' ? entry.value.toLocaleString() : entry.value}
+                {formattedValue}
               </span>
             </div>
           );
@@ -46,243 +79,704 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
-// FileHeaderConfigItem component
-const FileHeaderConfigItem = ({ fileModule, fileHeaderConfig, onConfigure }) => {
-const [localRowCount, setLocalRowCount] = useState(fileHeaderConfig.rowCount);
-const [localSelectedHeaders, setLocalSelectedHeaders] = useState(fileHeaderConfig.selectedHeaders || {});
+// Stage Configuration Modal - Now accepts stage-specific columns
+const StageConfigModal = ({ stage, isOpen, onClose, departmentColumns, stageSpecificColumns, onSave, currentConfig }) => {
+  const [xAxis, setXAxis] = useState(currentConfig?.xAxis || '');
+  const [yAxis, setYAxis] = useState(currentConfig?.yAxis || '');
 
-// Preview first few rows
-const previewRows = fileModule.fileData?.data?.slice(0, 5) || 
-                   fileModule.fileData?.sheets?.[0]?.data?.slice(0, 5) || [];
+  if (!isOpen) return null;
 
-const maxColumns = previewRows[0]?.length || 0;
+  // Use stage-specific columns if available, otherwise fall back to department columns
+  const columnsToShow = stageSpecificColumns && stageSpecificColumns.length > 0 ? stageSpecificColumns : departmentColumns;
 
-return (
-<div className="border border-gray-200 rounded-lg p-4">
-  <h4 className="font-medium text-gray-900 mb-3">
-    {fileModule.displayName || fileModule.name}
-  </h4>
-  
-  {/* Header row count selector */}
-  <div className="mb-4">
-    <label className="text-sm font-medium text-gray-700 mb-2 block">
-      Number of header rows:
-    </label>
-    <select
-      value={localRowCount}
-      onChange={(e) => setLocalRowCount(parseInt(e.target.value))}
-      className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-    >
-      <option value={1}>1 row</option>
-      <option value={2}>2 rows</option>
-      <option value={3}>3 rows</option>
-    </select>
-  </div>
+  console.log(`StageConfigModal for ${stage?.name}:`, {
+    stageSpecificColumns,
+    columnsToShow,
+    departmentColumns
+  });
 
-  {/* Header preview */}
-  {localRowCount > 1 && (
-    <div className="mb-4">
-      <p className="text-sm font-medium text-gray-700 mb-2">
-        Header rows preview:
-      </p>
-      <div className="border border-gray-200 rounded-lg overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <tbody className="divide-y divide-gray-200">
-            {previewRows.slice(0, localRowCount).map((row, rowIndex) => (
-              <tr key={rowIndex} className="bg-gray-50">
-                {row.map((cell, colIndex) => (
-                  <td key={colIndex} className="px-3 py-2 text-xs text-gray-600 border-r border-gray-200 whitespace-nowrap">
-                    {cell || '(empty)'}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )}
+  const handleSave = () => {
+    onSave(stage.id, xAxis, yAxis);
+    onClose();
+  };
 
-  {/* Custom header names */}
-  {maxColumns > 0 && (
-    <div>
-      <p className="text-sm font-medium text-gray-700 mb-2">
-        Custom column names (optional):
-      </p>
-      <div className="grid grid-cols-2 gap-3">
-        {Array.from({ length: maxColumns }).map((_, colIndex) => {
-          // Get header value from first header row
-          const headerValue = previewRows[0]?.[colIndex] || `Column ${colIndex + 1}`;
-          const currentValue = localSelectedHeaders[colIndex] || '';
-          
-          return (
-            <div key={colIndex}>
-              <label className="text-xs text-gray-500 mb-1 block">
-                Column {colIndex + 1}:
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full">
+        <div className="p-8">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-semibold text-gray-900">
+              Configure {stage.name} Chart
+            </h3>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X className="h-5 w-5 text-gray-500" />
+            </button>
+          </div>
+
+          <div className="space-y-6">
+            <div>
+              <label className="text-base font-medium text-gray-700 mb-2 block">
+                X-Axis (Categories)
               </label>
-              <input
-                type="text"
-                value={currentValue}
-                onChange={(e) => setLocalSelectedHeaders({
-                  ...localSelectedHeaders,
-                  [colIndex]: e.target.value
-                })}
-                placeholder={headerValue}
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              />
+              <select
+                value={xAxis}
+                onChange={(e) => setXAxis(e.target.value)}
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+              >
+                <option value="">Select column</option>
+                {columnsToShow.map((col, index) => (
+                  <option key={index} value={col}>
+                    {col === null || col === undefined ? `Column ${index + 1}` : String(col)}
+                  </option>
+                ))}
+              </select>
             </div>
-          );
-        })}
+
+            <div>
+              <label className="text-base font-medium text-gray-700 mb-2 block">
+                Y-Axis (Values)
+              </label>
+              <select
+                value={yAxis}
+                onChange={(e) => setYAxis(e.target.value)}
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+              >
+                <option value="">Select column</option>
+                {columnsToShow.map((col, index) => (
+                  <option key={index} value={col}>
+                    {col === null || col === undefined ? `Column ${index + 1}` : String(col)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex justify-end space-x-3 mt-8">
+            <button
+              onClick={onClose}
+              className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-base"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!xAxis || !yAxis}
+              className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-base"
+            >
+              Apply to Stage
+            </button>
+          </div>
+        </div>
       </div>
     </div>
-  )}
+  );
+};
 
-  {/* Apply button */}
-  <div className="mt-4 flex justify-end">
-    <button
-      onClick={() => onConfigure(fileModule.id, localRowCount, localSelectedHeaders)}
-      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-    >
-      Apply to this file
-    </button>
-  </div>
-</div>
-);
+// Full Screen Chart Modal - Made bigger
+const FullScreenChartModal = ({ stage, isOpen, onClose, chartData, distribution, chartType, onChartTypeChange }) => {
+  const [localChartType, setLocalChartType] = useState(chartType);
+
+  if (!isOpen) return null;
+
+  const handleChartTypeChange = (type) => {
+    setLocalChartType(type);
+    onChartTypeChange(stage.id, type);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-[1000px] max-w-6xl">
+        <div className="p-8">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-semibold text-gray-900">
+              {stage.name} - Full Screen View
+            </h3>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <Minimize2 className="h-5 w-5 text-gray-500" />
+            </button>
+          </div>
+
+          {/* Chart Type Selector */}
+          <div className="mb-6 flex items-center space-x-3">
+            <span className="text-base text-gray-600">Chart Type:</span>
+            <button
+              onClick={() => handleChartTypeChange('bar')}
+              className={`px-4 py-2 rounded-lg text-base flex items-center ${
+                localChartType === 'bar' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <BarChart2 className="h-4 w-4 mr-2" />
+              Bar
+            </button>
+            <button
+              onClick={() => handleChartTypeChange('pie')}
+              className={`px-4 py-2 rounded-lg text-base flex items-center ${
+                localChartType === 'pie' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <PieChart className="h-4 w-4 mr-2" />
+              Pie
+            </button>
+            <button
+              onClick={() => handleChartTypeChange('line')}
+              className={`px-4 py-2 rounded-lg text-base flex items-center ${
+                localChartType === 'line' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <TrendingUp className="h-4 w-4 mr-2" />
+              Line
+            </button>
+            <button
+              onClick={() => handleChartTypeChange('area')}
+              className={`px-4 py-2 rounded-lg text-base flex items-center ${
+                localChartType === 'area' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <AreaIcon className="h-4 w-4 mr-2" />
+              Area
+            </button>
+          </div>
+
+          {/* Full Size Chart */}
+          <div className="h-[500px] w-full">
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                {localChartType === 'bar' && (
+                  <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 70 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis 
+                      dataKey="name" 
+                      angle={-45} 
+                      textAnchor="end" 
+                      height={80} 
+                      interval={0}
+                      tick={{ fontSize: 12 }}
+                    />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend 
+                      wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}
+                      layout="horizontal"
+                      verticalAlign="bottom"
+                      align="center"
+                    />
+                    {distribution.map((item, index) => (
+                      <Bar 
+                        key={item.name}
+                        dataKey={item.name}
+                        stackId={item.name !== 'value' && item.name !== 'sum' && item.name !== 'average' ? "a" : undefined}
+                        fill={item.color}
+                        name={item.name}
+                        radius={[4, 4, 0, 0]}
+                      />
+                    ))}
+                  </BarChart>
+                )}
+                {localChartType === 'pie' && (
+                  <RePieChart>
+                    <Pie
+                      data={distribution}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={true}
+                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={200}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {distribution.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </RePieChart>
+                )}
+                {localChartType === 'line' && (
+                  <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 70 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis 
+                      dataKey="name" 
+                      angle={-45} 
+                      textAnchor="end" 
+                      height={80} 
+                      interval={0}
+                      tick={{ fontSize: 12 }}
+                    />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                    {distribution.map((item) => (
+                      <Line 
+                        key={item.name}
+                        type="monotone"
+                        dataKey={item.name}
+                        stroke={item.color}
+                        strokeWidth={2}
+                        dot={{ r: 3, fill: item.color }}
+                        name={item.name}
+                      />
+                    ))}
+                  </LineChart>
+                )}
+                {localChartType === 'area' && (
+                  <AreaChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 70 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis 
+                      dataKey="name" 
+                      angle={-45} 
+                      textAnchor="end" 
+                      height={80} 
+                      interval={0}
+                      tick={{ fontSize: 12 }}
+                    />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                    {distribution.map((item) => (
+                      <Area 
+                        key={item.name}
+                        type="monotone"
+                        dataKey={item.name}
+                        stackId="1"
+                        stroke={item.color}
+                        fill={item.color}
+                        fillOpacity={0.6}
+                        name={item.name}
+                      />
+                    ))}
+                  </AreaChart>
+                )}
+              </ResponsiveContainer>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                <p className="text-gray-500">No data available</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Mini Chart Component for Stage Boxes
+const MiniChart = ({ chartData, statusDistribution, chartType = 'bar' }) => {
+  if (!chartData || chartData.length === 0) {
+    return (
+      <div className="h-24 flex items-center justify-center bg-gray-50 rounded border border-gray-200">
+        <BarChart2 className="h-8 w-8 text-gray-300" />
+      </div>
+    );
+  }
+
+  // Limit data for mini chart
+  const miniData = chartData.slice(0, 5);
+
+  return (
+    <div className="h-24 w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        {chartType === 'pie' ? (
+          <RePieChart>
+            <Pie
+              data={statusDistribution.slice(0, 4)}
+              cx="50%"
+              cy="50%"
+              innerRadius={20}
+              outerRadius={35}
+              dataKey="value"
+              paddingAngle={2}
+            >
+              {statusDistribution.slice(0, 4).map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.color} />
+              ))}
+            </Pie>
+          </RePieChart>
+        ) : chartType === 'line' ? (
+          <LineChart data={miniData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+            <Line 
+              type="monotone" 
+              dataKey={statusDistribution[0]?.name || 'value'} 
+              stroke={statusDistribution[0]?.color || '#2563eb'} 
+              strokeWidth={2}
+              dot={false}
+            />
+          </LineChart>
+        ) : chartType === 'area' ? (
+          <AreaChart data={miniData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+            <Area 
+              type="monotone" 
+              dataKey={statusDistribution[0]?.name || 'value'} 
+              stroke={statusDistribution[0]?.color || '#2563eb'} 
+              fill={statusDistribution[0]?.color || '#2563eb'} 
+              fillOpacity={0.3}
+            />
+          </AreaChart>
+        ) : (
+          <BarChart data={miniData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+            {statusDistribution.map((item) => (
+              <Bar 
+                key={item.name}
+                dataKey={item.name}
+                stackId="a"
+                fill={item.color}
+                radius={[2, 2, 0, 0]}
+              />
+            ))}
+          </BarChart>
+        )}
+      </ResponsiveContainer>
+    </div>
+  );
+};
+
+// Dashboard Configuration Modal - Now starts with all options unselected
+const DashboardConfigModal = ({ isOpen, onClose, onApply, selectedProject, projectStages, currentConfig }) => {
+  const [showMilestones, setShowMilestones] = useState(false);
+  const [showCriticalIssues, setShowCriticalIssues] = useState(false);
+  const [showMetrics, setShowMetrics] = useState(false);
+  const [selectedMetrics, setSelectedMetrics] = useState([]);
+
+  // Always reset to unselected when modal opens
+  React.useEffect(() => {
+    if (isOpen) {
+      // Always reset to unchecked when modal opens
+      setShowMilestones(false);
+      setShowCriticalIssues(false);
+      setShowMetrics(false);
+      setSelectedMetrics([]);
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleMetricToggle = (stageId) => {
+    setSelectedMetrics(prev => 
+      prev.includes(stageId) 
+        ? prev.filter(id => id !== stageId)
+        : [...prev, stageId]
+    );
+  };
+
+  const handleApply = () => {
+    onApply({
+      milestones: showMilestones,
+      criticalIssues: showCriticalIssues,
+      metrics: showMetrics,
+      selectedMetrics: selectedMetrics
+    });
+    onClose();
+  };
+
+  const selectAllMetrics = () => {
+    if (selectedMetrics.length === projectStages.length) {
+      setSelectedMetrics([]);
+    } else {
+      setSelectedMetrics(projectStages.map(s => s.id));
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full">
+        <div className="p-8">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-semibold text-gray-900">
+              Stimulate Dashboard
+            </h3>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X className="h-5 w-5 text-gray-500" />
+            </button>
+          </div>
+
+          <p className="text-base text-gray-600 mb-6">
+            Configure what to display for {selectedProject?.name}
+          </p>
+
+          <div className="space-y-6">
+            {/* Main checkboxes */}
+            <div className="space-y-3">
+              <label className="flex items-center p-3 hover:bg-gray-50 rounded-lg cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showMilestones}
+                  onChange={(e) => setShowMilestones(e.target.checked)}
+                  className="h-5 w-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                />
+                <span className="ml-3 text-base font-medium text-gray-700">Milestones</span>
+              </label>
+
+              <label className="flex items-center p-3 hover:bg-gray-50 rounded-lg cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showCriticalIssues}
+                  onChange={(e) => setShowCriticalIssues(e.target.checked)}
+                  className="h-5 w-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                />
+                <span className="ml-3 text-base font-medium text-gray-700">Critical Issues</span>
+              </label>
+
+              <label className="flex items-center p-3 hover:bg-gray-50 rounded-lg cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showMetrics}
+                  onChange={(e) => {
+                    setShowMetrics(e.target.checked);
+                    if (!e.target.checked) {
+                      setSelectedMetrics([]);
+                    }
+                  }}
+                  className="h-5 w-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                />
+                <span className="ml-3 text-base font-medium text-gray-700">Metrics (Visuals)</span>
+              </label>
+            </div>
+
+            {/* Metrics sub-checkboxes */}
+            {showMetrics && (
+              <div className="ml-8 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-medium text-gray-500 uppercase tracking-wider">
+                    Select Metrics
+                  </span>
+                  <button
+                    onClick={selectAllMetrics}
+                    className="text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    {selectedMetrics.length === projectStages.length ? 'Deselect All' : 'Select All'}
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
+                  {projectStages.map((stage) => {
+                    return (
+                      <label key={stage.id} className="flex items-center p-2 hover:bg-white rounded cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedMetrics.includes(stage.id)}
+                          onChange={() => handleMetricToggle(stage.id)}
+                          className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">{stage.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end space-x-3 mt-8">
+            <button
+              onClick={onClose}
+              className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-base"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleApply}
+              className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-base"
+            >
+              Apply to Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// FileHeaderConfigItem component (simplified - removed column selection)
+const FileHeaderConfigItem = ({ fileModule, fileHeaderConfig, onConfigure }) => {
+  const [localRowCount, setLocalRowCount] = useState(fileHeaderConfig.rowCount);
+
+  // Preview first few rows
+  const previewRows = fileModule.fileData?.data?.slice(0, 5) || 
+                     fileModule.fileData?.sheets?.[0]?.data?.slice(0, 5) || [];
+
+  return (
+    <div className="border border-gray-200 rounded-lg p-4">
+      <h4 className="font-medium text-gray-900 mb-3">
+        {fileModule.displayName || fileModule.name}
+      </h4>
+      
+      {/* Header row count selector */}
+      <div className="mb-4">
+        <label className="text-sm font-medium text-gray-700 mb-2 block">
+          Number of header rows:
+        </label>
+        <select
+          value={localRowCount}
+          onChange={(e) => setLocalRowCount(parseInt(e.target.value))}
+          className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+        >
+          <option value={1}>1 row</option>
+          <option value={2}>2 rows</option>
+          <option value={3}>3 rows</option>
+        </select>
+      </div>
+
+      {/* Header preview */}
+      {localRowCount > 1 && (
+        <div className="mb-4">
+          <p className="text-sm font-medium text-gray-700 mb-2">
+            Header rows preview:
+          </p>
+          <div className="border border-gray-200 rounded-lg overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-200">
+                {previewRows.slice(0, localRowCount).map((row, rowIndex) => (
+                  <tr key={rowIndex} className="bg-gray-50">
+                    {row.map((cell, colIndex) => (
+                      <td key={colIndex} className="px-3 py-2 text-xs text-gray-600 border-r border-gray-200 whitespace-nowrap">
+                        {cell || '(empty)'}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Apply button */}
+      <div className="mt-4 flex justify-end">
+        <button
+          onClick={() => onConfigure(fileModule.id, localRowCount, {})}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+        >
+          Apply to this file
+        </button>
+      </div>
+    </div>
+  );
 };
 
 const ProjectDashboard = () => {
-const navigate = useNavigate();
-const [projectModules, setProjectModules] = useState([]);
-const [loading, setLoading] = useState(true);
-const [trackers, setTrackers] = useState([]);
-const [uploadedFilesData, setUploadedFilesData] = useState({});
+  const navigate = useNavigate();
+  const [projectModules, setProjectModules] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [trackers, setTrackers] = useState([]);
+  const [uploadedFilesData, setUploadedFilesData] = useState({});
 
-// Project selection
-const [selectedProjectId, setSelectedProjectId] = useState('');
-const [selectedProject, setSelectedProject] = useState(null);
+  // Project selection
+  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [selectedProject, setSelectedProject] = useState(null);
 
-// Selected file state
-const [selectedFile, setSelectedFile] = useState({
-isSelected: false,
-fileData: null,
-trackerInfo: null,
-projectModuleId: null,
-source: null
-});
+  // Selected file state
+  const [selectedFile, setSelectedFile] = useState({
+    isSelected: false,
+    fileData: null,
+    trackerInfo: null,
+    projectModuleId: null,
+    source: null
+  });
 
-// Available departments from the project's files
-const [availableDepartments, setAvailableDepartments] = useState([]);
+  // File data
+  const [departmentFiles, setDepartmentFiles] = useState([]);
+  const [selectedEmployees, setSelectedEmployees] = useState([]);
+  const [departmentColumns, setDepartmentColumns] = useState([]);
+  const [departmentEmployees, setDepartmentEmployees] = useState([]);
 
-const [selectedDepartment, setSelectedDepartment] = useState('');
-const [departmentFiles, setDepartmentFiles] = useState([]);
-const [xAxis, setXAxis] = useState('');
-const [yAxis, setYAxis] = useState('');
-const [chartType, setChartType] = useState('bar');
-const [selectedEmployees, setSelectedEmployees] = useState([]);
-const [chartData, setChartData] = useState([]);
-const [departmentColumns, setDepartmentColumns] = useState([]);
-const [departmentEmployees, setDepartmentEmployees] = useState([]);
+  // Store columns for each specific stage based on its file
+  const [stageSpecificColumns, setStageSpecificColumns] = useState({});
 
-// New state for enhanced visualization
-const [statusDistribution, setStatusDistribution] = useState([]);
-const [colorScheme, setColorScheme] = useState('status');
+  // Stage-specific chart configurations
+  const [stageConfigs, setStageConfigs] = useState({});
+  const [stageChartData, setStageChartData] = useState({});
+  const [stageDistribution, setStageDistribution] = useState({});
+  const [stageChartTypes, setStageChartTypes] = useState({});
 
-// Email state
-const [emailSubject, setEmailSubject] = useState('');
-const [emailBody, setEmailBody] = useState('');
-const [showEmailModal, setShowEmailModal] = useState(false);
-const [emailSending, setEmailSending] = useState(false);
-const [emailStatus, setEmailStatus] = useState('');
+  // Dashboard configuration
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [dashboardConfig, setDashboardConfig] = useState({
+    milestones: false,
+    criticalIssues: false,
+    metrics: false,
+    selectedMetrics: []
+  });
 
-// New state for multi-row header handling
-const [headerRowCount, setHeaderRowCount] = useState(1);
-const [showHeaderConfig, setShowHeaderConfig] = useState(false);
-const [selectedHeaders, setSelectedHeaders] = useState({});
+  // Modal state
+  const [configuringStage, setConfiguringStage] = useState(null);
+  const [fullScreenStage, setFullScreenStage] = useState(null);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [showHeaderConfig, setShowHeaderConfig] = useState(false);
 
-// Chart colors
-const STATUS_COLORS = {
-  completed: '#10b981',
-  'in progress': '#f59e0b',
-  pending: '#f59e0b',
-  overdue: '#ef4444',
-  planned: '#8b5cf6',
-  review: '#06b6d4',
-  other: '#94a3b8',
-  default: '#2563eb'
-};
+  // Email state
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailStatus, setEmailStatus] = useState('');
 
-const PIE_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6'];
+  // Add a new state for dynamic project stages
+  const [projectStages, setProjectStages] = useState([]);
 
-// Enhanced function to detect exact status from a value
-const detectExactStatus = (value) => {
-  if (!value || typeof value !== 'string') return 'other';
-  
-  const lowerValue = value.toLowerCase();
-  
-  const statusMap = {
-    'completed': ['complete', 'completed', 'done', 'finished', 'approved', 'closed', 'released'],
-    'in progress': ['in progress', 'progress', 'ongoing', 'started', 'active', 'waiting'],
-    'pending': ['pending', 'waiting', 'hold', 'on hold'],
-    'overdue': ['overdue', 'delay', 'late', 'behind', 'expired', 'past due'],
-    'planned': ['planned', 'scheduled', 'upcoming', 'forecast', 'target'],
-    'review': ['review', 'reviewed', 'qa', 'quality', 'check', 'audit']
+  // Chart colors
+  const PIE_COLORS = [
+    '#2563eb', '#10b981', '#f59e0b', '#ef4444', 
+    '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6',
+    '#f97316', '#6366f1', '#d946ef', '#0ea5e9',
+    '#84cc16', '#a855f7', '#ec4899', '#64748b'
+  ];
+
+  // Helper function to get a color based on stage name or index
+  const getStageColor = (index) => {
+    const colors = ['blue', 'purple', 'green', 'orange', 'red', 'teal', 'indigo', 'pink', 'yellow', 'cyan'];
+    return colors[index % colors.length];
   };
 
-  for (const [status, keywords] of Object.entries(statusMap)) {
-    if (keywords.some(keyword => lowerValue.includes(keyword))) {
-      return status;
+  // Function to generate a color based on string value
+  const getColorForValue = (value, index) => {
+    if (!value) return PIE_COLORS[index % PIE_COLORS.length];
+    
+    let hash = 0;
+    for (let i = 0; i < value.length; i++) {
+      hash = ((hash << 5) - hash) + value.charCodeAt(i);
+      hash = hash & hash;
     }
-  }
-  
-  return 'other';
-};
+    
+    const colorIndex = Math.abs(hash) % PIE_COLORS.length;
+    return PIE_COLORS[colorIndex];
+  };
 
-// Enhanced function to detect status from a row
-const detectRowStatus = (row) => {
-  for (const [key, value] of Object.entries(row)) {
-    if (typeof value === 'string') {
-      const status = detectExactStatus(value);
-      if (status !== 'other') {
-        return status;
-      }
-    }
-  }
-  return 'other';
-};
-
-// Enhanced function to extract data rows considering multi-row headers
-const extractDataRowsFromFile = (fileData, headerRowCount = 1) => {
-  const rows = [];
-
-  if (fileData.data && Array.isArray(fileData.data)) {
-    // Skip header rows
-    const dataRows = fileData.data.slice(headerRowCount);
-
-    // Get headers (might be multi-row combined)
-    const headers = extractHeadersFromFileData(fileData);
-
-    dataRows.forEach(row => {
-      if (Array.isArray(row)) {
-        const rowObj = {};
-        headers.forEach((header, index) => {
-          if (index < row.length) {
-            rowObj[header] = row[index];
-          }
-        });
-        // Only add rows that have at least one non-empty value
-        if (Object.values(rowObj).some(v => v !== null && v !== undefined && v !== '')) {
-          rows.push(rowObj);
-        }
-      } else if (typeof row === 'object' && row !== null) {
-        rows.push(row);
-      }
-    });
-  } else if (fileData.sheets && fileData.sheets.length > 0) {
-    const sheet = fileData.sheets[0];
-    if (sheet.data && Array.isArray(sheet.data)) {
-      const dataRows = sheet.data.slice(headerRowCount);
-      const headers = extractHeadersFromFileData(fileData);
+  // Function to check if a column contains numeric values
+  const isNumericColumn = (values) => {
+    if (!values || values.length === 0) return false;
+    
+    let numericCount = 0;
+    for (const val of values) {
+      if (val === null || val === undefined || val === '') continue;
       
+      if (typeof val === 'number') {
+        numericCount++;
+      } else if (typeof val === 'string') {
+        const cleaned = val.replace(/[$€£¥,\s]/g, '');
+        if (!isNaN(parseFloat(cleaned)) && isFinite(cleaned)) {
+          numericCount++;
+        }
+      }
+    }
+    
+    return numericCount > values.length * 0.3;
+  };
+
+  // Enhanced function to extract data rows considering multi-row headers
+  const extractDataRowsFromFile = (fileData, headerRowCount = 1) => {
+    const rows = [];
+
+    if (fileData.data && Array.isArray(fileData.data)) {
+      const dataRows = fileData.data.slice(headerRowCount);
+      const headers = extractHeadersFromFileData(fileData);
+
       dataRows.forEach(row => {
         if (Array.isArray(row)) {
           const rowObj = {};
@@ -298,1478 +792,1381 @@ const extractDataRowsFromFile = (fileData, headerRowCount = 1) => {
           rows.push(row);
         }
       });
-    }
-  }
-
-  return rows;
-};
-
-// Enhanced function to extract headers considering multi-row structure
-const extractHeadersFromFileData = (fileData) => {
-const headers = [];
-
-if (fileData.data && Array.isArray(fileData.data)) {
-// Check if we have stored header configuration
-if (fileData.headerConfig) {
-  const { rowCount, selectedHeaders: configHeaders } = fileData.headerConfig;
-  
-  if (rowCount > 1) {
-    // Multi-row header case
-    const headerRows = fileData.data.slice(0, rowCount);
-    
-    // Create combined headers
-    for (let colIndex = 0; colIndex < (headerRows[0]?.length || 0); colIndex++) {
-      let combinedHeader = '';
-      
-      for (let rowIndex = 0; rowIndex < rowCount; rowIndex++) {
-        const cellValue = headerRows[rowIndex]?.[colIndex] || '';
-        if (cellValue) {
-          combinedHeader += (combinedHeader ? ' - ' : '') + cellValue;
-        }
-      }
-      
-      // Check if there's a custom selected header
-      const customHeader = configHeaders?.[colIndex];
-      headers.push(customHeader || combinedHeader || `Column ${colIndex + 1}`);
-    }
-  } else {
-    // Single row header case
-    const headerRow = fileData.data[0];
-    if (Array.isArray(headerRow)) {
-      headerRow.forEach((cell, index) => {
-        // Check if there's a custom selected header
-        const customHeader = configHeaders?.[index];
-        headers.push(customHeader || cell || `Column ${index + 1}`);
-      });
-    } else if (typeof headerRow === 'object') {
-      Object.keys(headerRow).forEach(key => {
-        headers.push(key);
-      });
-    }
-  }
-} else {
-  // No header configuration - detect structure
-  if (fileData.headers && Array.isArray(fileData.headers)) {
-    // Simple headers array
-    return fileData.headers;
-  } else if (fileData.data.length > 0 && typeof fileData.data[0] === 'object') {
-    // Object format
-    return Object.keys(fileData.data[0]);
-  } else {
-    // Default - treat first row as headers
-    const firstRow = fileData.data[0];
-    if (Array.isArray(firstRow)) {
-      firstRow.forEach((cell, index) => {
-        headers.push(cell || `Column ${index + 1}`);
-      });
-    }
-  }
-}
-} else if (fileData.sheets && fileData.sheets.length > 0) {
-// Handle sheet-based data
-const sheet = fileData.sheets[0];
-if (sheet.headers && Array.isArray(sheet.headers)) {
-  return sheet.headers;
-}
-
-if (sheet.data && sheet.data.length > 0) {
-  // Check for header configuration in sheet
-  if (sheet.headerConfig) {
-    const { rowCount, selectedHeaders: configHeaders } = sheet.headerConfig;
-    
-    if (rowCount > 1) {
-      const headerRows = sheet.data.slice(0, rowCount);
-      
-      for (let colIndex = 0; colIndex < (headerRows[0]?.length || 0); colIndex++) {
-        let combinedHeader = '';
+    } else if (fileData.sheets && fileData.sheets.length > 0) {
+      const sheet = fileData.sheets[0];
+      if (sheet.data && Array.isArray(sheet.data)) {
+        const dataRows = sheet.data.slice(headerRowCount);
+        const headers = extractHeadersFromFileData(fileData);
         
-        for (let rowIndex = 0; rowIndex < rowCount; rowIndex++) {
-          const cellValue = headerRows[rowIndex]?.[colIndex] || '';
-          if (cellValue) {
-            combinedHeader += (combinedHeader ? ' - ' : '') + cellValue;
+        dataRows.forEach(row => {
+          if (Array.isArray(row)) {
+            const rowObj = {};
+            headers.forEach((header, index) => {
+              if (index < row.length) {
+                rowObj[header] = row[index];
+              }
+            });
+            if (Object.values(rowObj).some(v => v !== null && v !== undefined && v !== '')) {
+              rows.push(rowObj);
+            }
+          } else if (typeof row === 'object' && row !== null) {
+            rows.push(row);
           }
-        }
-        
-        const customHeader = configHeaders?.[colIndex];
-        headers.push(customHeader || combinedHeader || `Column ${colIndex + 1}`);
-      }
-    } else {
-      const headerRow = sheet.data[0];
-      if (Array.isArray(headerRow)) {
-        headerRow.forEach((cell, index) => {
-          const customHeader = configHeaders?.[index];
-          headers.push(customHeader || cell || `Column ${index + 1}`);
         });
       }
     }
-  } else {
-    // Default - first row as headers
-    const firstRow = sheet.data[0];
-    if (Array.isArray(firstRow)) {
-      firstRow.forEach((cell, index) => {
-        headers.push(cell || `Column ${index + 1}`);
-      });
+
+    return rows;
+  };
+
+  // Extract headers from the table display (what user sees in UI)
+  const extractHeadersFromFileData = (fileData) => {
+    console.log('📊 Extracting headers from table display for:', fileData?.fileName);
+    
+    // PRIORITY 1: Get headers from the table display (what user configured in UI)
+    if (fileData.displayHeaders && Array.isArray(fileData.displayHeaders)) {
+      console.log('✅ Using display headers from table UI:', fileData.displayHeaders);
+      const cleanedHeaders = fileData.displayHeaders
+        .map(h => h === null || h === undefined ? '' : String(h).trim())
+        .filter(h => h !== '');
+      
+      console.log('🧹 Display headers:', cleanedHeaders);
+      return cleanedHeaders;
     }
-  }
-}
-}
+    
+    // PRIORITY 2: If the fileData has a headers property (saved from FileContentViewer)
+    if (fileData.headers && Array.isArray(fileData.headers)) {
+      console.log('✅ Using saved headers from fileData:', fileData.headers);
+      const cleanedHeaders = fileData.headers
+        .map(h => h === null || h === undefined ? '' : String(h).trim())
+        .filter(h => h !== '');
+      
+      console.log('🧹 Cleaned headers:', cleanedHeaders);
+      return cleanedHeaders;
+    }
+    
+    // PRIORITY 3: If it has sheets format with headers
+    if (fileData.sheets && fileData.sheets[0]?.headers) {
+      console.log('✅ Using sheet headers');
+      const cleanedHeaders = fileData.sheets[0].headers
+        .map(h => h === null || h === undefined ? '' : String(h).trim())
+        .filter(h => h !== '');
+      return cleanedHeaders;
+    }
+    
+    // Fallback: Extract from data rows
+    const headers = [];
 
-return headers;
-};
+    if (fileData.data && Array.isArray(fileData.data)) {
+      if (fileData.headerConfig) {
+        const { rowCount } = fileData.headerConfig;
+        
+        if (rowCount > 1) {
+          const headerRows = fileData.data.slice(0, rowCount);
+          
+          for (let colIndex = 0; colIndex < (headerRows[0]?.length || 0); colIndex++) {
+            let combinedHeader = '';
+            
+            for (let rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+              const cellValue = headerRows[rowIndex]?.[colIndex] || '';
+              if (cellValue) {
+                combinedHeader += (combinedHeader ? ' - ' : '') + String(cellValue).trim();
+              }
+            }
+            
+            headers.push(combinedHeader || `Column ${colIndex + 1}`);
+          }
+        } else {
+          const headerRow = fileData.data[0];
+          if (Array.isArray(headerRow)) {
+            headerRow.forEach((cell, index) => {
+              headers.push(cell ? String(cell).trim() : `Column ${index + 1}`);
+            });
+          } else if (typeof headerRow === 'object') {
+            Object.keys(headerRow).forEach(key => {
+              headers.push(key);
+            });
+          }
+        }
+      } else {
+        // If no headerConfig, try to get headers from the first row
+        if (fileData.data.length > 0) {
+          const firstRow = fileData.data[0];
+          if (Array.isArray(firstRow)) {
+            firstRow.forEach((cell, index) => {
+              headers.push(cell ? String(cell).trim() : `Column ${index + 1}`);
+            });
+          } else if (typeof firstRow === 'object') {
+            Object.keys(firstRow).forEach(key => {
+              headers.push(key);
+            });
+          }
+        }
+      }
+    } else if (fileData.sheets && fileData.sheets.length > 0) {
+      const sheet = fileData.sheets[0];
+      
+      if (sheet.headerConfig) {
+        const { rowCount } = sheet.headerConfig;
+        
+        if (rowCount > 1 && sheet.data && sheet.data.length > 0) {
+          const headerRows = sheet.data.slice(0, rowCount);
+          
+          for (let colIndex = 0; colIndex < (headerRows[0]?.length || 0); colIndex++) {
+            let combinedHeader = '';
+            
+            for (let rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+              const cellValue = headerRows[rowIndex]?.[colIndex] || '';
+              if (cellValue) {
+                combinedHeader += (combinedHeader ? ' - ' : '') + String(cellValue).trim();
+              }
+            }
+            
+            headers.push(combinedHeader || `Column ${colIndex + 1}`);
+          }
+        } else if (sheet.data && sheet.data.length > 0) {
+          const headerRow = sheet.data[0];
+          if (Array.isArray(headerRow)) {
+            headerRow.forEach((cell, index) => {
+              headers.push(cell ? String(cell).trim() : `Column ${index + 1}`);
+            });
+          }
+        }
+      } else if (sheet.data && sheet.data.length > 0) {
+        const firstRow = sheet.data[0];
+        if (Array.isArray(firstRow)) {
+          firstRow.forEach((cell, index) => {
+            headers.push(cell ? String(cell).trim() : `Column ${index + 1}`);
+          });
+        }
+      }
+    }
 
-// Enhanced function to generate chart data with intelligent status detection
-const generateEnhancedChartData = (departmentFiles, xAxis, yAxis) => {
-  try {
-    if (departmentFiles.length === 0 || !xAxis || !yAxis) {
+    // Remove duplicates and empty headers
+    const result = [...new Set(headers.filter(h => h && h !== null && h.trim() !== ''))];
+    console.log('📋 Extracted headers (fallback):', result);
+    return result;
+  };
+
+  // Function to extract all rows from department files
+  const extractAllRows = () => {
+    let allRows = [];
+    
+    departmentFiles.forEach((file) => {
+      if (file.fileData) {
+        const fileHeaderCount = file.fileData?.headerConfig?.rowCount || 1;
+        const dataRows = extractDataRowsFromFile(file.fileData, fileHeaderCount);
+        allRows = [...allRows, ...dataRows];
+      }
+    });
+    
+    return allRows;
+  };
+
+  // Enhanced function to generate chart data
+  const generateEnhancedChartData = (departmentFiles, xAxis, yAxis) => {
+    try {
+      if (departmentFiles.length === 0 || !xAxis || !yAxis) {
+        return [];
+      }
+
+      let allRows = [];
+      departmentFiles.forEach((file) => {
+        if (file.fileData) {
+          const fileHeaderCount = file.fileData?.headerConfig?.rowCount || 1;
+          const dataRows = extractDataRowsFromFile(file.fileData, fileHeaderCount);
+          allRows = [...allRows, ...dataRows];
+        }
+      });
+
+      // Filter rows that have both xAxis and yAxis values
+      const validRows = allRows.filter(row => 
+        row[xAxis] !== undefined && row[xAxis] !== null && String(row[xAxis]).trim() !== '' &&
+        row[yAxis] !== undefined && row[yAxis] !== null && String(row[yAxis]).trim() !== ''
+      );
+
+      if (validRows.length === 0) {
+        return [];
+      }
+
+      // Check if y-axis is numeric
+      const yValues = validRows.map(row => row[yAxis]);
+      const isYAxisNumeric = isNumericColumn(yValues);
+
+      if (isYAxisNumeric) {
+        // Group by x-axis values and aggregate numeric y-values
+        const groupedData = {};
+        
+        validRows.forEach(row => {
+          const xValue = String(row[xAxis]).trim();
+          let yValue = row[yAxis];
+          
+          // Convert to number if possible
+          let numericValue = 0;
+          if (typeof yValue === 'number') {
+            numericValue = yValue;
+          } else if (typeof yValue === 'string') {
+            const cleaned = yValue.replace(/[$€£¥,\s]/g, '');
+            const parsed = parseFloat(cleaned);
+            if (!isNaN(parsed)) {
+              numericValue = parsed;
+            }
+          }
+          
+          if (!groupedData[xValue]) {
+            groupedData[xValue] = {
+              name: xValue.length > 30 ? xValue.substring(0, 30) + '...' : xValue,
+              fullName: xValue,
+              value: 0,
+              count: 0,
+              sum: 0
+            };
+          }
+          
+          groupedData[xValue].sum += numericValue;
+          groupedData[xValue].count += 1;
+        });
+
+        // Calculate average and set value to sum (for bar charts)
+        Object.values(groupedData).forEach(item => {
+          item.average = item.count > 0 ? item.sum / item.count : 0;
+          item.value = item.sum;
+        });
+
+        return Object.values(groupedData);
+      } else {
+        // For non-numeric y-axis, count occurrences of each combination
+        const uniqueXValues = [...new Set(validRows.map(row => String(row[xAxis]).trim()))];
+        const uniqueYValues = [...new Set(validRows.map(row => String(row[yAxis]).trim()))];
+
+        // Initialize chart data
+        const chartDataArray = uniqueXValues.map(xValue => {
+          const item = {
+            name: xValue.length > 30 ? xValue.substring(0, 30) + '...' : xValue,
+            fullName: xValue,
+            total: 0
+          };
+          
+          uniqueYValues.forEach(yValue => {
+            item[yValue] = 0;
+          });
+          
+          return item;
+        });
+
+        // Count occurrences
+        validRows.forEach(row => {
+          const xValue = String(row[xAxis]).trim();
+          const yValue = String(row[yAxis]).trim();
+          
+          const xIndex = uniqueXValues.findIndex(x => x === xValue);
+          if (xIndex !== -1) {
+            if (chartDataArray[xIndex][yValue] !== undefined) {
+              chartDataArray[xIndex][yValue] += 1;
+              chartDataArray[xIndex].total += 1;
+            }
+          }
+        });
+
+        return chartDataArray;
+      }
+    } catch (error) {
+      console.error('Error generating enhanced chart data:', error);
       return [];
     }
+  };
 
-    const aggregatedData = {};
-    let isSimpleMode = true; // Track if we're in simple counting mode (no status grouping)
-
-    departmentFiles.forEach((file) => {
-      const fileHeaderCount = file.fileData?.headerConfig?.rowCount || 1;
-      const dataRows = extractDataRowsFromFile(file.fileData, fileHeaderCount);
-
-      dataRows.forEach((row) => {
-        const xValue = row[xAxis];
-        const yValue = row[yAxis];
-        
-        if (xValue === undefined || xValue === null || xValue === '') return;
-        
-        // Check if Y-axis is a status/text column
-        const isStatusYAxis = yAxis.toLowerCase().includes('status') || 
-                              ['status', 'state', 'condition', 'stage'].some(s => 
-                                yAxis.toLowerCase().includes(s));
-        
-        // Check if Y-axis contains numeric values
-        let isNumericYAxis = false;
-        let numericValue = 0;
-        
-        if (typeof yValue === 'number') {
-          isNumericYAxis = true;
-          numericValue = yValue;
-        } else if (typeof yValue === 'string') {
-          const cleaned = yValue.replace(/[$€£¥,\s]/g, '');
-          const match = cleaned.match(/^(\d+(\.\d+)?)/);
-          if (match) {
-            isNumericYAxis = true;
-            numericValue = parseFloat(match[1]);
-          }
-        }
-        
-        // For Part Number vs Design Engineer scenario (or any non-status, non-numeric Y-axis)
-        // We want to count occurrences per X value
-        if (!isStatusYAxis && !isNumericYAxis) {
-          // Simple counting mode - count occurrences of each X value
-          const key = String(xValue);
-          
-          if (!aggregatedData[key]) {
-            aggregatedData[key] = {
-              name: String(xValue).substring(0, 30) + (String(xValue).length > 30 ? '...' : ''),
-              xAxis: xValue,
-              value: 0,
-              count: 0
-            };
-          }
-          
-          aggregatedData[key].value += 1; // Count each occurrence
-          aggregatedData[key].count += 1;
-        }
-        else if (isStatusYAxis) {
-          // Status Y-axis - group by status
-          isSimpleMode = false;
-          const status = detectExactStatus(yValue);
-          const key = `${xValue}|${status}`;
-          
-          if (!aggregatedData[key]) {
-            aggregatedData[key] = {
-              name: String(xValue).substring(0, 30) + (String(xValue).length > 30 ? '...' : ''),
-              xAxis: xValue,
-              status: status,
-              count: 0,
-              value: 0,
-              records: []
-            };
-          }
-          
-          aggregatedData[key].value += 1; // Count occurrences
-          aggregatedData[key].count += 1;
-          aggregatedData[key].records.push(row);
-        }
-        else if (isNumericYAxis) {
-          // Numeric Y-axis - sum the values by X, optionally detect status from other fields
-          // Check if there are status-like columns in the data
-          let hasStatusColumn = false;
-          for (const key in row) {
-            if (typeof row[key] === 'string' && 
-                (key.toLowerCase().includes('status') || 
-                 ['status', 'state', 'condition'].includes(key.toLowerCase()))) {
-              hasStatusColumn = true;
-              break;
-            }
-          }
-          
-          if (hasStatusColumn) {
-            // If there are status columns, group by status
-            isSimpleMode = false;
-            const status = detectRowStatus(row);
-            const key = `${xValue}|${status}`;
-            
-            if (!aggregatedData[key]) {
-              aggregatedData[key] = {
-                name: String(xValue).substring(0, 30) + (String(xValue).length > 30 ? '...' : ''),
-                xAxis: xValue,
-                status: status,
-                count: 0,
-                value: 0,
-                records: []
-              };
-            }
-            
-            aggregatedData[key].value += numericValue;
-            aggregatedData[key].count += 1;
-            aggregatedData[key].records.push(row);
-          } else {
-            // Simple numeric aggregation by X only
-            const key = String(xValue);
-            
-            if (!aggregatedData[key]) {
-              aggregatedData[key] = {
-                name: String(xValue).substring(0, 30) + (String(xValue).length > 30 ? '...' : ''),
-                xAxis: xValue,
-                value: 0,
-                count: 0
-              };
-            }
-            
-            aggregatedData[key].value += numericValue;
-            aggregatedData[key].count += 1;
-          }
-        }
-      });
-    });
-
-    // Check if we're in simple mode (no status grouping)
-    const firstKey = Object.keys(aggregatedData)[0];
-    isSimpleMode = firstKey && !aggregatedData[firstKey].hasOwnProperty('status');
-
-    if (isSimpleMode) {
-      // Simple mode - just return array of x vs y values
-      return Object.values(aggregatedData).map(item => ({
-        name: item.name,
-        value: item.value,
-        count: item.count,
-        average: item.count > 0 ? item.value / item.count : 0
+  // Generate distribution data
+  const generateDistribution = (chartData, xAxis, yAxis, allRows) => {
+    if (!chartData || chartData.length === 0) return [];
+    
+    // Check if y-axis is numeric by looking at actual data
+    const yValues = allRows.map(row => row[yAxis]).filter(v => v !== undefined && v !== null && v !== '');
+    const isYAxisNumeric = isNumericColumn(yValues);
+    
+    if (isYAxisNumeric) {
+      // For numeric data, distribution shows each category with its aggregated value
+      return chartData.map((item, index) => ({
+        name: item.fullName || item.name,
+        value: item.sum || item.value || 0,
+        color: getColorForValue(item.fullName || item.name, index),
+        count: item.count || 1
       }));
     } else {
-      // Status mode - transform to array format suitable for stacked charts
-      const chartDataArray = [];
-      const uniqueXValues = [...new Set(Object.values(aggregatedData).map(item => item.xAxis))];
-
-      uniqueXValues.forEach(xValue => {
-        const item = {
-          name: String(xValue).substring(0, 30) + (String(xValue).length > 30 ? '...' : ''),
-          xAxis: xValue,
-          fullName: xValue
-        };
-        
-        // Get all unique statuses for this X value
-        const statusesForX = Object.values(aggregatedData).filter(d => d.xAxis === xValue);
-        
-        statusesForX.forEach(data => {
-          if (data.status) {
-            item[data.status] = data.value;
-            item[`${data.status}Count`] = data.count;
-            item[`${data.status}Avg`] = data.count > 0 ? data.value / data.count : 0;
+      // For categorical data, distribution shows counts of each y-value category
+      const distribution = {};
+      
+      chartData.forEach(item => {
+        Object.keys(item).forEach(key => {
+          if (key !== 'name' && key !== 'fullName' && key !== 'total' && typeof item[key] === 'number') {
+            if (!distribution[key]) {
+              distribution[key] = 0;
+            }
+            distribution[key] += item[key];
           }
         });
-        
-        item.totalCount = statusesForX.reduce((sum, data) => sum + (data.count || 0), 0);
-        item.totalValue = statusesForX.reduce((sum, data) => sum + (data.value || 0), 0);
-        
-        chartDataArray.push(item);
       });
-
-      return chartDataArray;
+      
+      return Object.entries(distribution)
+        .map(([name, value], index) => ({
+          name,
+          value,
+          color: getColorForValue(name, index),
+          count: value
+        }))
+        .sort((a, b) => b.value - a.value);
     }
-  } catch (error) {
-    console.error('Error generating enhanced chart data:', error);
-    return [];
-  }
-};
+  };
 
-// Generate status distribution with improved categorization
-const generateStatusDistribution = (chartData, yAxis) => {
-  // If chart data is in simple mode (no status properties), return a single "Total" category
-  if (chartData.length > 0 && !chartData[0].hasOwnProperty('completed') && 
-      !chartData[0].hasOwnProperty('in progress') && !chartData[0].hasOwnProperty('pending') &&
-      !chartData[0].hasOwnProperty('overdue') && !chartData[0].hasOwnProperty('planned') &&
-      !chartData[0].hasOwnProperty('review') && !chartData[0].hasOwnProperty('other')) {
-    
-    // For simple mode, create a single "Total" category
-    return [{
-      name: 'Total',
-      value: chartData.reduce((sum, item) => sum + (item.value || 0), 0),
-      color: '#2563eb',
-      count: chartData.length
-    }];
-  }
+  // handleProjectSelect function - Now resets dashboard config to all unselected
+  const handleProjectSelect = (projectId) => {
+    const project = projectModules.find(p => p.id === projectId);
+    setSelectedProjectId(projectId);
+    setSelectedProject(project);
 
-  const distribution = {};
-  const isStatusColumn = yAxis.toLowerCase().includes('status') || 
-                        ['status', 'state', 'condition', 'stage'].some(s => 
-                          yAxis.toLowerCase().includes(s));
-  
-  chartData.forEach(item => {
-    Object.keys(item).forEach(key => {
-      // Skip metadata keys and count/avg fields
-      if (key !== 'name' && key !== 'xAxis' && key !== 'fullName' && 
-          key !== 'totalCount' && key !== 'totalValue' && 
-          !key.includes('Count') && !key.includes('Avg') && 
-          !key.includes('Records')) {
+    console.log('Selected project:', project);
+
+    // DECLARE dynamicStages OUTSIDE the if block
+    let dynamicStages = [];
+
+    // Create dynamic stages from project submodules
+    if (project && project.submodules && Array.isArray(project.submodules)) {
+      dynamicStages = project.submodules.map((submodule, index) => {
+        // CRITICAL: Use the correct ID to link stage to file
+        const trackerId = submodule.trackerId;
         
-        if (!distribution[key]) {
-          distribution[key] = 0;
-        }
-        
-        // For status columns, each occurrence counts as 1
-        // For numeric columns, sum the values
-        distribution[key] += isStatusColumn ? (item[`${key}Count`] || item[key]) : item[key];
-      }
+        return {
+          id: submodule.id || `stage-${index}`,
+          name: submodule.displayName || submodule.name || `Stage ${index + 1}`,
+          color: getStageColor(index),
+          description: submodule.description || `${submodule.name} Phase`,
+          trackerId: trackerId,
+          fileModule: submodule
+        };
+      });
+      setProjectStages(dynamicStages);
+      
+      console.log('Dynamic stages created:', dynamicStages);
+      
+      // Reset dashboard config to all unchecked when selecting a new project
+      setDashboardConfig({
+        milestones: false,
+        criticalIssues: false,
+        metrics: false,
+        selectedMetrics: []
+      });
+    } else {
+      setProjectStages([]);
+    }
+
+    setSelectedFile({
+      isSelected: false,
+      fileData: null,
+      trackerInfo: null,
+      projectModuleId: null,
+      source: null
     });
-  });
 
-  // Sort by value descending
-  return Object.entries(distribution)
-    .map(([status, value], index) => ({
-      name: status.charAt(0).toUpperCase() + status.slice(1),
-      value: Math.round(value * 100) / 100, // Round to 2 decimals
-      color: STATUS_COLORS[status] || PIE_COLORS[index % PIE_COLORS.length],
-      count: value
-    }))
-    .sort((a, b) => b.value - a.value);
-};
-
-// Handle project selection - updated to extract available departments
-const handleProjectSelect = (projectId) => {
-const project = projectModules.find(p => p.id === projectId);
-setSelectedProjectId(projectId);
-setSelectedProject(project);
-
-// Extract unique departments from the project's files
-const departments = new Set();
-if (project && project.submodules && Array.isArray(project.submodules)) {
-  project.submodules.forEach((fileModule) => {
-    const trackerInfo = getTrackerInfo(fileModule.trackerId);
-    if (trackerInfo && trackerInfo.department) {
-      departments.add(trackerInfo.department);
+    // Get all files from the project
+    if (project && project.submodules && Array.isArray(project.submodules)) {
+      const files = [];
+      project.submodules.forEach((fileModule) => {
+        const trackerInfo = getTrackerInfo(fileModule.trackerId);
+        const fileData = uploadedFilesData[fileModule.trackerId];
+        if (trackerInfo && fileData) {
+          files.push({
+            ...fileModule,
+            trackerInfo,
+            fileData: fileData,
+            projectName: project.name,
+            trackerId: fileModule.trackerId
+          });
+        }
+      });
+      
+      setDepartmentFiles(files);
+      console.log('Files loaded:', files.map(f => ({ name: f.name, trackerId: f.trackerId })));
+      
+      // Extract columns from all files - now prioritizing displayHeaders
+      const columns = extractColumnsFromFiles(files);
+      setDepartmentColumns(columns);
+      
+      // Extract columns for each specific stage
+      const stageColumnsMap = {};
+      
+      // Now dynamicStages is accessible here because we declared it outside
+      dynamicStages.forEach(stage => {
+        console.log(`Looking for file for stage: ${stage.name} with trackerId: ${stage.trackerId}`);
+        
+        // Find the file for this stage by trackerId
+        const stageFile = files.find(f => f.trackerId === stage.trackerId);
+        
+        if (stageFile && stageFile.fileData) {
+          // Try to get displayHeaders first (from UI), fallback to regular headers
+          let stageHeaders = [];
+          
+          if (stageFile.fileData.displayHeaders && Array.isArray(stageFile.fileData.displayHeaders)) {
+            stageHeaders = stageFile.fileData.displayHeaders;
+            console.log(`✅ Stage "${stage.name}" using display headers from UI:`, stageHeaders);
+          } else {
+            stageHeaders = extractHeadersFromFileData(stageFile.fileData);
+            console.log(`✅ Stage "${stage.name}" using extracted headers:`, stageHeaders);
+          }
+          
+          stageColumnsMap[stage.id] = stageHeaders;
+        } else {
+          console.warn(`❌ No file found for stage: ${stage.name} with trackerId: ${stage.trackerId}`);
+          console.log('Available files trackerIds:', files.map(f => f.trackerId));
+          stageColumnsMap[stage.id] = []; // Empty array as fallback
+        }
+      });
+      
+      setStageSpecificColumns(stageColumnsMap);
+      console.log('Stage-specific columns map:', stageColumnsMap);
+      
+      // Extract employees from all files
+      const employees = extractEmployeesFromFiles(files);
+      setDepartmentEmployees(employees);
+      
+      // Reset stage configs when changing project
+      setStageConfigs({});
+      setStageChartData({});
+      setStageDistribution({});
+      setStageChartTypes({});
+    } else {
+      setDepartmentFiles([]);
+      setDepartmentColumns([]);
+      setStageSpecificColumns({});
+      setDepartmentEmployees([]);
     }
-  });
-}
-setAvailableDepartments(Array.from(departments));
 
-setSelectedDepartment('');
-setDepartmentFiles([]);
-setDepartmentColumns([]);
-setDepartmentEmployees([]);
-setXAxis('');
-setYAxis('');
-setChartData([]);
-setStatusDistribution([]);
-setSelectedEmployees([]);
-setHeaderRowCount(1);
-setSelectedHeaders({});
-};
+    setSelectedEmployees([]);
+    // Show config modal after project selection
+    setShowConfigModal(true);
+  };
 
-// Load department files
-useEffect(() => {
-if (selectedDepartment && selectedProject) {
-const files = getDepartmentFilesFromSelectedProject();
-  
-  if (files.length > 0) {
-    setDepartmentFiles(files);
-    const columns = extractColumnsFromFiles(files);
-    setDepartmentColumns(columns);
-    const employees = extractEmployeesFromFiles(files);
-    setDepartmentEmployees(employees);
-    setXAxis('');
-    setYAxis('');
-  } else {
+  // Handle dashboard configuration apply
+  const handleDashboardConfigApply = (config) => {
+    setDashboardConfig(config);
+  };
+
+  // Handle stage configuration
+  const handleStageConfig = (stageId, xAxis, yAxis) => {
+    const newConfigs = {
+      ...stageConfigs,
+      [stageId]: { xAxis, yAxis }
+    };
+    setStageConfigs(newConfigs);
+
+    // Generate chart data for this stage
+    if (departmentFiles.length > 0 && xAxis && yAxis) {
+      const allRows = extractAllRows();
+      const data = generateEnhancedChartData(departmentFiles, xAxis, yAxis);
+      const distribution = generateDistribution(data, xAxis, yAxis, allRows);
+      
+      setStageChartData({
+        ...stageChartData,
+        [stageId]: data
+      });
+      
+      setStageDistribution({
+        ...stageDistribution,
+        [stageId]: distribution
+      });
+    }
+  };
+
+  // Handle chart type change for a stage
+  const handleChartTypeChange = (stageId, chartType) => {
+    setStageChartTypes({
+      ...stageChartTypes,
+      [stageId]: chartType
+    });
+  };
+
+  // Handle full screen view
+  const handleFullScreen = (stage) => {
+    setFullScreenStage(stage);
+  };
+
+  // Update handleDashboardClick to reset to all unselected
+  const handleDashboardClick = () => {
+    setSelectedFile({
+      isSelected: false,
+      fileData: null,
+      trackerInfo: null,
+      projectModuleId: null,
+      source: null
+    });
+    
+    setSelectedProjectId('');
+    setSelectedProject(null);
     setDepartmentFiles([]);
     setDepartmentColumns([]);
+    setStageSpecificColumns({});
     setDepartmentEmployees([]);
-    setXAxis('');
-    setYAxis('');
-    setChartData([]);
-    setStatusDistribution([]);
-  }
-} else {
-setDepartmentFiles([]);
-setDepartmentColumns([]);
-setDepartmentEmployees([]);
-setXAxis('');
-setYAxis('');
-setChartData([]);
-setStatusDistribution([]);
-}
-}, [selectedDepartment, selectedProject]);
-
-const getDepartmentFilesFromSelectedProject = () => {
-if (!selectedProject) return [];
-
-const files = [];
-if (selectedProject.submodules && Array.isArray(selectedProject.submodules)) {
-selectedProject.submodules.forEach((fileModule) => {
-  const trackerInfo = getTrackerInfo(fileModule.trackerId);
-  if (trackerInfo && trackerInfo.department?.toLowerCase() === selectedDepartment.toLowerCase()) {
-    const fileData = uploadedFilesData[fileModule.trackerId];
-    files.push({
-      ...fileModule,
-      trackerInfo,
-      fileData: fileData || null,
-      projectName: selectedProject.name
+    setProjectStages([]);
+    setStageConfigs({});
+    setStageChartData({});
+    setStageDistribution({});
+    setStageChartTypes({});
+    setSelectedEmployees([]);
+    
+    // Reset dashboard config to all unchecked
+    setDashboardConfig({
+      milestones: false,
+      criticalIssues: false,
+      metrics: false,
+      selectedMetrics: []
     });
-  }
-});
-}
-return files;
-};
+  };
 
-// Enhanced function to extract columns from files with multi-row header support
-const extractColumnsFromFiles = (files) => {
-const columnsSet = new Set();
+  // Extract columns from files - now prioritizing displayHeaders
+  const extractColumnsFromFiles = (files) => {
+    const columnsSet = new Set();
 
-files.forEach((file) => {
-if (!file.fileData) return;
+    files.forEach((file) => {
+      if (!file.fileData) return;
 
-const headers = extractHeadersFromFileData(file.fileData);
-headers.forEach(col => {
-  if (col && col.trim() !== '') {
-    columnsSet.add(col);
-  }
-});
-});
-
-return Array.from(columnsSet);
-};
-
-const extractEmployeesFromFiles = (files) => {
-const employeesSet = new Set();
-files.forEach(file => {
-if (file.trackerInfo) {
-employeesSet.add(JSON.stringify({
-  id: file.trackerInfo.id,
-  name: file.trackerInfo.employeeName || 'Unknown',
-  email: file.trackerInfo.employeeEmail || `${file.trackerInfo.employeeName?.toLowerCase().replace(/\s+/g, '.')}@company.com`,
-  department: file.trackerInfo.department,
-  project: selectedProject?.name,
-  uploadDate: file.trackerInfo.uploadDate
-}));
-}
-});
-return Array.from(employeesSet).map(e => JSON.parse(e));
-};
-
-// Function to configure headers for a file
-const configureFileHeaders = (fileModule, rowCount, selectedHeaders) => {
-// Filter out empty custom headers
-const filteredHeaders = {};
-Object.keys(selectedHeaders).forEach(key => {
-if (selectedHeaders[key] && selectedHeaders[key].trim() !== '') {
-  filteredHeaders[key] = selectedHeaders[key];
-}
-});
-
-const updatedFileData = { 
-...fileModule.fileData,
-headerConfig: {
-  rowCount,
-  selectedHeaders: filteredHeaders
-}
-};
-
-// Save to localStorage
-const newFilesData = {
-...uploadedFilesData,
-[fileModule.trackerId]: updatedFileData
-};
-
-setUploadedFilesData(newFilesData);
-localStorage.setItem('uploaded_files_data', JSON.stringify(newFilesData));
-
-// Refresh department files and columns
-const updatedFiles = departmentFiles.map(f => 
-f.trackerId === fileModule.trackerId ? { ...f, fileData: updatedFileData } : f
-);
-setDepartmentFiles(updatedFiles);
-
-// Immediately update columns based on new headers
-const columns = extractColumnsFromFiles(updatedFiles);
-setDepartmentColumns(columns);
-
-// Close modal after configuration
-setShowHeaderConfig(false);
-
-// Force chart update if axes are already selected
-if (xAxis && yAxis) {
-  const newData = generateEnhancedChartData(updatedFiles, xAxis, yAxis);
-  setChartData(newData);
-  
-  const distribution = generateStatusDistribution(newData, yAxis);
-  setStatusDistribution(distribution);
-}
-
-// Show success message
-alert('Header configuration saved successfully!');
-};
-
-// Handle email sending
-const handleSendEmail = async () => {
-if (selectedEmployees.length === 0) {
-setEmailStatus('Please select at least one recipient');
-return;
-}
-
-setEmailSending(true);
-setEmailStatus('Sending...');
-
-try {
-await new Promise(resolve => setTimeout(resolve, 1500));
-setEmailStatus('Email sent successfully!');
-setTimeout(() => {
-  setShowEmailModal(false);
-  setEmailStatus('');
-  setEmailSubject('');
-  setEmailBody('');
-  setSelectedEmployees([]);
-}, 2000);
-} catch (error) {
-setEmailStatus('Failed to send email');
-} finally {
-setEmailSending(false);
-}
-};
-
-const toggleEmployeeSelection = (employeeId) => {
-setSelectedEmployees(prev => 
-prev.includes(employeeId) 
-  ? prev.filter(id => id !== employeeId)
-  : [...prev, employeeId]
-);
-};
-
-const selectAllEmployees = () => {
-if (selectedEmployees.length === departmentEmployees.length) {
-setSelectedEmployees([]);
-} else {
-setSelectedEmployees(departmentEmployees.map(e => e.id));
-}
-};
-
-// Load data
-const loadProjectModules = () => {
-try {
-const savedModules = localStorage.getItem('project_dashboard_modules');
-const allModules = savedModules ? JSON.parse(savedModules) : [];
-
-const projectModules = allModules.filter(m => 
-  m.type === 'project' && m.context === 'project-dashboard'
-);
-
-setProjectModules(projectModules);
-
-const savedTrackers = localStorage.getItem('upload_trackers');
-setTrackers(savedTrackers ? JSON.parse(savedTrackers) : []);
-
-const savedFilesData = localStorage.getItem('uploaded_files_data');
-setUploadedFilesData(savedFilesData ? JSON.parse(savedFilesData) : {});
-} catch (error) {
-console.error('Error loading data:', error);
-} finally {
-setLoading(false);
-}
-};
-
-useEffect(() => {
-loadProjectModules();
-
-const handleUpdate = () => loadProjectModules();
-window.addEventListener('projectDashboardUpdate', handleUpdate);
-
-return () => window.removeEventListener('projectDashboardUpdate', handleUpdate);
-}, []);
-
-// File event handling
-useEffect(() => {
-const handleOpenFile = (event) => {
-const { trackerId, source } = event.detail;
-if (source && source !== 'project-dashboard') return;
-
-const tracker = trackers.find(t => t.id === trackerId);
-const fileData = uploadedFilesData[trackerId];
-
-if (!tracker || !fileData) return;
-
-let projectModule = null;
-for (const proj of projectModules) {
-  if (proj.submodules?.some(f => f.trackerId === trackerId)) {
-    projectModule = proj;
-    break;
-  }
-}
-
-setSelectedFile({
-  isSelected: true,
-  fileData: fileData,
-  trackerInfo: tracker,
-  projectModuleId: projectModule?.moduleId || null,
-  source: 'project-dashboard'
-});
-
-if (projectModule) {
-  setSelectedProjectId(projectModule.id);
-  setSelectedProject(projectModule);
-}
-};
-
-window.addEventListener('openProjectDashboardFile', handleOpenFile);
-return () => window.removeEventListener('openProjectDashboardFile', handleOpenFile);
-}, [trackers, uploadedFilesData, projectModules]);
-
-const handleFileClick = (fileModule, projectModule) => {
-if (selectedFile.isSelected && selectedFile.trackerInfo?.id === fileModule.trackerId) {
-return;
-}
-
-const trackerInfo = getTrackerInfo(fileModule.trackerId);
-const fileData = uploadedFilesData[fileModule.trackerId];
-
-if (!trackerInfo || !fileData) return;
-
-setSelectedFile({
-isSelected: true,
-fileData: fileData,
-trackerInfo: trackerInfo,
-projectModuleId: projectModule.moduleId,
-source: 'project-dashboard'
-});
-};
-
-const handleCloseFileViewer = () => {
-setSelectedFile({
-isSelected: false,
-fileData: null,
-trackerInfo: null,
-projectModuleId: null,
-source: null
-});
-};
-
-const handleSaveFileData = (trackerId, updatedFileData) => {
-const newFilesData = { ...uploadedFilesData, [trackerId]: updatedFileData };
-setUploadedFilesData(newFilesData);
-localStorage.setItem('uploaded_files_data', JSON.stringify(newFilesData));
-
-if (selectedFile.trackerInfo?.id === trackerId) {
-setSelectedFile(prev => ({ ...prev, fileData: updatedFileData }));
-}
-
-if (selectedDepartment && selectedProject) {
-setDepartmentFiles(getDepartmentFilesFromSelectedProject());
-}
-};
-
-const getTrackerInfo = (trackerId) => {
-return trackers.find(t => t.id === trackerId);
-};
-
-// Generate chart data when axes change or when department files are updated
-useEffect(() => {
-  if (selectedDepartment && xAxis && yAxis && departmentFiles.length > 0) {
-    const data = generateEnhancedChartData(departmentFiles, xAxis, yAxis);
-    setChartData(data);
-    
-    const distribution = generateStatusDistribution(data, yAxis);
-    setStatusDistribution(distribution);
-    
-    // Auto-select appropriate chart type based on data
-    const isSimpleMode = data.length > 0 && !data[0].hasOwnProperty('completed') && 
-                         !data[0].hasOwnProperty('in progress');
-    
-    if (isSimpleMode) {
-      // For simple counting (like Part Number vs Design Engineer), use bar chart
-      setChartType('bar');
-    } else {
-      // For status-based data
-      if (distribution.length <= 6) {
-        setChartType('pie');
-      } else {
-        setChartType('bar');
-      }
-    }
-  } else {
-    setChartData([]);
-    setStatusDistribution([]);
-  }
-}, [selectedDepartment, xAxis, yAxis, departmentFiles]);
-
-if (loading) {
-return (
-<div className="min-h-screen bg-gray-50 flex items-center justify-center">
-  <div className="text-center">
-    <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto mb-4"></div>
-    <h3 className="text-lg font-medium text-gray-900">Loading Projects...</h3>
-  </div>
-</div>
-);
-}
-
-return (
-<div className="min-h-screen bg-gray-50">
-  {/* Header */}
-  <div className="bg-white border-b border-gray-200 px-6 py-4">
-    <div className="flex items-center justify-between">
-      <div className="flex items-center space-x-3">
-        <Layout className="h-6 w-6 text-blue-600" />
-        <h1 className="text-xl font-semibold text-gray-900">Project Analytics Dashboard</h1>
-      </div>
+      // Try to get headers from displayHeaders first (from UI)
+      let headers = [];
       
-      {/* Project Selector */}
-      <div className="w-96">
-        {projectModules.length === 0 ? (
-          <button
-            onClick={() => navigate('/upload-trackers')}
-            className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm flex items-center justify-center"
-          >
-            <File className="h-4 w-4 mr-2" />
-            Upload Trackers
-          </button>
-        ) : (
-          <select
-            value={selectedProjectId}
-            onChange={(e) => handleProjectSelect(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
-          >
-            <option value="">Select a project</option>
-            {projectModules.map(project => (
-              <option key={project.id} value={project.id}>
-                {project.name} ({project.submodules?.length || 0} files)
-              </option>
-            ))}
-          </select>
-        )}
+      if (file.fileData.displayHeaders && Array.isArray(file.fileData.displayHeaders)) {
+        headers = file.fileData.displayHeaders;
+        console.log(`📋 Using display headers for ${file.name}:`, headers);
+      } else {
+        headers = extractHeadersFromFileData(file.fileData);
+      }
+      
+      headers.forEach(col => {
+        if (col && col.trim() !== '') {
+          columnsSet.add(col);
+        }
+      });
+    });
+
+    return Array.from(columnsSet).sort();
+  };
+
+  const extractEmployeesFromFiles = (files) => {
+    const employeesSet = new Set();
+    files.forEach(file => {
+      if (file.trackerInfo) {
+        employeesSet.add(JSON.stringify({
+          id: file.trackerInfo.id,
+          name: file.trackerInfo.employeeName || 'Unknown',
+          email: file.trackerInfo.employeeEmail || `${file.trackerInfo.employeeName?.toLowerCase().replace(/\s+/g, '.')}@company.com`,
+          department: file.trackerInfo.department,
+          project: selectedProject?.name,
+          uploadDate: file.trackerInfo.uploadDate
+        }));
+      }
+    });
+    return Array.from(employeesSet).map(e => JSON.parse(e));
+  };
+
+  // Configure file headers
+  const configureFileHeaders = (fileModule, rowCount, selectedHeaders) => {
+    const updatedFileData = { 
+      ...fileModule.fileData,
+      headerConfig: {
+        rowCount
+      }
+    };
+
+    const newFilesData = {
+      ...uploadedFilesData,
+      [fileModule.trackerId]: updatedFileData
+    };
+
+    setUploadedFilesData(newFilesData);
+    localStorage.setItem('uploaded_files_data', JSON.stringify(newFilesData));
+
+    const updatedFiles = departmentFiles.map(f => 
+      f.trackerId === fileModule.trackerId ? { ...f, fileData: updatedFileData } : f
+    );
+    setDepartmentFiles(updatedFiles);
+
+    const columns = extractColumnsFromFiles(updatedFiles);
+    setDepartmentColumns(columns);
+    
+    // Update stage-specific columns for the affected file
+    const updatedStageColumns = { ...stageSpecificColumns };
+    Object.keys(stageSpecificColumns).forEach(stageId => {
+      const stage = projectStages.find(s => s.id === stageId);
+      if (stage && stage.trackerId === fileModule.trackerId) {
+        const stageFile = updatedFiles.find(f => f.trackerId === stage.trackerId);
+        if (stageFile && stageFile.fileData) {
+          // Try to get displayHeaders first
+          let stageHeaders = [];
+          if (stageFile.fileData.displayHeaders && Array.isArray(stageFile.fileData.displayHeaders)) {
+            stageHeaders = stageFile.fileData.displayHeaders;
+          } else {
+            stageHeaders = extractHeadersFromFileData(stageFile.fileData);
+          }
+          updatedStageColumns[stageId] = stageHeaders;
+          console.log(`Updated stage "${stage.name}" headers after config:`, stageHeaders);
+        }
+      }
+    });
+    setStageSpecificColumns(updatedStageColumns);
+
+    setShowHeaderConfig(false);
+
+    // Regenerate all stage charts with new data
+    const allRows = extractAllRows();
+    const newStageChartData = {};
+    const newStageDistribution = {};
+
+    Object.entries(stageConfigs).forEach(([stageId, config]) => {
+      if (config.xAxis && config.yAxis) {
+        const data = generateEnhancedChartData(updatedFiles, config.xAxis, config.yAxis);
+        const distribution = generateDistribution(data, config.xAxis, config.yAxis, allRows);
+        newStageChartData[stageId] = data;
+        newStageDistribution[stageId] = distribution;
+      }
+    });
+
+    setStageChartData(newStageChartData);
+    setStageDistribution(newStageDistribution);
+
+    alert('Header configuration saved successfully!');
+  };
+
+  // Handle email sending
+  const handleSendEmail = async () => {
+    if (selectedEmployees.length === 0) {
+      setEmailStatus('Please select at least one recipient');
+      return;
+    }
+
+    setEmailSending(true);
+    setEmailStatus('Sending...');
+
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      setEmailStatus('Email sent successfully!');
+      setTimeout(() => {
+        setShowEmailModal(false);
+        setEmailStatus('');
+        setEmailSubject('');
+        setEmailBody('');
+        setSelectedEmployees([]);
+      }, 2000);
+    } catch (error) {
+      setEmailStatus('Failed to send email');
+    } finally {
+      setEmailSending(false);
+    }
+  };
+
+  const toggleEmployeeSelection = (employeeId) => {
+    setSelectedEmployees(prev => 
+      prev.includes(employeeId) 
+        ? prev.filter(id => id !== employeeId)
+        : [...prev, employeeId]
+    );
+  };
+
+  const selectAllEmployees = () => {
+    if (selectedEmployees.length === departmentEmployees.length) {
+      setSelectedEmployees([]);
+    } else {
+      setSelectedEmployees(departmentEmployees.map(e => e.id));
+    }
+  };
+
+  // Load data
+  const loadProjectModules = () => {
+    try {
+      const savedModules = localStorage.getItem('project_dashboard_modules');
+      const allModules = savedModules ? JSON.parse(savedModules) : [];
+
+      const projectModules = allModules.filter(m => 
+        m.type === 'project' && m.context === 'project-dashboard'
+      );
+
+      setProjectModules(projectModules);
+
+      const savedTrackers = localStorage.getItem('upload_trackers');
+      setTrackers(savedTrackers ? JSON.parse(savedTrackers) : []);
+
+      const savedFilesData = localStorage.getItem('uploaded_files_data');
+      setUploadedFilesData(savedFilesData ? JSON.parse(savedFilesData) : {});
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProjectModules();
+
+    const handleUpdate = () => loadProjectModules();
+    window.addEventListener('projectDashboardUpdate', handleUpdate);
+
+    return () => window.removeEventListener('projectDashboardUpdate', handleUpdate);
+  }, []);
+
+  // File event handling
+  useEffect(() => {
+    const handleOpenFile = (event) => {
+      const { trackerId, source } = event.detail;
+      if (source && source !== 'project-dashboard') return;
+
+      const tracker = trackers.find(t => t.id === trackerId);
+      const fileData = uploadedFilesData[trackerId];
+
+      if (!tracker || !fileData) return;
+
+      let projectModule = null;
+      for (const proj of projectModules) {
+        if (proj.submodules?.some(f => f.trackerId === trackerId)) {
+          projectModule = proj;
+          break;
+        }
+      }
+
+      setSelectedFile({
+        isSelected: true,
+        fileData: fileData,
+        trackerInfo: tracker,
+        projectModuleId: projectModule?.moduleId || null,
+        source: 'project-dashboard'
+      });
+
+      if (projectModule) {
+        setSelectedProjectId(projectModule.id);
+        setSelectedProject(projectModule);
+      }
+    };
+
+    window.addEventListener('openProjectDashboardFile', handleOpenFile);
+    return () => window.removeEventListener('openProjectDashboardFile', handleOpenFile);
+  }, [trackers, uploadedFilesData, projectModules]);
+
+  // Handle file click
+  const handleFileClick = (fileModule, projectModule) => {
+    const trackerInfo = getTrackerInfo(fileModule.trackerId);
+    const fileData = uploadedFilesData[fileModule.trackerId];
+
+    if (!trackerInfo || !fileData) return;
+
+    setSelectedFile({
+      isSelected: true,
+      fileData: fileData,
+      trackerInfo: trackerInfo,
+      projectModuleId: projectModule.moduleId,
+      source: 'project-dashboard'
+    });
+  };
+
+  const handleCloseFileViewer = () => {
+    setSelectedFile({
+      isSelected: false,
+      fileData: null,
+      trackerInfo: null,
+      projectModuleId: null,
+      source: null
+    });
+  };
+
+  // Handle save file data - update stage-specific columns
+  const handleSaveFileData = (trackerId, updatedFileData) => {
+    console.log('💾 SAVING FILE DATA - Tracker:', trackerId);
+    console.log('Updated display headers:', updatedFileData?.displayHeaders);
+    console.log('Updated headers:', updatedFileData?.headers);
+    
+    const newFilesData = { ...uploadedFilesData, [trackerId]: updatedFileData };
+    setUploadedFilesData(newFilesData);
+    localStorage.setItem('uploaded_files_data', JSON.stringify(newFilesData));
+
+    if (selectedFile.trackerInfo?.id === trackerId) {
+      setSelectedFile(prev => ({ ...prev, fileData: updatedFileData }));
+    }
+
+    if (selectedProject) {
+      // Refresh files
+      const files = [];
+      if (selectedProject.submodules && Array.isArray(selectedProject.submodules)) {
+        selectedProject.submodules.forEach((fileModule) => {
+          const trackerInfo = getTrackerInfo(fileModule.trackerId);
+          const fileData = newFilesData[fileModule.trackerId];
+          if (trackerInfo && fileData) {
+            files.push({
+              ...fileModule,
+              trackerInfo,
+              fileData: fileData,
+              projectName: selectedProject.name
+            });
+          }
+        });
+      }
+      setDepartmentFiles(files);
+      
+      const columns = extractColumnsFromFiles(files);
+      setDepartmentColumns(columns);
+      
+      // Update stage-specific columns for the affected file
+      const updatedStageColumns = { ...stageSpecificColumns };
+      Object.keys(stageSpecificColumns).forEach(stageId => {
+        const stage = projectStages.find(s => s.id === stageId);
+        if (stage && stage.trackerId === trackerId) {
+          const stageFile = files.find(f => f.trackerId === stage.trackerId);
+          if (stageFile && stageFile.fileData) {
+            // Try to get displayHeaders first
+            let stageHeaders = [];
+            if (stageFile.fileData.displayHeaders && Array.isArray(stageFile.fileData.displayHeaders)) {
+              stageHeaders = stageFile.fileData.displayHeaders;
+            } else {
+              stageHeaders = extractHeadersFromFileData(stageFile.fileData);
+            }
+            updatedStageColumns[stageId] = stageHeaders;
+            console.log(`Updated stage "${stage.name}" headers after save:`, stageHeaders);
+          }
+        }
+      });
+      setStageSpecificColumns(updatedStageColumns);
+    }
+  };
+
+  const getTrackerInfo = (trackerId) => {
+    return trackers.find(t => t.id === trackerId);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto mb-4"></div>
+          <h3 className="text-lg font-medium text-gray-900">Loading Projects...</h3>
+        </div>
       </div>
-    </div>
-  </div>
+    );
+  }
 
-  {/* Main Content */}
-  <div className="p-6">
-    {selectedProject ? (
-      <div className="flex gap-6">
-        {/* Left Panel - Controls */}
-        {!selectedFile.isSelected && (
-          <div className="w-96 flex-shrink-0 transition-all duration-300">
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              {/* Project Info */}
-              <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-                <h2 className="font-semibold text-gray-900 flex items-center">
-                  <Folder className="h-4 w-4 mr-2 text-blue-600" />
-                  {selectedProject.name}
-                </h2>
-                <p className="text-xs text-gray-600 mt-1">
-                  {selectedProject.submodules?.length || 0} files • {selectedProject.projectStats?.contributors?.length || 0} contributors
-                </p>
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      {!selectedFile.isSelected && (
+        <div className="bg-white border-b border-gray-200 px-6 py-4">
+          <div className="flex items-center justify-between">
+            
+            {/* Project Selector */}
+            <div className="w-96">
+              {projectModules.length === 0 ? (
+                <button
+                  onClick={() => navigate('/upload-trackers')}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm flex items-center justify-center"
+                >
+                  <File className="h-4 w-4 mr-2" />
+                  Upload Trackers
+                </button>
+              ) : (
+                <select
+                  value={selectedProjectId}
+                  onChange={(e) => handleProjectSelect(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+                >
+                  <option value="">Select a project</option>
+                  {projectModules.map(project => (
+                    <option key={project.id} value={project.id}>
+                      {project.name} ({project.submodules?.length || 0} files)
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content */}
+      <div className="p-6">
+        {selectedProject ? (
+          <div>
+            {/* File Viewer (if file selected) */}
+            {selectedFile.isSelected && selectedFile.source === 'project-dashboard' && (
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                <div className="p-4 h-[calc(100vh-240px)] overflow-auto">
+                  <FileContentViewer
+                    fileData={selectedFile.fileData}
+                    trackerInfo={selectedFile.trackerInfo}
+                    onBack={handleCloseFileViewer}
+                    onSaveData={(updatedData) => {
+                      if (selectedFile.trackerInfo) {
+                        handleSaveFileData(selectedFile.trackerInfo.id, updatedData);
+                      }
+                    }}
+                    viewOnly={false}
+                    context="project"
+                  />
+                </div>
               </div>
+            )}
 
-              {/* Department Selection */}
-              <div className="p-4 border-b border-gray-200">
-                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3 block">
-                  Select Department
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {availableDepartments.length > 0 ? (
-                    availableDepartments.map(dept => (
+            {/* Main Project Container - Only show when no file is selected */}
+            {!selectedFile.isSelected && (
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                {/* Project Header */}
+                <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      
+                      <h2 className="text-xl font-semibold text-white">{selectedProject.name}</h2>
+                      
+                    </div>
+                    
+                    {/* Controls inside header */}
+                    <div className="flex items-center space-x-3">
+                      {/* Stimulate Dashboard Button */}
                       <button
-                        key={dept}
-                        onClick={() => setSelectedDepartment(dept)}
-                        className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                          selectedDepartment === dept
-                            ? 'bg-blue-600 text-white shadow-sm'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
+                        onClick={() => setShowConfigModal(true)}
+                        className="px-4 py-1.5 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition-colors text-sm flex items-center font-medium"
                       >
-                        {dept}
+                        Stimulate Dashboard
                       </button>
-                    ))
-                  ) : (
-                    <div className="col-span-2 text-center py-4 text-sm text-gray-500 bg-gray-50 rounded-lg">
-                      No departments found
+
+                      {/* Send Report Button */}
+                      <button
+                        onClick={() => setShowEmailModal(true)}
+                        className="px-4 py-1.5 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition-colors text-sm flex items-center font-medium"
+                      >
+                        <Send className="h-4 w-4 mr-1" />
+                        Send Report
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Content Area - Conditionally rendered based on dashboard config */}
+                <div className="p-6 space-y-8">
+                  {/* UPDATED: Milestones Section with New Table Format */}
+                  {dashboardConfig.milestones && (
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                        <span>Major Milestones</span>
+                        <span className="ml-4 text-sm font-normal text-gray-500">(as of March 2024)</span>
+                      </h3>
+                      <div className="overflow-x-auto border border-gray-200 rounded-lg shadow-sm">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-100">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200 w-1/4">Major Milestones</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200 w-1/4">L0 drg</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200 w-1/4">L1 drg</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider w-1/4">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {DUMMY_MILESTONES.map((milestone) => (
+                              <tr key={milestone.id} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-sm font-medium text-gray-900 border-r border-gray-200">{milestone.name}</td>
+                                <td className="px-4 py-3 text-sm text-gray-600 border-r border-gray-200">{milestone.l0drg}</td>
+                                <td className="px-4 py-3 text-sm text-gray-600 border-r border-gray-200">{milestone.l1drg}</td>
+                                <td className="px-4 py-3">
+                                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium
+                                    ${milestone.status === 'Completed' ? 'bg-green-100 text-green-800' : 
+                                      milestone.status === 'Ahead' ? 'bg-blue-100 text-blue-800' :
+                                      milestone.status === 'At Risk' ? 'bg-orange-100 text-orange-800' :
+                                      milestone.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-gray-100 text-gray-800'}`}>
+                                    {milestone.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {/* Empty attached table placeholder */}
+                      <div className="mt-4 border border-gray-200 rounded-lg bg-gray-50 p-4 text-center text-gray-400 text-sm">
+                        <Table className="h-5 w-5 mx-auto mb-1 text-gray-300" />
+                        <span>Additional data table placeholder</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* UPDATED: Critical Issues Section with New Table Format */}
+                  {dashboardConfig.criticalIssues && (
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Critical Issues</h3>
+                      <div className="overflow-x-auto border border-gray-200 rounded-lg shadow-sm">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-100">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200 w-12">S.No.</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200">Issues</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200 w-32">Resp</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200">Support Required</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200 w-32">From whom</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider w-24">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {DUMMY_ISSUES.map((issue) => (
+                              <tr key={issue.id} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-sm text-gray-600 border-r border-gray-200">{issue.sno}</td>
+                                <td className="px-4 py-3 text-sm text-gray-900 border-r border-gray-200">{issue.issue}</td>
+                                <td className="px-4 py-3 text-sm text-gray-600 border-r border-gray-200">{issue.resp}</td>
+                                <td className="px-4 py-3 text-sm text-gray-600 border-r border-gray-200">{issue.supportRequired}</td>
+                                <td className="px-4 py-3 text-sm text-gray-600 border-r border-gray-200">{issue.fromWhom}</td>
+                                <td className="px-4 py-3">
+                                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium
+                                    ${issue.status === 'In Progress' ? 'bg-blue-100 text-blue-800' : 
+                                      issue.status === 'Open' ? 'bg-orange-100 text-orange-800' :
+                                      'bg-gray-100 text-gray-800'}`}>
+                                    {issue.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {/* Empty attached table placeholder */}
+                      <div className="mt-4 border border-gray-200 rounded-lg bg-gray-50 p-4 text-center text-gray-400 text-sm">
+                        <Table className="h-5 w-5 mx-auto mb-1 text-gray-300" />
+                        <span>Additional data table placeholder</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Project Stages with Embedded Charts - Only show selected metrics */}
+                  {dashboardConfig.metrics && dashboardConfig.selectedMetrics.length > 0 && departmentColumns.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                        Project Metrics
+                      </h3>
+                      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                        {projectStages.filter(stage => dashboardConfig.selectedMetrics.includes(stage.id)).map((stage) => {
+                          const stageConfig = stageConfigs[stage.id] || {};
+                          const chartData = stageChartData[stage.id] || [];
+                          const distribution = stageDistribution[stage.id] || [];
+                          const chartType = stageChartTypes[stage.id] || 'bar';
+                          const hasConfig = stageConfig.xAxis && stageConfig.yAxis;
+                          
+                          const colorClasses = {
+                            blue: 'border-blue-200 bg-blue-50',
+                            purple: 'border-purple-200 bg-purple-50',
+                            green: 'border-green-200 bg-green-50',
+                            orange: 'border-orange-200 bg-orange-50',
+                            red: 'border-red-200 bg-red-50',
+                            teal: 'border-teal-200 bg-teal-50',
+                          };
+                          
+                          return (
+                            <div 
+                              key={stage.id}
+                              className={`border rounded-xl overflow-hidden ${colorClasses[stage.color] || 'border-gray-200 bg-gray-50'}`}
+                            >
+                              {/* Stage Header */}
+                              <div className="p-3 border-b border-gray-200 bg-white bg-opacity-50">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center">
+                                    <h4 className="font-medium text-gray-900">{stage.name}</h4>
+                                  </div>
+                                  <div className="flex items-center space-x-1">
+                                    <button
+                                      onClick={() => handleFullScreen(stage)}
+                                      className="p-1.5 bg-white rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+                                      title="Full screen view"
+                                    >
+                                      <Maximize2 className="h-4 w-4 text-gray-600" />
+                                    </button>
+                                    <button
+                                      onClick={() => setConfiguringStage(stage)}
+                                      className="p-1.5 bg-white rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+                                      title="Configure chart"
+                                    >
+                                      <Settings2 className="h-4 w-4 text-gray-600" />
+                                    </button>
+                                  </div>
+                                </div>
+                                {hasConfig && (
+                                  <p className="text-xs text-gray-500 mt-1 truncate">
+                                    {stageConfig.xAxis} vs {stageConfig.yAxis}
+                                  </p>
+                                )}
+                              </div>
+                              
+                              {/* Chart Area */}
+                              <div className="p-3">
+                                {hasConfig ? (
+                                  chartData.length > 0 ? (
+                                    <MiniChart 
+                                      chartData={chartData} 
+                                      statusDistribution={distribution}
+                                      chartType={chartType}
+                                    />
+                                  ) : (
+                                    <div className="h-24 flex items-center justify-center bg-white bg-opacity-50 rounded border border-gray-200">
+                                      <p className="text-xs text-gray-400">No data available for selected columns</p>
+                                    </div>
+                                  )
+                                ) : (
+                                  <div className="h-24 flex items-center justify-center bg-white bg-opacity-50 rounded border border-gray-200">
+                                    <button
+                                      onClick={() => setConfiguringStage(stage)}
+                                      className="text-xs text-blue-600 hover:text-blue-800 flex items-center"
+                                    >
+                                      <Settings2 className="h-3 w-3 mr-1" />
+                                      Configure axes
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              {/* Stats Footer */}
+                              {hasConfig && chartData.length > 0 && (
+                                <div className="px-3 pb-3">
+                                  <div className="flex justify-between text-xs">
+                                    <span className="text-gray-500">Categories:</span>
+                                    <span className="font-medium text-gray-900">{chartData.length}</span>
+                                  </div>
+                                  <div className="flex justify-between text-xs">
+                                    <span className="text-gray-500">Groups:</span>
+                                    <span className="font-medium text-gray-900">{distribution.length}</span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>
               </div>
+            )}
+          </div>
+        ) : (
+          // Empty State
+          !selectedFile.isSelected && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-12 text-center">
+              <Layout className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No Project Selected</h3>
+              <p className="text-gray-500 mb-6">Choose a project from the dropdown above to start analyzing data</p>
+              {projectModules.length === 0 && (
+                <button
+                  onClick={() => navigate('/upload-trackers')}
+                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <File className="h-4 w-4 mr-2" />
+                  Upload Trackers
+                </button>
+              )}
+            </div>
+          )
+        )}
+      </div>
 
-              {/* Analysis Controls */}
-              {selectedDepartment && (
-                <div className="p-4">
-                  <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">
-                    Analysis Settings
-                  </h3>
+      {/* Dashboard Configuration Modal */}
+      {showConfigModal && (
+        <DashboardConfigModal
+          isOpen={showConfigModal}
+          onClose={() => setShowConfigModal(false)}
+          onApply={handleDashboardConfigApply}
+          selectedProject={selectedProject}
+          projectStages={projectStages}
+          currentConfig={dashboardConfig}
+        />
+      )}
 
-                  {/* Header Configuration Button */}
-                  {departmentFiles.length > 0 && (
-                    <div className="mb-4">
-                      <button
-                        onClick={() => setShowHeaderConfig(true)}
-                        className="w-full px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm flex items-center justify-center"
-                      >
-                        <Columns className="h-4 w-4 mr-2" />
-                        Configure Headers
-                      </button>
-                    </div>
-                  )}
+      {/* Stage Configuration Modal - Now passes stage-specific columns */}
+      {configuringStage && (
+        <StageConfigModal
+          stage={configuringStage}
+          isOpen={true}
+          onClose={() => setConfiguringStage(null)}
+          departmentColumns={departmentColumns}
+          stageSpecificColumns={stageSpecificColumns[configuringStage.id] || []}
+          onSave={handleStageConfig}
+          currentConfig={stageConfigs[configuringStage.id]}
+        />
+      )}
 
-                  {/* Axis Selection */}
-                  <div className="space-y-3 mb-4">
-                    <div>
-                      <label className="text-xs font-medium text-gray-600 mb-1 block">
-                        X-Axis (Categories)
-                      </label>
-                      <select
-                        value={xAxis}
-                        onChange={(e) => {
-                          setXAxis(e.target.value);
-                        }}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                      >
-                        <option value="">Select column</option>
-                        {departmentColumns.map(col => (
-                          <option key={col} value={col}>{col}</option>
-                        ))}
-                      </select>
-                    </div>
+      {/* Full Screen Chart Modal */}
+      {fullScreenStage && (
+        <FullScreenChartModal
+          stage={fullScreenStage}
+          isOpen={true}
+          onClose={() => setFullScreenStage(null)}
+          chartData={stageChartData[fullScreenStage.id] || []}
+          distribution={stageDistribution[fullScreenStage.id] || []}
+          chartType={stageChartTypes[fullScreenStage.id] || 'bar'}
+          onChartTypeChange={handleChartTypeChange}
+        />
+      )}
 
-                    <div>
-                      <label className="text-xs font-medium text-gray-600 mb-1 block">
-                        Y-Axis (Values)
-                      </label>
-                      <select
-                        value={yAxis}
-                        onChange={(e) => {
-                          setYAxis(e.target.value);
-                        }}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                      >
-                        <option value="">Select column</option>
-                        {departmentColumns.map(col => (
-                          <option key={col} value={col}>{col}</option>
-                        ))}
-                      </select>
-                    </div>
+      {/* Header Configuration Modal */}
+      {showHeaderConfig && departmentFiles.length > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-semibold text-gray-900">
+                  Configure File Headers
+                </h3>
+                <button
+                  onClick={() => setShowHeaderConfig(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="h-5 w-5 text-gray-500" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {departmentFiles.map((fileModule) => {
+                  const fileHeaderConfig = fileModule.fileData?.headerConfig || { 
+                    rowCount: 1
+                  };
+                  
+                  return (
+                    <FileHeaderConfigItem
+                      key={fileModule.id}
+                      fileModule={fileModule}
+                      fileHeaderConfig={fileHeaderConfig}
+                      onConfigure={(fileId, rowCount, selectedHeaders) => 
+                        configureFileHeaders(fileModule, rowCount, selectedHeaders)
+                      }
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email Modal */}
+      {showEmailModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-semibold text-gray-900">
+                  Send Report
+                </h3>
+                <button
+                  onClick={() => setShowEmailModal(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="h-5 w-5 text-gray-500" />
+                </button>
+              </div>
+
+              {/* Recipients */}
+              <div className="mb-6">
+                <label className="text-base font-medium text-gray-700 mb-3 block">
+                  Recipients ({departmentEmployees.length} available)
+                </label>
+                <div className="border border-gray-300 rounded-lg max-h-60 overflow-y-auto">
+                  <div className="p-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+                    <button
+                      onClick={selectAllEmployees}
+                      className="text-base text-blue-600 hover:text-blue-800"
+                    >
+                      {selectedEmployees.length === departmentEmployees.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                    <span className="text-base text-gray-600">
+                      {selectedEmployees.length} selected
+                    </span>
                   </div>
-
-                  {/* Chart Type Selection - Only 4 charts */}
-                  {chartData.length > 0 && (
-                    <>
-                      <div className="mb-4">
-                        <label className="text-xs font-medium text-gray-600 mb-2 block">
-                          Chart Type
-                        </label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            onClick={() => setChartType('bar')}
-                            className={`px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-center ${
-                              chartType === 'bar'
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            <BarChart2 className="h-3.5 w-3.5 mr-1" />
-                            Bar Chart
-                          </button>
-                          <button
-                            onClick={() => setChartType('pie')}
-                            className={`px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-center ${
-                              chartType === 'pie'
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            <PieChart className="h-3.5 w-3.5 mr-1" />
-                            Pie Chart
-                          </button>
-                          <button
-                            onClick={() => setChartType('line')}
-                            className={`px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-center ${
-                              chartType === 'line'
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            <TrendingUp className="h-3.5 w-3.5 mr-1" />
-                            Line Chart
-                          </button>
-                          <button
-                            onClick={() => setChartType('area')}
-                            className={`px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-center ${
-                              chartType === 'area'
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            <AreaIcon className="h-3.5 w-3.5 mr-1" />
-                            Area Chart
-                          </button>
-                        </div>
+                  {departmentEmployees.map((employee) => (
+                    <label
+                      key={employee.id}
+                      className="flex items-center px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedEmployees.includes(employee.id)}
+                        onChange={() => toggleEmployeeSelection(employee.id)}
+                        className="h-5 w-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500 mr-4"
+                      />
+                      <div className="flex-1">
+                        <p className="text-base font-medium text-gray-700">{employee.name}</p>
+                        <p className="text-sm text-gray-500">{employee.email}</p>
                       </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
 
-                      {/* Distribution Summary - Only for bar/line/area charts */}
-                      {chartType !== 'pie' && statusDistribution.length > 0 && (
-                        <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                          <h4 className="text-xs font-medium text-gray-700 mb-2 flex items-center">
-                            <PieChart className="h-3 w-3 mr-1 text-blue-600" />
-                            {statusDistribution.length === 1 ? 'Total Summary' : 'Status Distribution'}
-                          </h4>
-                          <div className="space-y-2">
-                            {statusDistribution.map((status, index) => (
-                              <div key={index} className="flex items-center justify-between">
-                                <div className="flex items-center">
-                                  <div className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: status.color }}></div>
-                                  <span className="text-xs text-gray-600">{status.name}</span>
-                                </div>
-                                <span className="text-xs font-medium" style={{ color: status.color }}>
-                                  {status.value.toLocaleString()}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+              {/* Subject */}
+              <div className="mb-6">
+                <label className="text-base font-medium text-gray-700 mb-3 block">
+                  Subject
+                </label>
+                <input
+                  type="text"
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  placeholder={`${selectedProject?.name} Report`}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base"
+                />
+              </div>
+
+              {/* Message */}
+              <div className="mb-6">
+                <label className="text-base font-medium text-gray-700 mb-3 block">
+                  Message
+                </label>
+                <textarea
+                  value={emailBody}
+                  onChange={(e) => setEmailBody(e.target.value)}
+                  placeholder="Add a message..."
+                  rows="5"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base resize-none"
+                />
+              </div>
+
+              {/* Status */}
+              {emailStatus && (
+                <div className={`mb-6 p-4 rounded-lg text-base ${
+                  emailStatus.includes('success') 
+                    ? 'bg-green-50 text-green-700 border border-green-200'
+                    : emailStatus.includes('Failed')
+                    ? 'bg-red-50 text-red-700 border border-red-200'
+                    : 'bg-blue-50 text-blue-700 border border-blue-200'
+                }`}>
+                  {emailStatus}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex justify-end space-x-4">
+                <button
+                  onClick={() => setShowEmailModal(false)}
+                  className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-base"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSendEmail}
+                  disabled={emailSending || selectedEmployees.length === 0}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-base flex items-center"
+                >
+                  {emailSending ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-3"></div>
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-5 w-5 mr-2" />
+                      Send to {selectedEmployees.length} recipient(s)
                     </>
                   )}
-
-                  {/* Send Report Button */}
-                  {chartData.length > 0 && (
-                    <button
-                      onClick={() => setShowEmailModal(true)}
-                      className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center justify-center"
-                    >
-                      <Send className="h-4 w-4 mr-2" />
-                      Send Report ({departmentEmployees.length} recipients)
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Right Panel - Enhanced Chart/File Viewer */}
-        <div className={`${!selectedFile.isSelected ? 'flex-1' : 'w-full'} transition-all duration-300`}>
-          {selectedFile.isSelected && selectedFile.source === 'project-dashboard' ? (
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm h-full">
-              <div className="border-b border-gray-200 px-4 py-3 flex items-center justify-between bg-gray-50">
-                <button
-                  onClick={handleCloseFileViewer}
-                  className="flex items-center text-sm text-blue-600 hover:text-blue-800"
-                >
-                  <ChevronRight className="h-4 w-4 mr-1 rotate-180" />
-                  Back to Dashboard
                 </button>
-                <h3 className="text-sm font-medium text-gray-700">
-                  {selectedFile.trackerInfo?.fileName}
-                </h3>
-              </div>
-              <div className="p-4 h-[calc(100vh-240px)] overflow-auto">
-                <FileContentViewer
-                  fileData={selectedFile.fileData}
-                  trackerInfo={selectedFile.trackerInfo}
-                  onBack={handleCloseFileViewer}
-                  onSaveData={(updatedData) => {
-                    if (selectedFile.trackerInfo) {
-                      handleSaveFileData(selectedFile.trackerInfo.id, updatedData);
-                    }
-                  }}
-                  viewOnly={false}
-                  context="project"
-                />
               </div>
             </div>
-          ) : (
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-semibold text-gray-900 flex items-center">
-                  <BarChart2 className="h-5 w-5 mr-2 text-blue-600" />
-                  {chartType === 'bar' && 'Bar Chart'}
-                  {chartType === 'pie' && 'Pie Chart'}
-                  {chartType === 'line' && 'Line Chart'}
-                  {chartType === 'area' && 'Area Chart'}
-                </h2>
-                {selectedDepartment && xAxis && yAxis && chartData.length > 0 && (
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xs px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full">
-                      {xAxis}
-                    </span>
-                    <span className="text-xs px-3 py-1.5 bg-purple-50 text-purple-700 rounded-full">
-                      {yAxis}
-                    </span>
-                    {chartType !== 'pie' && (
-                      <span className="text-xs px-3 py-1.5 bg-green-50 text-green-700 rounded-full">
-                        {statusDistribution.length === 1 ? 'Total' : `${statusDistribution.length} groups`}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Enhanced Chart Container */}
-              <div className="h-[500px] w-full">
-                {chartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    {chartType === 'bar' && (
-                      <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 70 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis 
-                          dataKey="name" 
-                          angle={-45} 
-                          textAnchor="end" 
-                          height={80} 
-                          interval={0}
-                          tick={{ fontSize: 11 }}
-                        />
-                        <YAxis tick={{ fontSize: 11 }} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend 
-                          wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}
-                          layout="horizontal"
-                          verticalAlign="bottom"
-                          align="center"
-                        />
-                        {statusDistribution.length === 1 ? (
-                          // Simple bar chart for single value
-                          <Bar 
-                            dataKey="value"
-                            fill={statusDistribution[0].color}
-                            name={yAxis}
-                            radius={[4, 4, 0, 0]}
-                          />
-                        ) : (
-                          // Stacked bar chart for multiple statuses
-                          statusDistribution.map((status, index) => (
-                            <Bar 
-                              key={status.name}
-                              dataKey={status.name.toLowerCase()}
-                              stackId="a"
-                              fill={status.color}
-                              name={status.name}
-                              radius={[index === statusDistribution.length - 1 ? 4 : 0, index === statusDistribution.length - 1 ? 4 : 0, 0, 0]}
-                            />
-                          ))
-                        )}
-                      </BarChart>
-                    )}
-                    {chartType === 'pie' && (
-                      <RePieChart>
-                        <Pie
-                          data={statusDistribution}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={true}
-                          label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                          outerRadius={180}
-                          fill="#8884d8"
-                          dataKey="value"
-                        >
-                          {statusDistribution.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend />
-                      </RePieChart>
-                    )}
-                    {chartType === 'line' && (
-                      <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 70 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis 
-                          dataKey="name" 
-                          angle={-45} 
-                          textAnchor="end" 
-                          height={80} 
-                          interval={0}
-                          tick={{ fontSize: 11 }}
-                        />
-                        <YAxis tick={{ fontSize: 11 }} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                        {statusDistribution.length === 1 ? (
-                          <Line 
-                            type="monotone"
-                            dataKey="value"
-                            stroke={statusDistribution[0].color}
-                            strokeWidth={2}
-                            dot={{ r: 3, fill: statusDistribution[0].color }}
-                            name={yAxis}
-                          />
-                        ) : (
-                          statusDistribution.map((status) => (
-                            <Line 
-                              key={status.name}
-                              type="monotone"
-                              dataKey={status.name.toLowerCase()}
-                              stroke={status.color}
-                              strokeWidth={2}
-                              dot={{ r: 3, fill: status.color }}
-                              name={status.name}
-                            />
-                          ))
-                        )}
-                      </LineChart>
-                    )}
-                    {chartType === 'area' && (
-                      <AreaChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 70 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis 
-                          dataKey="name" 
-                          angle={-45} 
-                          textAnchor="end" 
-                          height={80} 
-                          interval={0}
-                          tick={{ fontSize: 11 }}
-                        />
-                        <YAxis tick={{ fontSize: 11 }} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                        {statusDistribution.length === 1 ? (
-                          <Area 
-                            type="monotone"
-                            dataKey="value"
-                            stroke={statusDistribution[0].color}
-                            fill={statusDistribution[0].color}
-                            fillOpacity={0.6}
-                            name={yAxis}
-                          />
-                        ) : (
-                          statusDistribution.map((status) => (
-                            <Area 
-                              key={status.name}
-                              type="monotone"
-                              dataKey={status.name.toLowerCase()}
-                              stackId="1"
-                              stroke={status.color}
-                              fill={status.color}
-                              fillOpacity={0.6}
-                              name={status.name}
-                            />
-                          ))
-                        )}
-                      </AreaChart>
-                    )}
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                    <div className="text-center px-4">
-                      <BarChart2 className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                      <p className="text-gray-500 font-medium">No visualization data</p>
-                      <p className="text-sm text-gray-400 mt-1">
-                        {!selectedDepartment ? "Select a department to begin" :
-                         !xAxis || !yAxis ? "Select X and Y axes to visualize" :
-                         "No data available for the selected configuration"}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Enhanced Stats Cards */}
-              {chartData.length > 0 && (
-                <div className="mt-6">
-                  <div className="grid grid-cols-5 gap-4 mb-4">
-                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
-                      <p className="text-xs text-blue-600 mb-1">Total Categories</p>
-                      <p className="text-2xl font-semibold text-blue-900">{chartData.length}</p>
-                    </div>
-                    <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
-                      <p className="text-xs text-purple-600 mb-1">Data Groups</p>
-                      <p className="text-2xl font-semibold text-purple-900">{statusDistribution.length}</p>
-                    </div>
-                    <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
-                      <p className="text-xs text-green-600 mb-1">Files Analyzed</p>
-                      <p className="text-2xl font-semibold text-green-900">{departmentFiles.length}</p>
-                    </div>
-                    <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg p-4 border border-amber-200">
-                      <p className="text-xs text-amber-600 mb-1">X-Axis</p>
-                      <p className="text-sm font-medium text-amber-900 truncate">{xAxis}</p>
-                    </div>
-                    <div className="bg-gradient-to-br from-rose-50 to-rose-100 rounded-lg p-4 border border-rose-200">
-                      <p className="text-xs text-rose-600 mb-1">Y-Axis</p>
-                      <p className="text-sm font-medium text-rose-900 truncate">{yAxis}</p>
-                    </div>
-                  </div>
-
-                  {/* Legend - Only for non-pie charts */}
-                  {chartType !== 'pie' && (
-                    <div className="flex flex-wrap gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                      {statusDistribution.map((status) => (
-                        <div key={status.name} className="flex items-center">
-                          <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: status.color }}></div>
-                          <span className="text-xs text-gray-700">{status.name}</span>
-                          <span className="ml-2 text-xs font-medium" style={{ color: status.color }}>
-                            {status.value.toLocaleString()}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    ) : (
-      // Empty State
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-12 text-center">
-        <Layout className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">No Project Selected</h3>
-        <p className="text-gray-500 mb-6">Choose a project from the dropdown above to start analyzing data</p>
-        {projectModules.length === 0 && (
-          <button
-            onClick={() => navigate('/upload-trackers')}
-            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <File className="h-4 w-4 mr-2" />
-            Upload Trackers
-          </button>
-        )}
-      </div>
-    )}
-  </div>
-
-  {/* Header Configuration Modal */}
-  {showHeaderConfig && departmentFiles.length > 0 && (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-              <Merge className="h-5 w-5 mr-2 text-blue-600" />
-              Configure File Headers
-            </h3>
-            <button
-              onClick={() => setShowHeaderConfig(false)}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <X className="h-5 w-5 text-gray-500" />
-            </button>
-          </div>
-
-          <div className="space-y-6">
-            {departmentFiles.map((fileModule) => {
-              // Get existing config or use defaults
-              const fileHeaderConfig = fileModule.fileData?.headerConfig || { 
-                rowCount: 1, 
-                selectedHeaders: {} 
-              };
-              
-              return (
-                <FileHeaderConfigItem
-                  key={fileModule.id}
-                  fileModule={fileModule}
-                  fileHeaderConfig={fileHeaderConfig}
-                  onConfigure={(fileId, rowCount, selectedHeaders) => 
-                    configureFileHeaders(fileModule, rowCount, selectedHeaders)
-                  }
-                />
-              );
-            })}
           </div>
         </div>
-      </div>
+      )}
     </div>
-  )}
-
-  {/* Email Modal */}
-  {showEmailModal && (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-              <Mail className="h-5 w-5 mr-2 text-blue-600" />
-              Send Report
-            </h3>
-            <button
-              onClick={() => setShowEmailModal(false)}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <X className="h-5 w-5 text-gray-500" />
-            </button>
-          </div>
-
-          {/* Recipients */}
-          <div className="mb-4">
-            <label className="text-sm font-medium text-gray-700 mb-2 block">
-              Recipients ({departmentEmployees.length} available)
-            </label>
-            <div className="border border-gray-300 rounded-lg max-h-48 overflow-y-auto">
-              <div className="p-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-                <button
-                  onClick={selectAllEmployees}
-                  className="text-sm text-blue-600 hover:text-blue-800"
-                >
-                  {selectedEmployees.length === departmentEmployees.length ? 'Deselect All' : 'Select All'}
-                </button>
-                <span className="text-sm text-gray-600">
-                  {selectedEmployees.length} selected
-                </span>
-              </div>
-              {departmentEmployees.map((employee) => (
-                <label
-                  key={employee.id}
-                  className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedEmployees.includes(employee.id)}
-                    onChange={() => toggleEmployeeSelection(employee.id)}
-                    className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 mr-3"
-                  />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-700">{employee.name}</p>
-                    <p className="text-xs text-gray-500">{employee.email}</p>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Subject */}
-          <div className="mb-4">
-            <label className="text-sm font-medium text-gray-700 mb-2 block">
-              Subject
-            </label>
-            <input
-              type="text"
-              value={emailSubject}
-              onChange={(e) => setEmailSubject(e.target.value)}
-              placeholder={`${selectedProject?.name} - ${selectedDepartment} Report`}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-            />
-          </div>
-
-          {/* Message */}
-          <div className="mb-6">
-            <label className="text-sm font-medium text-gray-700 mb-2 block">
-              Message
-            </label>
-            <textarea
-              value={emailBody}
-              onChange={(e) => setEmailBody(e.target.value)}
-              placeholder="Add a message..."
-              rows="4"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm resize-none"
-            />
-          </div>
-
-          {/* Enhanced Chart Preview */}
-          {chartData.length > 0 && (
-            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-              <p className="text-sm font-medium text-gray-700 mb-3 flex items-center">
-                <BarChart2 className="h-4 w-4 mr-2" />
-                Chart Preview ({xAxis} vs {yAxis})
-              </p>
-              <div className="h-48 bg-white rounded-lg border border-gray-200 p-2">
-                <ResponsiveContainer width="100%" height="100%">
-                  {chartType === 'pie' ? (
-                    <RePieChart>
-                      <Pie
-                        data={statusDistribution.slice(0, 5)}
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={60}
-                        dataKey="value"
-                      >
-                        {statusDistribution.slice(0, 5).map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                    </RePieChart>
-                  ) : (
-                    <BarChart data={chartData.slice(0, 5)} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-                      <XAxis dataKey="name" tick={{ fontSize: 8 }} />
-                      <YAxis tick={{ fontSize: 8 }} />
-                      <Tooltip />
-                      {statusDistribution.length === 1 ? (
-                        <Bar 
-                          dataKey="value"
-                          fill={statusDistribution[0].color}
-                          name={yAxis}
-                        />
-                      ) : (
-                        statusDistribution.slice(0, 3).map((status) => (
-                          <Bar 
-                            key={status.name}
-                            dataKey={status.name.toLowerCase()}
-                            stackId="a"
-                            fill={status.color}
-                            name={status.name}
-                          />
-                        ))
-                      )}
-                    </BarChart>
-                  )}
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-
-          {/* Status */}
-          {emailStatus && (
-            <div className={`mb-4 p-3 rounded-lg text-sm ${
-              emailStatus.includes('success') 
-                ? 'bg-green-50 text-green-700 border border-green-200'
-                : emailStatus.includes('Failed')
-                ? 'bg-red-50 text-red-700 border border-red-200'
-                : 'bg-blue-50 text-blue-700 border border-blue-200'
-            }`}>
-              {emailStatus}
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex justify-end space-x-3">
-            <button
-              onClick={() => setShowEmailModal(false)}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSendEmail}
-              disabled={emailSending || selectedEmployees.length === 0}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center"
-            >
-              {emailSending ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
-                  Sending...
-                </>
-              ) : (
-                <>
-                  <Send className="h-4 w-4 mr-2" />
-                  Send to {selectedEmployees.length} recipient(s)
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )}
-</div>
-);
+  );
 };
 
 export default ProjectDashboard;

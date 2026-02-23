@@ -140,7 +140,6 @@ const Login = () => {
                       className="w-full h-full object-cover"
                       style={{
                         imageRendering: 'crisp-edges',
-                        imageRendering: '-webkit-optimize-contrast',
                         WebkitFontSmoothing: 'antialiased',
                         MozOsxFontSmoothing: 'grayscale',
                         backfaceVisibility: 'hidden',

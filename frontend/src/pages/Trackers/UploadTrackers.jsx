@@ -2020,13 +2020,12 @@ const UploadTrackers = ({ selectedFileId, onClearSelection }) => {
 
   // Department options - Updated to match ProjectDashboard
   const departmentOptions = [
-    'Design',
-    'VOP',
-    'Production',
-    'Maintenance',
-    'Logistics',
-    'HR',
-    'Finance'
+    'Design Release',
+    'Part Development',
+    'Build',
+    'Gateway',
+    'Validation',
+    'Quality Issues',
   ];
 
   // Load columns
@@ -2064,7 +2063,7 @@ const UploadTrackers = ({ selectedFileId, onClearSelection }) => {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadForm, setUploadForm] = useState({
     project: '',
-    department: 'Design',  // ← CHANGED from 'DAS' to 'Design'
+    department: 'Design Release',  // ← CHANGED from 'DAS' to 'Design'
     employeeName: '',
     file: null
   });
