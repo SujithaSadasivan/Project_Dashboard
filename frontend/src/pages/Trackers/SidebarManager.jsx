@@ -1,5 +1,5 @@
 // ============================================================================
-// DUAL SIDEBAR MANAGER - Two Independent Hierarchies - NO CHANGES NEEDED
+// DUAL SIDEBAR MANAGER - Two Independent Hierarchies - FIXED
 // ============================================================================
 
 const sidebarManager = {
@@ -59,13 +59,14 @@ const sidebarManager = {
       .replace(/[^a-z0-9-]/g, '');
     
     return {
-      id: `upload-file-${trackerId}`,
+      id: `upload-file-${trackerId}-${Date.now()}`,  // ← ADDED timestamp to make unique
       moduleId: `upload-file-${trackerId}`,
       name: fileName,
       displayName: fileName.replace(/\.[^/.]+$/, ""),
       type: 'file',
       parentId: `upload-project-${projectId}`,
       trackerId: trackerId,
+      uploadTrackerFileId: `upload-file-${trackerId}-${Date.now()}`, // ← NEW unique identifier for Upload Trackers
       context: 'upload-management',
       viewType: 'management',
       path: `/upload-trackers/${projectId}/${trackerId}`,
@@ -97,8 +98,10 @@ const sidebarManager = {
       modules.push(projectModule);
     }
     
+    // Check using uploadTrackerFileId instead of just trackerId
     const existingFile = projectModule.submodules.find(file => 
-      file.trackerId === trackerId && file.context === 'upload-management'
+      file.uploadTrackerFileId === `upload-file-${trackerId}-${Date.now()}` && 
+      file.context === 'upload-management'
     );
     
     if (!existingFile) {
@@ -124,7 +127,13 @@ const sidebarManager = {
       sidebarManager.saveUploadTrackerModules(modules);
       
       window.dispatchEvent(new CustomEvent('uploadTrackerUpdate', { 
-        detail: { type: 'add', trackerId, projectName, context: 'upload-management' } 
+        detail: { 
+          type: 'add', 
+          trackerId, 
+          uploadTrackerFileId: fileModule.uploadTrackerFileId, // ← Include unique ID
+          projectName, 
+          context: 'upload-management' 
+        } 
       }));
     }
     
@@ -136,11 +145,14 @@ const sidebarManager = {
     let removed = false;
     
     for (const projectModule of modules) {
+      // Find by trackerId OR uploadTrackerFileId pattern
       const fileIndex = projectModule.submodules.findIndex(file => 
-        file.trackerId === trackerId && file.context === 'upload-management'
+        (file.trackerId === trackerId || file.uploadTrackerFileId?.includes(`upload-file-${trackerId}`)) && 
+        file.context === 'upload-management'
       );
       
       if (fileIndex !== -1) {
+        const removedFile = projectModule.submodules[fileIndex];
         projectModule.submodules.splice(fileIndex, 1);
         projectModule.stats.fileCount = projectModule.submodules.length;
         projectModule.lastUpdated = new Date().toISOString();
@@ -156,7 +168,12 @@ const sidebarManager = {
         sidebarManager.saveUploadTrackerModules(modules);
         
         window.dispatchEvent(new CustomEvent('uploadTrackerUpdate', { 
-          detail: { type: 'delete', trackerId, context: 'upload-management' } 
+          detail: { 
+            type: 'delete', 
+            trackerId, 
+            uploadTrackerFileId: removedFile.uploadTrackerFileId,
+            context: 'upload-management' 
+          } 
         }));
         
         break;
@@ -223,13 +240,14 @@ const sidebarManager = {
       .replace(/[^a-z0-9-]/g, '');
     
     return {
-      id: `project-file-${trackerId}`,
+      id: `project-file-${trackerId}-${Date.now()}`,  // ← ADDED timestamp to make unique
       moduleId: `project-file-${trackerId}`,
       name: fileName,
       displayName: fileName.replace(/\.[^/.]+$/, ""),
       type: 'file',
       parentId: `project-dashboard-${projectId}`,
       trackerId: trackerId,
+      projectDashboardFileId: `project-file-${trackerId}-${Date.now()}`, // ← NEW unique identifier for Project Dashboard
       context: 'project-dashboard',
       viewType: 'collaboration',
       path: `/projects/${projectId}/${trackerId}`,
@@ -264,8 +282,10 @@ const sidebarManager = {
       modules.push(projectModule);
     }
     
+    // Check using projectDashboardFileId instead of just trackerId
     const existingFile = projectModule.submodules.find(file => 
-      file.trackerId === trackerId && file.context === 'project-dashboard'
+      file.projectDashboardFileId === `project-file-${trackerId}-${Date.now()}` && 
+      file.context === 'project-dashboard'
     );
     
     if (!existingFile) {
@@ -299,7 +319,13 @@ const sidebarManager = {
       sidebarManager.saveProjectDashboardModules(modules);
       
       window.dispatchEvent(new CustomEvent('projectDashboardUpdate', { 
-        detail: { type: 'add', trackerId, projectName, context: 'project-dashboard' } 
+        detail: { 
+          type: 'add', 
+          trackerId, 
+          projectDashboardFileId: fileModule.projectDashboardFileId, // ← Include unique ID
+          projectName, 
+          context: 'project-dashboard' 
+        } 
       }));
     }
     
@@ -311,11 +337,14 @@ const sidebarManager = {
     let removed = false;
     
     for (const projectModule of modules) {
+      // Find by trackerId OR projectDashboardFileId pattern
       const fileIndex = projectModule.submodules.findIndex(file => 
-        file.trackerId === trackerId && file.context === 'project-dashboard'
+        (file.trackerId === trackerId || file.projectDashboardFileId?.includes(`project-file-${trackerId}`)) && 
+        file.context === 'project-dashboard'
       );
       
       if (fileIndex !== -1) {
+        const removedFile = projectModule.submodules[fileIndex];
         projectModule.submodules.splice(fileIndex, 1);
         projectModule.projectStats.totalFiles = projectModule.submodules.length;
         projectModule.projectStats.lastActivity = new Date().toISOString();
@@ -332,7 +361,12 @@ const sidebarManager = {
         sidebarManager.saveProjectDashboardModules(modules);
         
         window.dispatchEvent(new CustomEvent('projectDashboardUpdate', { 
-          detail: { type: 'delete', trackerId, context: 'project-dashboard' } 
+          detail: { 
+            type: 'delete', 
+            trackerId, 
+            projectDashboardFileId: removedFile.projectDashboardFileId,
+            context: 'project-dashboard' 
+          } 
         }));
         
         break;
@@ -381,6 +415,25 @@ const sidebarManager = {
       });
     });
     return files;
+  },
+
+  // ============== NEW: Get file by context-specific ID ==============
+  
+  getFileByContextId: (fileId, context) => {
+    if (context === 'upload-management') {
+      const modules = sidebarManager.loadUploadTrackerModules();
+      for (const project of modules) {
+        const file = project.submodules.find(f => f.uploadTrackerFileId === fileId);
+        if (file) return { file, projectName: project.name };
+      }
+    } else if (context === 'project-dashboard') {
+      const modules = sidebarManager.loadProjectDashboardModules();
+      for (const project of modules) {
+        const file = project.submodules.find(f => f.projectDashboardFileId === fileId);
+        if (file) return { file, projectName: project.name };
+      }
+    }
+    return null;
   }
 };
 

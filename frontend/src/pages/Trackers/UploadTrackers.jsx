@@ -10,10 +10,11 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
+
 // ============================================================================
 // DUAL SIDEBAR MANAGER - Two Independent Hierarchies
 // ============================================================================
-
+  
 const sidebarManager = {
   // ============== HIERARCHY 1: UPLOAD TRACKERS MODULE ==============
   // Purpose: For file management, tracking, and administrative view
@@ -2020,13 +2021,12 @@ const UploadTrackers = ({ selectedFileId, onClearSelection }) => {
 
   // Department options - Updated to match ProjectDashboard
   const departmentOptions = [
-    'Design',
-    'VOP',
-    'Production',
-    'Maintenance',
-    'Logistics',
-    'HR',
-    'Finance'
+    'Design Release',
+    'Part Development',
+    'Build',
+    'Gateway',
+    'Validation',
+    'Quality Issues',
   ];
 
   // Load columns
@@ -2060,11 +2060,11 @@ const UploadTrackers = ({ selectedFileId, onClearSelection }) => {
   const [currentSheet, setCurrentSheet] = useState(0);
   const [excelHeaders, setExcelHeaders] = useState([]);
   
-  // Upload Form Modal State - CHANGED default department from 'DAS' to 'Design'
+  // Upload Form Modal State
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadForm, setUploadForm] = useState({
     project: '',
-    department: 'Design',  // ← CHANGED from 'DAS' to 'Design'
+    department: 'Design Release',
     employeeName: '',
     file: null
   });
@@ -2093,7 +2093,9 @@ const UploadTrackers = ({ selectedFileId, onClearSelection }) => {
   const [showBulkEditPrompt, setShowBulkEditPrompt] = useState(false);
   const [showExportConfirmPrompt, setShowExportConfirmPrompt] = useState(null);
 
-  // Initial file loaded flag
+  // ==========================================================================
+  // FIXED: Initial file loaded flag - CRITICAL FOR NAVIGATION
+  // ==========================================================================
   const [initialFileLoaded, setInitialFileLoaded] = useState(false);
 
   // Show notification
@@ -2125,16 +2127,17 @@ const UploadTrackers = ({ selectedFileId, onClearSelection }) => {
           const fileData = uploadedFilesData[trackerId];
           if (fileData) {
             setSelectedFileContent(fileData);
+            setInitialFileLoaded(true); // ← ADDED
           } else {
             const allFilesData = JSON.parse(localStorage.getItem('uploaded_files_data') || '{}');
             if (allFilesData[trackerId]) {
               setSelectedFileContent(allFilesData[trackerId]);
+              setInitialFileLoaded(true); // ← ADDED
             } else {
               showNotification('File data not found. Please re-upload the file.', 'error');
             }
           }
         }
-        setInitialFileLoaded(true);
       }
       
       if (projectName) {
@@ -2190,10 +2193,12 @@ const UploadTrackers = ({ selectedFileId, onClearSelection }) => {
       const fileData = uploadedFilesData[selectedFileId];
       if (fileData) {
         setSelectedFileContent(fileData);
+        setInitialFileLoaded(true); // ← ADDED
       } else {
         const allFilesData = JSON.parse(localStorage.getItem('uploaded_files_data') || '{}');
         if (allFilesData[selectedFileId]) {
           setSelectedFileContent(allFilesData[selectedFileId]);
+          setInitialFileLoaded(true); // ← ADDED
         } else {
           setSelectedFileContent(null);
           showNotification('File data not found. Please re-upload the file.', 'error');
@@ -2202,6 +2207,7 @@ const UploadTrackers = ({ selectedFileId, onClearSelection }) => {
     } else {
       setSelectedFileContent(null);
       setSelectedFileTrackerInfo(null);
+      setInitialFileLoaded(false); // ← ADDED - Reset when no file is selected
     }
   }, [selectedFileId, trackers, uploadedFilesData]);
 
@@ -2455,7 +2461,7 @@ const UploadTrackers = ({ selectedFileId, onClearSelection }) => {
     setShowUploadModal(true);
     setUploadForm({
       project: '',
-      department: 'Design',  // ← CHANGED from 'DAS' to 'Design'
+      department: 'Design Release',
       employeeName: '',
       file: null
     });
@@ -2703,7 +2709,7 @@ const UploadTrackers = ({ selectedFileId, onClearSelection }) => {
             setSelectedFile(null);
             setUploadForm({
               project: '',
-              department: 'Design',  // ← CHANGED from 'DAS' to 'Design'
+              department: 'Design Release',
               employeeName: '',
               file: null
             });
@@ -2739,14 +2745,14 @@ const UploadTrackers = ({ selectedFileId, onClearSelection }) => {
     // Create a properly formatted fileData object that FileContentViewer expects
     const formattedFileData = {
       ...fileData,
-      headers: currentSheetData.headers,  // ← CRITICAL: Add headers at root level
-      data: currentSheetData.data,        // ← CRITICAL: Add data at root level
-      sheets: fileData.sheets             // Keep original sheets for compatibility
+      headers: currentSheetData.headers,
+      data: currentSheetData.data,
+      sheets: fileData.sheets
     };
     
     setExcelViewerData({
       ...tracker,
-      fileData: formattedFileData,        // Store the properly formatted data
+      fileData: formattedFileData,
       sheets: fileData.sheets
     });
     
@@ -2754,6 +2760,7 @@ const UploadTrackers = ({ selectedFileId, onClearSelection }) => {
     setExcelHeaders(currentSheetData.headers || []);
     setExcelEditMode(false);
     setCurrentSheet(0);
+    setInitialFileLoaded(true); // ← ADDED
   };
 
   const closeExcelViewer = () => {
@@ -2761,6 +2768,7 @@ const UploadTrackers = ({ selectedFileId, onClearSelection }) => {
     setExcelEditMode(false);
     setExcelEditData([]);
     setExcelHeaders([]);
+    setInitialFileLoaded(false); // ← ADDED
   };
 
   // Export functions
@@ -2879,7 +2887,7 @@ const UploadTrackers = ({ selectedFileId, onClearSelection }) => {
     if (col.id === 'department' && col.type === 'select') return (
       <div>
         <select 
-          value={value || 'Design'}  // ← CHANGED from 'DAS' to 'Design'
+          value={value || 'Design Release'}
           onChange={e => onChange(col.id, e.target.value)} 
           className={inputClass}
         >
@@ -2947,7 +2955,9 @@ const UploadTrackers = ({ selectedFileId, onClearSelection }) => {
     return value || '-';
   };
 
-  // Open file directly
+  // ==========================================================================
+  // FIXED: Open file directly - Added setInitialFileLoaded(true)
+  // ==========================================================================
   const openFileDirectly = (trackerId) => {
     console.log('Opening file directly:', trackerId);
     
@@ -2963,6 +2973,7 @@ const UploadTrackers = ({ selectedFileId, onClearSelection }) => {
       if (allFilesData[trackerId]) {
         setSelectedFileContent(allFilesData[trackerId]);
         setSelectedFileTrackerInfo(tracker);
+        setInitialFileLoaded(true); // ← ADDED
         showNotification(`Opened file: ${tracker.fileName}`);
       } else {
         showNotification('File data not found. Please re-upload the file.', 'error');
@@ -2970,12 +2981,16 @@ const UploadTrackers = ({ selectedFileId, onClearSelection }) => {
     } else {
       setSelectedFileContent(fileData);
       setSelectedFileTrackerInfo(tracker);
+      setInitialFileLoaded(true); // ← ADDED
       showNotification(`Opened file: ${tracker.fileName}`);
     }
   };
 
-  // Check if we should show file content
-  const shouldShowFileContent = selectedFileContent || (window.location.search.includes('file=') && selectedFileContent === null && initialFileLoaded);
+  // ==========================================================================
+  // FIXED: Check if we should show file content - Improved logic
+  // ==========================================================================
+  const shouldShowFileContent = selectedFileContent !== null && initialFileLoaded;
+
   return (
     <div className="space-y-3 sm:space-y-4 px-0">
       {/* Notification Banner */}
@@ -3177,38 +3192,74 @@ const UploadTrackers = ({ selectedFileId, onClearSelection }) => {
       )}
 
       {/* Excel Viewer Modal - FIXED to pass headers and data at root level */}
-{excelViewerData && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
-    <div className="bg-white rounded-lg w-full max-w-7xl h-[95vh] flex flex-col">
-      <div className="flex-1 overflow-auto p-2 sm:p-4">
-        <FileContentViewer 
-          fileData={excelViewerData.fileData || {
-            headers: excelHeaders,        // ← CRITICAL: Headers at root level
-            data: excelEditData,          // ← CRITICAL: Data at root level
-            sheets: [{
-              headers: excelHeaders,
-              data: excelEditData
-            }]
-          }}
-          trackerInfo={excelViewerData}
-          onBack={closeExcelViewer}
-          viewOnly={true}                // ← ALWAYS true for Upload Trackers
-          context="upload"
-        />
-      </div>
-    </div>
-  </div>
-)}
+      {excelViewerData && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white rounded-lg w-full max-w-7xl h-[95vh] flex flex-col">
+            <div className="flex-1 overflow-auto p-2 sm:p-4">
+              <FileContentViewer 
+                fileData={excelViewerData.fileData || {
+                  headers: excelHeaders,
+                  data: excelEditData,
+                  sheets: [{
+                    headers: excelHeaders,
+                    data: excelEditData
+                  }]
+                }}
+                trackerInfo={excelViewerData}
+                onBack={() => {
+                  closeExcelViewer();
+                  // Also clear the file selection
+                  setSelectedFileContent(null);
+                  setSelectedFileTrackerInfo(null);
+                  if (onClearSelection) {
+                    onClearSelection();
+                  }
+                }}
+                viewOnly={true}
+                context="upload"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MAIN CONTENT */}
       {shouldShowFileContent ? (
-  <FileContentViewer 
-    fileData={selectedFileContent} 
-    trackerInfo={selectedFileTrackerInfo} 
-    onBack={onClearSelection}
-    onSaveData={null}  // <--- SET TO null - NO SAVING ALLOWED
-    viewOnly={true}    // <--- ALWAYS true for Upload Trackers
-    context="upload"
-  />
+        <FileContentViewer 
+          fileData={selectedFileContent} 
+          trackerInfo={selectedFileTrackerInfo} 
+          onBack={() => {
+            // ==========================================================================
+            // FIXED: Proper back navigation - Reset all states
+            // ==========================================================================
+            console.log('Back button clicked - navigating to parent module');
+            
+            // Clear local state
+            setSelectedFileContent(null);
+            setSelectedFileTrackerInfo(null);
+            setInitialFileLoaded(false); // ← CRITICAL: Reset the flag
+            
+            // Update URL without file parameter
+            const url = new URL(window.location);
+            url.searchParams.delete('file');
+            window.history.pushState({}, '', url);
+            
+            // Call onClearSelection to notify parent Dashboard
+            if (onClearSelection) {
+              onClearSelection(); // This sets selectedUploadFileId to null in Dashboard
+            }
+            
+            // Dispatch event as backup
+            window.dispatchEvent(new CustomEvent('returnToDashboard', { 
+              detail: { from: 'uploadTrackers' } 
+            }));
+            
+            console.log('Back navigation complete - should show table view');
+          }}
+          onSaveData={null}
+          viewOnly={true}
+          context="upload"
+        />
       ) : (
         /* Original Upload Trackers content */
         <>
@@ -3430,7 +3481,16 @@ const UploadTrackers = ({ selectedFileId, onClearSelection }) => {
                           </div>
                         ) : (
                           <div className="flex items-center space-x-2">
-                            <button onClick={() => showExcelViewer(tracker)} className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-full transition-colors">
+                            <button 
+                              onClick={() => {
+                                showExcelViewer(tracker);
+                                // Also set the file as selected for proper navigation
+                                setSelectedFileContent(uploadedFilesData[tracker.id]);
+                                setSelectedFileTrackerInfo(tracker);
+                                setInitialFileLoaded(true);
+                              }} 
+                              className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-full transition-colors"
+                            >
                               <Eye className="h-4 w-4" />
                             </button>
                             <button onClick={() => startEditing(tracker)} className="p-1.5 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 rounded-full transition-colors">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, Edit, Trash2, X, Check, ChevronUp, ChevronDown, Filter, Download, Eye, EyeOff, CheckSquare, Square, Snowflake, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, X, Check, ChevronUp, ChevronDown, Download, Eye, EyeOff, CheckSquare, Square, Snowflake, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import axios from 'axios';
 
 const EmployeeMaster = () => {
@@ -23,7 +23,6 @@ const EmployeeMaster = () => {
   const [showDeletePrompt, setShowDeletePrompt] = useState(null);
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [newColumnName, setNewColumnName] = useState('');
-  const [newColumnType, setNewColumnType] = useState('text');
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -42,9 +41,6 @@ const EmployeeMaster = () => {
   // Sorting state
   const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'ascending' });
 
-  // Single column filter state
-  const [columnFilter, setColumnFilter] = useState('');
-
   // State for Add Employee modal
   const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
   
@@ -62,10 +58,13 @@ const EmployeeMaster = () => {
   const [notification, setNotification] = useState({ show: false, message: '', type: '' });
   
   // Freeze states - Updated to support multiple frozen rows and columns
-  const [frozenRows, setFrozenRows] = useState([]); // Now an array of row indices
-  const [frozenColumns, setFrozenColumns] = useState([]); // Array of column indices
+  const [frozenRows, setFrozenRows] = useState([]);
+  const [frozenColumns, setFrozenColumns] = useState([]);
   const [showFreezeColumnModal, setShowFreezeColumnModal] = useState(false);
   const [showFreezeRowModal, setShowFreezeRowModal] = useState(false);
+  // Temporary states for modal selections
+  const [tempFrozenRows, setTempFrozenRows] = useState([]);
+  const [tempFrozenColumns, setTempFrozenColumns] = useState([]);
   
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
@@ -116,6 +115,8 @@ const EmployeeMaster = () => {
     setSelectAll(false);
     setFrozenRows([]);
     setFrozenColumns([]);
+    setTempFrozenRows([]);
+    setTempFrozenColumns([]);
     setCurrentPage(1);
     await fetchData();
     showNotification('Data refreshed successfully');
@@ -150,10 +151,15 @@ const EmployeeMaster = () => {
     });
   };
 
-  // Bulk edit function
+  // Bulk edit function - Modified to handle single row only
   const handleBulkEdit = () => {
     if (selectedEmployees.length === 0) {
       showNotification('Please select at least one employee to edit', 'error');
+      return;
+    }
+    
+    if (selectedEmployees.length > 1) {
+      showNotification('Only one row can be edited at a time', 'error');
       return;
     }
     
@@ -169,8 +175,6 @@ const EmployeeMaster = () => {
       if (employee) {
         startEditing(employee);
       }
-    } else {
-      showNotification(`${selectedEmployees.length} employees marked for bulk edit`, 'info');
     }
     setShowBulkEditPrompt({ show: false, count: 0 });
   };
@@ -198,7 +202,7 @@ const EmployeeMaster = () => {
       await fetchEmployees();
       setSelectedEmployees([]);
       setSelectAll(false);
-      setCurrentPage(1); // Reset to first page after delete
+      setCurrentPage(1);
       setShowBulkDeletePrompt({ show: false, count: 0 });
       showNotification(`${count} employees deleted successfully`);
     } catch (err) {
@@ -267,7 +271,7 @@ const EmployeeMaster = () => {
     let direction = 'ascending';
     if (sortConfig.key === key && sortConfig.direction === 'ascending') direction = 'descending';
     setSortConfig({ key, direction });
-    setCurrentPage(1); // Reset to first page when sorting
+    setCurrentPage(1);
   };
 
   const getSortIcon = (key) => {
@@ -286,12 +290,7 @@ const EmployeeMaster = () => {
       String(value).toLowerCase().includes(searchTerm.toLowerCase())
     );
     
-    // Single column filter that searches across all columns
-    const matchesColumnFilter = !columnFilter || Object.values(emp).some(v => 
-      String(v).toLowerCase().includes(columnFilter.toLowerCase())
-    );
-    
-    return matchesSearch && matchesColumnFilter;
+    return matchesSearch;
   });
 
   // Sort employees
@@ -321,7 +320,6 @@ const EmployeeMaster = () => {
   // Handle page change
   const handlePageChange = (newPage) => {
     setCurrentPage(newPage);
-    // Clear selection when changing pages
     setSelectedEmployees([]);
     setSelectAll(false);
   };
@@ -329,7 +327,7 @@ const EmployeeMaster = () => {
   // Handle page size change
   const handlePageSizeChange = (newSize) => {
     setPageSize(newSize);
-    setCurrentPage(1); // Reset to first page when changing page size
+    setCurrentPage(1);
     setSelectedEmployees([]);
     setSelectAll(false);
   };
@@ -384,7 +382,7 @@ const EmployeeMaster = () => {
       await fetchEmployees();
       setShowAddEmployeeModal(false);
       setNewEmployee({});
-      setCurrentPage(1); // Reset to first page after adding
+      setCurrentPage(1);
       showNotification('Employee added successfully');
     } catch (err) {
       console.error(err);
@@ -399,11 +397,6 @@ const EmployeeMaster = () => {
     setNewEmployee({});
   };
 
-  // Show delete prompt
-  const showDeleteConfirmation = (id, name) => {
-    setShowDeletePrompt({ id, name });
-  };
-
   // Confirm delete employee
   const confirmDeleteEmployee = async () => {
     if (showDeletePrompt) {
@@ -411,7 +404,6 @@ const EmployeeMaster = () => {
         await axios.delete(`${API_BASE_URL}/employees/${showDeletePrompt.id}`);
         await fetchEmployees();
         setShowDeletePrompt(null);
-        // Adjust current page if necessary
         if (paginatedEmployees.length === 1 && currentPage > 1) {
           setCurrentPage(currentPage - 1);
         }
@@ -445,6 +437,8 @@ const EmployeeMaster = () => {
       await fetchEmployees();
       setEditingId(null);
       setEditForm({});
+      setSelectedEmployees([]);
+      setSelectAll(false);
       showNotification('Employee updated successfully');
     } catch (err) {
       console.error(err);
@@ -491,14 +485,13 @@ const EmployeeMaster = () => {
         label: newColumnName,
         visible: true,
         sortable: true,
-        type: newColumnType,
+        type: 'text',
         deletable: true,
         required: false
       };
       
       setColumns([...columns, newColumn]);
       setNewColumnName('');
-      setNewColumnType('text');
       setShowColumnAddPrompt({ show: false, columnName: '' });
       setShowColumnModal(false);
       showNotification('Column added successfully');
@@ -528,38 +521,54 @@ const EmployeeMaster = () => {
   };
 
   const handleExport = (format) => {
-    // Simple export logic - you can enhance this with actual export functionality
     showNotification(`Export to ${format.toUpperCase()} completed successfully`);
     setShowExportConfirmPrompt(null);
     setShowExportDropdown(false);
   };
 
-  // Freeze functions - Updated for multiple rows and columns with proper positioning
+  // Freeze functions - Updated to pre-select based on selected employees/columns
   const toggleFreezeRow = () => {
+    // Get the actual row indices of selected employees on current page
+    const selectedRowIndices = paginatedEmployees
+      .map((emp, index) => {
+        const actualRowIndex = (currentPage - 1) * pageSize + index;
+        return selectedEmployees.includes(emp.id) ? actualRowIndex : null;
+      })
+      .filter(index => index !== null);
+    
+    // Combine with existing frozen rows for initial selection
+    setTempFrozenRows([...new Set([...frozenRows, ...selectedRowIndices])].sort((a, b) => a - b));
     setShowFreezeRowModal(true);
   };
 
   const toggleFreezeColumn = () => {
+    // Get column indices of visible columns
+    const visibleColumnIndices = visibleColumns.map(col => 
+      columns.findIndex(c => c.id === col.id)
+    );
+    
+    // Start with existing frozen columns
+    setTempFrozenColumns([...frozenColumns]);
     setShowFreezeColumnModal(true);
   };
 
-  const handleFreezeRows = (selectedRowIndices) => {
-    setFrozenRows(selectedRowIndices);
+  const handleFreezeRows = () => {
+    setFrozenRows(tempFrozenRows);
     setShowFreezeRowModal(false);
     
-    if (selectedRowIndices.length > 0) {
-      showNotification(`${selectedRowIndices.length} row(s) frozen`);
+    if (tempFrozenRows.length > 0) {
+      showNotification(`${tempFrozenRows.length} row(s) frozen`);
     } else {
       showNotification('All rows unfrozen');
     }
   };
 
-  const handleFreezeColumns = (selectedColumnIndices) => {
-    setFrozenColumns(selectedColumnIndices);
+  const handleFreezeColumns = () => {
+    setFrozenColumns(tempFrozenColumns);
     setShowFreezeColumnModal(false);
     
-    if (selectedColumnIndices.length > 0) {
-      showNotification(`${selectedColumnIndices.length} column(s) frozen`);
+    if (tempFrozenColumns.length > 0) {
+      showNotification(`${tempFrozenColumns.length} column(s) frozen`);
     } else {
       showNotification('All columns unfrozen');
     }
@@ -573,48 +582,42 @@ const EmployeeMaster = () => {
     return frozenColumns.includes(colIndex);
   };
 
-  // Get the left position for frozen columns - FIXED
+  // Get the left position for frozen columns
   const getFrozenColumnLeft = (colIndex) => {
     if (!isColumnFrozen(colIndex)) return 'auto';
     
-    // Checkbox column width (includes padding)
-    const checkboxWidth = 64; // 4rem = 64px
+    const checkboxWidth = 64;
     
-    // Sort frozen columns to maintain correct order
     const sortedFrozenColumns = [...frozenColumns].sort((a, b) => a - b);
     const positionIndex = sortedFrozenColumns.indexOf(colIndex);
     
     if (positionIndex === -1) return 'auto';
     
-    // Calculate total width of previous frozen columns
     let leftOffset = 0;
     for (let i = 0; i < positionIndex; i++) {
       const prevColIndex = sortedFrozenColumns[i];
       if (prevColIndex === 0) {
         leftOffset += checkboxWidth;
       } else {
-        leftOffset += 160; // min-w-[160px] for regular columns
+        leftOffset += 160;
       }
     }
     
     return `${leftOffset}px`;
   };
 
-  // Get the top position for frozen rows - FIXED
+  // Get the top position for frozen rows
   const getFrozenRowTop = (rowIndex) => {
     if (!isRowFrozen(rowIndex)) return 'auto';
     
-    // Header height
     const headerHeight = 42;
-    const rowHeight = 53; // Approximate row height
+    const rowHeight = 53;
     
-    // Sort frozen rows to maintain correct order
     const sortedFrozenRows = [...frozenRows].sort((a, b) => a - b);
     const positionIndex = sortedFrozenRows.indexOf(rowIndex);
     
     if (positionIndex === -1) return 'auto';
     
-    // Calculate total height of previous frozen rows
     let topOffset = headerHeight;
     for (let i = 0; i < positionIndex; i++) {
       topOffset += rowHeight;
@@ -642,9 +645,9 @@ const EmployeeMaster = () => {
 
   return (
     <div className="h-full flex flex-col bg-gray-50 overflow-visible">
-      {/* Custom tooltip styles - instant appearance */}
+      {/* Custom tooltip styles - smaller and more compact */}
       <style>{`
-        /* Simple tooltip styles */
+        /* Tooltip styles */
         .tooltip {
           position: relative;
         }
@@ -655,15 +658,18 @@ const EmployeeMaster = () => {
           bottom: 100%;
           left: 50%;
           transform: translateX(-50%);
-          margin-bottom: 8px;
+          margin-bottom: 4px;
           padding: 4px 8px;
           background-color: #1f2937;
           color: white;
-          font-size: 12px;
+          font-size: 11px;
           white-space: nowrap;
           border-radius: 4px;
           z-index: 10000;
           pointer-events: none;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          line-height: 1.2;
+          font-weight: normal;
         }
 
         /* Freeze styles - subtle blue background to indicate frozen state */
@@ -895,29 +901,6 @@ const EmployeeMaster = () => {
           </div>
         )}
 
-        {/* Bulk Edit Prompt */}
-        {showBulkEditPrompt.show && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-sm w-full mx-4">
-              <div className="flex items-center justify-between mb-3 sm:mb-4">
-                <h3 className="font-medium text-gray-900 text-sm sm:text-base">Confirm Bulk Edit</h3>
-                <button onClick={() => setShowBulkEditPrompt({ show: false, count: 0 })} className="p-1 text-gray-400 hover:text-gray-600">
-                  <X className="h-4 w-4 sm:h-5 sm:w-5"/>
-                </button>
-              </div>
-              <div className="mb-4">
-                <p className="text-xs sm:text-sm text-gray-600">
-                  Are you sure you want to edit {showBulkEditPrompt.count} selected employee{showBulkEditPrompt.count > 1 ? 's' : ''}?
-                </p>
-              </div>
-              <div className="flex justify-end space-x-2">
-                <button onClick={() => setShowBulkEditPrompt({ show: false, count: 0 })} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
-                <button onClick={confirmBulkEdit} className="px-3 py-1.5 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Edit</button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Add Column Prompt */}
         {showColumnAddPrompt.show && (
           <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-[60]">
@@ -935,7 +918,7 @@ const EmployeeMaster = () => {
               </div>
               <div className="flex justify-end space-x-2">
                 <button onClick={() => setShowColumnAddPrompt({ show: false, columnName: '' })} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
-                <button onClick={confirmAddColumn} className="px-3 py-1.5 text-xs sm:text-sm bg-gradient-to-r from-rose-400 to-amber-400 text-white rounded hover:opacity-90">Add Column</button>
+                <button onClick={confirmAddColumn} className="px-3 py-1.5 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Add Column</button>
               </div>
             </div>
           </div>
@@ -988,42 +971,20 @@ const EmployeeMaster = () => {
               <div className="mb-4">
                 <p className="text-xs text-gray-600 mb-3">Select columns to freeze (they will remain visible while scrolling horizontally)</p>
                 <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {/* Checkbox column is always first */}
-                  <div className="flex items-center p-2 border border-gray-200 rounded bg-gray-50">
-                    <input
-                      type="checkbox"
-                      id="freeze-checkbox"
-                      checked={frozenColumns.includes(0)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setFrozenColumns([0, ...frozenColumns.filter(idx => idx !== 0)].sort((a, b) => a - b));
-                        } else {
-                          setFrozenColumns(frozenColumns.filter(idx => idx !== 0));
-                        }
-                      }}
-                      className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
-                    />
-                    <label htmlFor="freeze-checkbox" className="text-sm text-gray-700 cursor-pointer flex-1 font-medium">
-                      Checkbox Column
-                    </label>
-                    {frozenColumns.includes(0) && (
-                      <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">Frozen</span>
-                    )}
-                  </div>
                   
-                  {visibleColumns.map((column, index) => {
+                  {visibleColumns.map((column) => {
                     const actualColumnIndex = columns.findIndex(col => col.id === column.id);
                     return (
                       <div key={column.id} className="flex items-center p-2 border border-gray-200 rounded">
                         <input
                           type="checkbox"
                           id={`freeze-${column.id}`}
-                          checked={frozenColumns.includes(actualColumnIndex)}
+                          checked={tempFrozenColumns.includes(actualColumnIndex)}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              setFrozenColumns([...frozenColumns, actualColumnIndex].sort((a, b) => a - b));
+                              setTempFrozenColumns([...tempFrozenColumns, actualColumnIndex].sort((a, b) => a - b));
                             } else {
-                              setFrozenColumns(frozenColumns.filter(idx => idx !== actualColumnIndex));
+                              setTempFrozenColumns(tempFrozenColumns.filter(idx => idx !== actualColumnIndex));
                             }
                           }}
                           className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
@@ -1031,7 +992,7 @@ const EmployeeMaster = () => {
                         <label htmlFor={`freeze-${column.id}`} className="text-sm text-gray-700 cursor-pointer flex-1">
                           {column.label}
                         </label>
-                        {frozenColumns.includes(actualColumnIndex) && (
+                        {tempFrozenColumns.includes(actualColumnIndex) && (
                           <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">Frozen</span>
                         )}
                       </div>
@@ -1048,9 +1009,7 @@ const EmployeeMaster = () => {
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
-                    handleFreezeColumns(frozenColumns);
-                  }}
+                  onClick={handleFreezeColumns}
                   className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
                   Apply Freeze
@@ -1088,12 +1047,12 @@ const EmployeeMaster = () => {
                         <input
                           type="checkbox"
                           id={`freeze-row-${emp.id}`}
-                          checked={frozenRows.includes(actualRowIndex)}
+                          checked={tempFrozenRows.includes(actualRowIndex)}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              setFrozenRows([...frozenRows, actualRowIndex].sort((a, b) => a - b));
+                              setTempFrozenRows([...tempFrozenRows, actualRowIndex].sort((a, b) => a - b));
                             } else {
-                              setFrozenRows(frozenRows.filter(idx => idx !== actualRowIndex));
+                              setTempFrozenRows(tempFrozenRows.filter(idx => idx !== actualRowIndex));
                             }
                           }}
                           className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
@@ -1101,7 +1060,7 @@ const EmployeeMaster = () => {
                         <label htmlFor={`freeze-row-${emp.id}`} className="text-sm text-gray-700 cursor-pointer flex-1">
                           Row {actualRowIndex + 1}: {emp.name} ({emp.id})
                         </label>
-                        {frozenRows.includes(actualRowIndex) && (
+                        {tempFrozenRows.includes(actualRowIndex) && (
                           <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">Frozen</span>
                         )}
                       </div>
@@ -1118,9 +1077,7 @@ const EmployeeMaster = () => {
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
-                    handleFreezeRows(frozenRows);
-                  }}
+                  onClick={handleFreezeRows}
                   className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
                   Apply Freeze
@@ -1169,7 +1126,6 @@ const EmployeeMaster = () => {
                 <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Available Columns</h4>
                 <div className="space-y-2 max-h-60 overflow-y-auto">
                   {columns.map((column) => {
-                    const isFixedColumn = ['id', 'name', 'email', 'department', 'role', 'status'].includes(column.id);
                     const isEditing = editingColumn === column.id;
                    
                     return (
@@ -1438,7 +1394,7 @@ const EmployeeMaster = () => {
                 </button>
                 <button
                   onClick={saveEdit}
-                  className="px-4 py-2 text-sm bg-black text-white rounded hover:bg-gray-800"
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
                   Save Changes
                 </button>
@@ -1465,7 +1421,7 @@ const EmployeeMaster = () => {
 
           {!loading && !error && (
               <>
-          {/* TOOLBAR SECTION - FIXED */}
+          {/* TOOLBAR SECTION */}
           <div className="p-4 border-b border-gray-200 flex-shrink-0">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
              
@@ -1484,27 +1440,8 @@ const EmployeeMaster = () => {
                 </div>
               </div>
 
-              {/* RIGHT SIDE - Reordered: Filter, +, Freeze, Export, Refresh */}
+              {/* RIGHT SIDE */}
               <div className="flex gap-2 mt-2 sm:mt-0">
-                {/* Single Column Filter */}
-                <div className="relative">
-                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Filter..."
-                    value={columnFilter}
-                    onChange={(e) => setColumnFilter(e.target.value)}
-                    className="h-10 pl-9 pr-3 text-xs sm:text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black w-full sm:w-48"
-                  />
-                  {columnFilter && (
-                    <button
-                      onClick={() => setColumnFilter('')}
-                      className="p-1 absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="h-3 w-3 sm:h-4 sm:w-4" />
-                    </button>
-                  )}
-                </div>
 
                 {/* Add Column Button */}
                 <button
@@ -1617,7 +1554,7 @@ const EmployeeMaster = () => {
                       </button>
                     </div>
                   </th>
-                  {visibleColumns.map((col, index) => {
+                  {visibleColumns.map((col) => {
                     const actualColumnIndex = columns.findIndex(c => c.id === col.id);
                     return (
                       <th
@@ -1709,7 +1646,7 @@ const EmployeeMaster = () => {
             </table>
           </div>
 
-          {/* FOOTER SECTION - FIXED */}
+          {/* FOOTER SECTION */}
           <div className="px-4 py-3 border-t border-gray-200 text-xs text-gray-900 flex flex-col sm:flex-row items-center justify-between gap-2 bg-white flex-shrink-0">
             {/* LEFT SIDE - Add Employee and Action Buttons */}
             <div className="flex items-center gap-2">
@@ -1741,7 +1678,7 @@ const EmployeeMaster = () => {
                   <button
                     onClick={handleBulkEdit}
                     className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
-                    title={selectedEmployees.length === 1 ? "Edit selected employee" : "Edit selected employees"}
+                    title="Edit selected employee"
                   >
                     <Edit className="h-4 w-4" />
                     {selectedEmployees.length > 1 && <span>Edit ({selectedEmployees.length})</span>}
@@ -1796,7 +1733,7 @@ const EmployeeMaster = () => {
                       onClick={() => handlePageChange(pageNum)}
                       className={`px-2 py-1 text-xs rounded ${
                         currentPage === pageNum
-                          ? 'bg-gradient-to-r from-rose-400 to-amber-400 text-white'
+                          ? 'bg-blue-600 text-white'
                           : 'text-gray-700 hover:bg-gray-100'
                       }`}
                     >
@@ -1820,9 +1757,6 @@ const EmployeeMaster = () => {
 
               <span className="text-gray-600">
                 Showing {paginatedEmployees.length} of {sortedEmployees.length} employees
-                {columnFilter &&
-                  ` (Filtered)`
-                }
               </span>
               
               {selectedEmployees.length > 0 && (

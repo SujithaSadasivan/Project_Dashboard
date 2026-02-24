@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, Edit, Trash2, X, Check, ChevronUp, ChevronDown, Filter, Download, Eye, EyeOff, Briefcase, DollarSign, Users, TrendingUp, CheckCircle, Clock, AlertTriangle, FileText, Calendar, CheckSquare, Square, Snowflake, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, X, Check, ChevronUp, ChevronDown, Filter, Download, Eye, EyeOff, Briefcase, DollarSign, Users, TrendingUp, CheckCircle, Clock, AlertTriangle, FileText, Calendar, CheckSquare, Square, Snowflake, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -40,7 +40,6 @@ const ProjectMaster = () => {
   const [showDeletePrompt, setShowDeletePrompt] = useState(null);
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [newColumnName, setNewColumnName] = useState('');
-  const [newColumnType, setNewColumnType] = useState('text');
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -59,9 +58,6 @@ const ProjectMaster = () => {
   // Sorting state
   const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'ascending' });
 
-  // Single column filter state
-  const [columnFilter, setColumnFilter] = useState('');
-
   // State for Add Project modal
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
   
@@ -78,9 +74,14 @@ const ProjectMaster = () => {
   const [showDeleteColumnPrompt, setShowDeleteColumnPrompt] = useState(null);
   const [notification, setNotification] = useState({ show: false, message: '', type: '' });
   
-  // Freeze states
-  const [frozenRows, setFrozenRows] = useState(0);
-  const [frozenColumns, setFrozenColumns] = useState(0);
+  // Freeze states - Updated to support multiple frozen rows and columns
+  const [frozenRows, setFrozenRows] = useState([]);
+  const [frozenColumns, setFrozenColumns] = useState([]);
+  const [showFreezeColumnModal, setShowFreezeColumnModal] = useState(false);
+  const [showFreezeRowModal, setShowFreezeRowModal] = useState(false);
+  // Temporary states for modal selections
+  const [tempFrozenRows, setTempFrozenRows] = useState([]);
+  const [tempFrozenColumns, setTempFrozenColumns] = useState([]);
   
   const [validationErrors, setValidationErrors] = useState({});
 
@@ -126,22 +127,23 @@ const ProjectMaster = () => {
 
   // Fetch data on mount
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        await fetchProjects();
-        await fetchEmployees();
-      } catch (err) {
-        console.error("Error loading data:", err);
-        setError("Failed to load data. Please try again.");
-        showNotification('Failed to load data', 'error');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchData();
   }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await fetchProjects();
+      await fetchEmployees();
+    } catch (err) {
+      console.error("Error loading data:", err);
+      setError("Failed to load data. Please try again.");
+      showNotification('Failed to load data', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchEmployees = () => {
     getEmployees()
@@ -166,6 +168,19 @@ const ProjectMaster = () => {
       console.error('Error fetching projects:', err);
       throw err;
     }
+  };
+
+  // Refresh function - resets selections and freezes
+  const handleRefresh = async () => {
+    setSelectedProjects([]);
+    setSelectAll(false);
+    setFrozenRows([]);
+    setFrozenColumns([]);
+    setTempFrozenRows([]);
+    setTempFrozenColumns([]);
+    setCurrentPage(1);
+    await fetchData();
+    showNotification('Data refreshed successfully');
   };
 
   // Save columns to localStorage
@@ -194,7 +209,7 @@ const ProjectMaster = () => {
       } else {
         const newSelection = [...prev, projectId];
         const allVisibleIds = paginatedProjects.map(proj => proj.id);
-        if (newSelection.length === allVisibleIds.length) {
+        if (newSelection.length === allVisibleIds.length && allVisibleIds.length > 0) {
           setSelectAll(true);
         }
         return newSelection;
@@ -202,10 +217,15 @@ const ProjectMaster = () => {
     });
   };
 
-  // Bulk edit function
+  // Bulk edit function - Modified to handle single row only
   const handleBulkEdit = () => {
     if (selectedProjects.length === 0) {
       showNotification('Please select at least one project to edit', 'error');
+      return;
+    }
+    
+    if (selectedProjects.length > 1) {
+      showNotification('Only one row can be edited at a time', 'error');
       return;
     }
     
@@ -221,8 +241,6 @@ const ProjectMaster = () => {
       if (project) {
         startEditing(project);
       }
-    } else {
-      showNotification(`${selectedProjects.length} projects marked for bulk edit`, 'info');
     }
     setShowBulkEditPrompt({ show: false, count: 0 });
   };
@@ -349,11 +367,7 @@ const ProjectMaster = () => {
       String(value).toLowerCase().includes(searchTerm.toLowerCase())
     );
     
-    const matchesColumnFilter = !columnFilter || Object.values(proj).some(v => 
-      String(v).toLowerCase().includes(columnFilter.toLowerCase())
-    );
-    
-    return matchesSearch && matchesColumnFilter;
+    return matchesSearch;
   });
 
   // Sort projects
@@ -529,6 +543,8 @@ const ProjectMaster = () => {
       setEditingId(null);
       setEditForm({});
       setValidationErrors({});
+      setSelectedProjects([]);
+      setSelectAll(false);
       showNotification('Project updated successfully');
     } catch (err) {
       console.error(err);
@@ -579,13 +595,12 @@ const ProjectMaster = () => {
         label: newColumnName,
         visible: true,
         sortable: true,
-        type: newColumnType,
+        type: 'text',
         required: false
       };
       
       setColumns([...columns, newColumn]);
       setNewColumnName('');
-      setNewColumnType('text');
       setShowColumnAddPrompt({ show: false, columnName: '' });
       setShowColumnModal(false);
       showNotification('Column added successfully');
@@ -701,25 +716,104 @@ const ProjectMaster = () => {
     return csvRows.join('\n');
   };
 
-  // Freeze functions
+  // Freeze functions - Updated to pre-select based on selected projects/columns
   const toggleFreezeRow = () => {
-    if (frozenRows === 0) {
-      setFrozenRows(1);
-      showNotification('First row frozen');
-    } else {
-      setFrozenRows(0);
-      showNotification('Rows unfrozen');
-    }
+    // Get the actual row indices of selected projects on current page
+    const selectedRowIndices = paginatedProjects
+      .map((proj, index) => {
+        const actualRowIndex = (currentPage - 1) * pageSize + index;
+        return selectedProjects.includes(proj.id) ? actualRowIndex : null;
+      })
+      .filter(index => index !== null);
+    
+    // Combine with existing frozen rows for initial selection
+    setTempFrozenRows([...new Set([...frozenRows, ...selectedRowIndices])].sort((a, b) => a - b));
+    setShowFreezeRowModal(true);
   };
 
   const toggleFreezeColumn = () => {
-    if (frozenColumns === 0) {
-      setFrozenColumns(1);
-      showNotification('First column frozen');
+    // Get column indices of visible columns
+    const visibleColumnIndices = visibleColumns.map(col => 
+      columns.findIndex(c => c.id === col.id)
+    );
+    
+    // Start with existing frozen columns
+    setTempFrozenColumns([...frozenColumns]);
+    setShowFreezeColumnModal(true);
+  };
+
+  const handleFreezeRows = () => {
+    setFrozenRows(tempFrozenRows);
+    setShowFreezeRowModal(false);
+    
+    if (tempFrozenRows.length > 0) {
+      showNotification(`${tempFrozenRows.length} row(s) frozen`);
     } else {
-      setFrozenColumns(0);
-      showNotification('Columns unfrozen');
+      showNotification('All rows unfrozen');
     }
+  };
+
+  const handleFreezeColumns = () => {
+    setFrozenColumns(tempFrozenColumns);
+    setShowFreezeColumnModal(false);
+    
+    if (tempFrozenColumns.length > 0) {
+      showNotification(`${tempFrozenColumns.length} column(s) frozen`);
+    } else {
+      showNotification('All columns unfrozen');
+    }
+  };
+
+  const isRowFrozen = (rowIndex) => {
+    return frozenRows.includes(rowIndex);
+  };
+
+  const isColumnFrozen = (colIndex) => {
+    return frozenColumns.includes(colIndex);
+  };
+
+  // Get the left position for frozen columns
+  const getFrozenColumnLeft = (colIndex) => {
+    if (!isColumnFrozen(colIndex)) return 'auto';
+    
+    const checkboxWidth = 64;
+    
+    const sortedFrozenColumns = [...frozenColumns].sort((a, b) => a - b);
+    const positionIndex = sortedFrozenColumns.indexOf(colIndex);
+    
+    if (positionIndex === -1) return 'auto';
+    
+    let leftOffset = 0;
+    for (let i = 0; i < positionIndex; i++) {
+      const prevColIndex = sortedFrozenColumns[i];
+      if (prevColIndex === 0) {
+        leftOffset += checkboxWidth;
+      } else {
+        leftOffset += 160;
+      }
+    }
+    
+    return `${leftOffset}px`;
+  };
+
+  // Get the top position for frozen rows
+  const getFrozenRowTop = (rowIndex) => {
+    if (!isRowFrozen(rowIndex)) return 'auto';
+    
+    const headerHeight = 42;
+    const rowHeight = 53;
+    
+    const sortedFrozenRows = [...frozenRows].sort((a, b) => a - b);
+    const positionIndex = sortedFrozenRows.indexOf(rowIndex);
+    
+    if (positionIndex === -1) return 'auto';
+    
+    let topOffset = headerHeight;
+    for (let i = 0; i < positionIndex; i++) {
+      topOffset += rowHeight;
+    }
+    
+    return `${topOffset}px`;
   };
 
   // Render input fields
@@ -792,9 +886,9 @@ const ProjectMaster = () => {
 
   return (
     <div className="h-full flex flex-col bg-gray-50 overflow-visible">
-      {/* Custom tooltip styles */}
+      {/* Custom tooltip styles - smaller and more compact */}
       <style>{`
-        /* Simple tooltip styles */
+        /* Tooltip styles */
         .tooltip {
           position: relative;
         }
@@ -805,36 +899,43 @@ const ProjectMaster = () => {
           bottom: 100%;
           left: 50%;
           transform: translateX(-50%);
-          margin-bottom: 8px;
+          margin-bottom: 4px;
           padding: 4px 8px;
           background-color: #1f2937;
           color: white;
-          font-size: 12px;
+          font-size: 11px;
           white-space: nowrap;
           border-radius: 4px;
           z-index: 10000;
+          pointer-events: none;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          line-height: 1.2;
+          font-weight: normal;
         }
 
-        /* Freeze styles */
+        /* Freeze styles - subtle blue background to indicate frozen state */
         .frozen-row {
-          position: sticky;
-          top: 0;
+          position: sticky !important;
           z-index: 20;
           background: #f0f9ff !important;
           border-bottom: 2px solid #0284c7;
         }
 
         .frozen-column {
-          position: sticky;
-          left: 0;
+          position: sticky !important;
           z-index: 15;
           background: #f0f9ff !important;
           border-right: 2px solid #0284c7;
         }
 
-        .frozen-row.frozen-column {
+        .frozen-row .frozen-column {
           z-index: 25;
           background: #e0f2fe !important;
+        }
+
+        th.frozen-column {
+          z-index: 35;
+          background: linear-gradient(135deg, #e0f2fe, #dbeafe) !important;
         }
 
         .freeze-indicator {
@@ -843,7 +944,7 @@ const ProjectMaster = () => {
           border: 1px solid #0284c7;
         }
 
-        /* Table container styles */
+        /* Table container styles for proper scrolling */
         .project-master-container {
           height: 100%;
           display: flex;
@@ -884,18 +985,17 @@ const ProjectMaster = () => {
           border-bottom: 1px solid #e5e7eb;
         }
 
+        /* Ensure proper stacking of frozen elements */
+        .frozen-column {
+          z-index: 15;
+        }
+
         th.frozen-column {
           z-index: 35;
         }
 
-        td.frozen-column {
-          z-index: 15;
-          background: white;
-        }
-
         tr.frozen-row td {
-          position: sticky;
-          top: 42px;
+          position: sticky !important;
           z-index: 20;
           background: #f0f9ff !important;
         }
@@ -903,6 +1003,19 @@ const ProjectMaster = () => {
         tr.frozen-row td.frozen-column {
           z-index: 25;
           background: #e0f2fe !important;
+        }
+
+        /* Fix for multiple frozen rows */
+        tbody tr.frozen-row {
+          position: sticky;
+        }
+
+        tbody tr.frozen-row:first-of-type td {
+          border-top: 2px solid #0284c7;
+        }
+
+        tbody tr.frozen-row:last-of-type td {
+          border-bottom: 2px solid #0284c7;
         }
       `}</style>
 
@@ -1069,7 +1182,7 @@ const ProjectMaster = () => {
               </div>
               <div className="flex justify-end space-x-2">
                 <button onClick={() => setShowColumnAddPrompt({ show: false, columnName: '' })} className="px-3 py-1.5 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
-                <button onClick={confirmAddColumn} className="px-3 py-1.5 text-xs sm:text-sm bg-gradient-to-r from-rose-400 to-amber-400 text-white rounded hover:opacity-90">Add Column</button>
+                <button onClick={confirmAddColumn} className="px-3 py-1.5 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Add Column</button>
               </div>
             </div>
           </div>
@@ -1096,6 +1209,143 @@ const ProjectMaster = () => {
                   handleExport(showExportConfirmPrompt.format);
                   setShowExportConfirmPrompt(null);
                 }} className="px-3 py-1.5 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Export</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Freeze Column Modal */}
+        {showFreezeColumnModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full mx-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">
+                  <span className="bg-gray-200 px-2 py-0.5 rounded">
+                    Freeze Columns
+                  </span>
+                </h3>
+                <button
+                  onClick={() => setShowFreezeColumnModal(false)}
+                  className="p-1 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4 sm:h-5 sm:w-5" />
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <p className="text-xs text-gray-600 mb-3">Select columns to freeze (they will remain visible while scrolling horizontally)</p>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  
+                  {visibleColumns.map((column) => {
+                    const actualColumnIndex = columns.findIndex(col => col.id === column.id);
+                    return (
+                      <div key={column.id} className="flex items-center p-2 border border-gray-200 rounded">
+                        <input
+                          type="checkbox"
+                          id={`freeze-${column.id}`}
+                          checked={tempFrozenColumns.includes(actualColumnIndex)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setTempFrozenColumns([...tempFrozenColumns, actualColumnIndex].sort((a, b) => a - b));
+                            } else {
+                              setTempFrozenColumns(tempFrozenColumns.filter(idx => idx !== actualColumnIndex));
+                            }
+                          }}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
+                        />
+                        <label htmlFor={`freeze-${column.id}`} className="text-sm text-gray-700 cursor-pointer flex-1">
+                          {column.label}
+                        </label>
+                        {tempFrozenColumns.includes(actualColumnIndex) && (
+                          <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">Frozen</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => setShowFreezeColumnModal(false)}
+                  className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleFreezeColumns}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Apply Freeze
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Freeze Row Modal */}
+        {showFreezeRowModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full mx-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">
+                  <span className="bg-gray-200 px-2 py-0.5 rounded">
+                    Freeze Rows
+                  </span>
+                </h3>
+                <button
+                  onClick={() => setShowFreezeRowModal(false)}
+                  className="p-1 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4 sm:h-5 sm:w-5" />
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <p className="text-xs text-gray-600 mb-3">Select rows to freeze (they will remain visible while scrolling vertically)</p>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {paginatedProjects.map((proj, index) => {
+                    const actualRowIndex = (currentPage - 1) * pageSize + index;
+                    return (
+                      <div key={proj.id} className="flex items-center p-2 border border-gray-200 rounded">
+                        <input
+                          type="checkbox"
+                          id={`freeze-row-${proj.id}`}
+                          checked={tempFrozenRows.includes(actualRowIndex)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setTempFrozenRows([...tempFrozenRows, actualRowIndex].sort((a, b) => a - b));
+                            } else {
+                              setTempFrozenRows(tempFrozenRows.filter(idx => idx !== actualRowIndex));
+                            }
+                          }}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
+                        />
+                        <label htmlFor={`freeze-row-${proj.id}`} className="text-sm text-gray-700 cursor-pointer flex-1">
+                          Row {actualRowIndex + 1}: {proj.name} ({proj.id})
+                        </label>
+                        {tempFrozenRows.includes(actualRowIndex) && (
+                          <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">Frozen</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => setShowFreezeRowModal(false)}
+                  className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleFreezeRows}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Apply Freeze
+                </button>
               </div>
             </div>
           </div>
@@ -1172,16 +1422,6 @@ const ProjectMaster = () => {
                           ) : (
                             <>
                               <span className="">{column.label}</span>
-                              {column.required && (
-                                <span className="">
-                                  {/* Required */}
-                                </span>
-                              )}
-                              {isFixedColumn && (
-                                <span className="">
-                                  {/* Fixed */}
-                                </span>
-                              )}
                             </>
                           )}
                         </div>
@@ -1304,7 +1544,7 @@ const ProjectMaster = () => {
                 </button>
                 <button
                   onClick={saveEdit}
-                  className="px-4 py-2 text-sm bg-black text-white rounded hover:bg-gray-800"
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
                   Save Changes
                 </button>
@@ -1331,7 +1571,7 @@ const ProjectMaster = () => {
 
           {!loading && !error && (
               <>
-          {/* TOOLBAR SECTION - FIXED */}
+          {/* TOOLBAR SECTION */}
           <div className="p-4 border-b border-gray-200 flex-shrink-0">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
              
@@ -1352,48 +1592,29 @@ const ProjectMaster = () => {
 
               {/* RIGHT SIDE */}
               <div className="flex gap-2 mt-2 sm:mt-0">
-                {/* Single Column Filter */}
-                <div className="relative">
-                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Filter..."
-                    value={columnFilter}
-                    onChange={(e) => setColumnFilter(e.target.value)}
-                    className="h-10 pl-9 pr-3 text-xs sm:text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black w-full sm:w-48"
-                  />
-                  {columnFilter && (
-                    <button
-                      onClick={() => setColumnFilter('')}
-                      className="p-1 absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="h-3 w-3 sm:h-4 sm:w-4" />
-                    </button>
-                  )}
-                </div>
 
-                {/* Add Column Button with Freeze */}
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => setShowColumnModal(true)}
-                    className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50 whitespace-nowrap tooltip"
-                    data-tooltip="Add column"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={toggleFreezeColumn}
-                    className={`flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border rounded whitespace-nowrap tooltip ${
-                      frozenColumns > 0 
-                        ? 'bg-blue-50 text-blue-700 border-blue-300' 
-                        : 'border-gray-300 hover:bg-gray-50 text-gray-700'
-                    }`}
-                    data-tooltip={frozenColumns > 0 ? "Unfreeze first column" : "Freeze first column"}
-                  >
-                    <Snowflake className={`h-4 w-4 ${frozenColumns > 0 ? 'text-blue-600' : 'text-gray-600'}`} />
-                    {frozenColumns > 0 && <span className="ml-1 text-xs">Frozen</span>}
-                  </button>
-                </div>
+                {/* Add Column Button */}
+                <button
+                  onClick={() => setShowColumnModal(true)}
+                  className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50 whitespace-nowrap tooltip"
+                  data-tooltip="Add column"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+
+                {/* Freeze Column Button */}
+                <button
+                  onClick={toggleFreezeColumn}
+                  className={`flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border rounded whitespace-nowrap tooltip ${
+                    frozenColumns.length > 0 
+                      ? 'bg-blue-50 text-blue-700 border-blue-300' 
+                      : 'border-gray-300 hover:bg-gray-50 text-gray-700'
+                  }`}
+                  data-tooltip={frozenColumns.length > 0 ? "Unfreeze columns" : "Freeze columns"}
+                >
+                  <Snowflake className={`h-4 w-4 ${frozenColumns.length > 0 ? 'text-blue-600' : 'text-gray-600'}`} />
+                  {frozenColumns.length > 0 && <span className="ml-1 text-xs">{frozenColumns.length}</span>}
+                </button>
 
                 {/* Export Button with Dropdown */}
                 <div className="relative">
@@ -1441,6 +1662,16 @@ const ProjectMaster = () => {
                     </>
                   )}
                 </div>
+
+                {/* Refresh Button */}
+                <button
+                  onClick={handleRefresh}
+                  className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50 whitespace-nowrap tooltip"
+                  data-tooltip="Refresh data"
+                  disabled={loading}
+                >
+                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                </button>
               </div>
             </div>
           </div>
@@ -1453,8 +1684,12 @@ const ProjectMaster = () => {
                   {/* Checkbox column */}
                   <th 
                     className={`text-left py-3 px-8 font-medium cursor-pointer hover:opacity-80 whitespace-nowrap w-8 ${
-                      frozenColumns > 0 ? 'frozen-column' : ''
+                      isColumnFrozen(0) ? 'frozen-column' : ''
                     }`}
+                    style={{
+                      left: isColumnFrozen(0) ? '0' : 'auto',
+                      zIndex: isColumnFrozen(0) ? 35 : 30
+                    }}
                   >
                     <div className="flex items-center justify-center">
                       <button
@@ -1469,62 +1704,99 @@ const ProjectMaster = () => {
                       </button>
                     </div>
                   </th>
-                  {visibleColumns.map((col, index) => (
-                    <th
-                      key={col.id}
-                      className={`text-left py-3 px-8 font-medium cursor-pointer hover:opacity-80 whitespace-nowrap ${
-                        index < frozenColumns ? 'frozen-column' : ''
-                      }`}
-                      onClick={() => col.sortable && handleSort(col.id)}
-                    >
-                      <div className="flex items-center space-x-1">
-                        <span className="text-base">{col.label}</span>
-                        {col.required && <span className="text-red-300">*</span>}
-                        {col.sortable && getSortIcon(col.id)}
-                      </div>
-                    </th>
-                  ))}
+                  {visibleColumns.map((col) => {
+                    const actualColumnIndex = columns.findIndex(c => c.id === col.id);
+                    return (
+                      <th
+                        key={col.id}
+                        className={`text-left py-3 px-8 font-medium cursor-pointer hover:opacity-80 whitespace-nowrap ${
+                          isColumnFrozen(actualColumnIndex) ? 'frozen-column' : ''
+                        }`}
+                        onClick={() => col.sortable && handleSort(col.id)}
+                        style={{
+                          left: isColumnFrozen(actualColumnIndex) ? getFrozenColumnLeft(actualColumnIndex) : 'auto',
+                          zIndex: isColumnFrozen(actualColumnIndex) ? 35 : 30
+                        }}
+                      >
+                        <div className="flex items-center space-x-1">
+                          <span className="text-base">{col.label}</span>
+                          {col.required && <span className="text-red-300">*</span>}
+                          {col.sortable && getSortIcon(col.id)}
+                        </div>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
 
               <tbody>
-                {paginatedProjects.map((proj, rowIndex) => (
-                  <tr
-                    key={proj.id}
-                    className={`border-b border-gray-200 hover:bg-gray-50 transition-colors ${
-                      rowIndex < frozenRows ? 'frozen-row' : ''
-                    }`}
-                  >
-                    {/* Checkbox cell */}
-                    <td className={`py-3 px-8 whitespace-nowrap w-4 ${
-                      frozenColumns > 0 ? 'frozen-column' : ''
-                    }`}>
-                      <div className="flex items-center justify-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedProjects.includes(proj.id)}
-                          onChange={() => toggleProjectSelection(proj.id)}
-                          className="h-4 w-4 text-gray-600 border-gray-300 rounded focus:ring-gray-500"
-                        />
-                      </div>
-                    </td>
-                    {visibleColumns.map((col, colIndex) => (
+                {paginatedProjects.map((proj, rowIndex) => {
+                  const actualRowIndex = (currentPage - 1) * pageSize + rowIndex;
+                  const isRowCurrentlyFrozen = isRowFrozen(actualRowIndex);
+                  
+                  return (
+                    <tr
+                      key={proj.id}
+                      className={`border-b border-gray-200 hover:bg-gray-50 transition-colors ${
+                        isRowCurrentlyFrozen ? 'frozen-row' : ''
+                      }`}
+                      style={{
+                        top: isRowCurrentlyFrozen ? getFrozenRowTop(actualRowIndex) : 'auto'
+                      }}
+                    >
+                      {/* Checkbox cell */}
                       <td 
-                        key={col.id} 
-                        className={`py-3 px-8 whitespace-nowrap min-w-[160px] text-base ${
-                          colIndex < frozenColumns ? 'frozen-column' : ''
+                        className={`py-3 px-8 whitespace-nowrap w-4 ${
+                          isColumnFrozen(0) ? 'frozen-column' : ''
                         }`}
+                        style={{
+                          left: isColumnFrozen(0) ? '0' : 'auto',
+                          zIndex: isColumnFrozen(0) ? (isRowCurrentlyFrozen ? 25 : 15) : 'auto'
+                        }}
                       >
-                        {renderCellContent(col, proj[col.id])}
+                        <div className="flex items-center justify-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedProjects.includes(proj.id)}
+                            onChange={() => toggleProjectSelection(proj.id)}
+                            className="h-4 w-4 text-gray-600 border-gray-300 rounded focus:ring-gray-500"
+                          />
+                        </div>
                       </td>
-                    ))}
+                      {visibleColumns.map((col) => {
+                        const actualColumnIndex = columns.findIndex(c => c.id === col.id);
+                        return (
+                          <td 
+                            key={col.id} 
+                            className={`py-3 px-8 whitespace-nowrap min-w-[160px] text-base ${
+                              isColumnFrozen(actualColumnIndex) ? 'frozen-column' : ''
+                            }`}
+                            style={{
+                              left: isColumnFrozen(actualColumnIndex) ? getFrozenColumnLeft(actualColumnIndex) : 'auto',
+                              zIndex: isColumnFrozen(actualColumnIndex) ? (isRowCurrentlyFrozen ? 25 : 15) : 'auto'
+                            }}
+                          >
+                            {renderCellContent(col, proj[col.id])}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+                
+                {/* Empty state */}
+                {paginatedProjects.length === 0 && (
+                  <tr>
+                    <td colSpan={visibleColumns.length + 1} className="text-center py-8 text-gray-500">
+                      No projects found
+                    </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
 
-          {/* FOOTER SECTION - FIXED */}
+          {/* FOOTER SECTION */}
           <div className="px-4 py-3 border-t border-gray-200 text-xs text-gray-900 flex flex-col sm:flex-row items-center justify-between gap-2 bg-white flex-shrink-0">
             {/* LEFT SIDE - Add Project and Action Buttons */}
             <div className="flex items-center gap-2">
@@ -1539,14 +1811,14 @@ const ProjectMaster = () => {
                 <button
                   onClick={toggleFreezeRow}
                   className={`flex items-center gap-1 h-10 px-3 text-xs border rounded tooltip ${
-                    frozenRows > 0 
+                    frozenRows.length > 0 
                       ? 'bg-blue-50 text-blue-700 border-blue-300' 
                       : 'border-gray-300 hover:bg-gray-50 text-gray-700'
                   }`}
-                  data-tooltip={frozenRows > 0 ? "Unfreeze first row" : "Freeze first row"}
+                  data-tooltip={frozenRows.length > 0 ? "Unfreeze rows" : "Select rows to freeze"}
                 >
-                  <Snowflake className={`h-4 w-4 ${frozenRows > 0 ? 'text-blue-600' : 'text-gray-600'}`} />
-                  {frozenRows > 0 && <span className="ml-1">Frozen</span>}
+                  <Snowflake className={`h-4 w-4 ${frozenRows.length > 0 ? 'text-blue-600' : 'text-gray-600'}`} />
+                  {frozenRows.length > 0 && <span className="ml-1 text-xs">{frozenRows.length}</span>}
                 </button>
               </div>
               
@@ -1556,7 +1828,7 @@ const ProjectMaster = () => {
                   <button
                     onClick={handleBulkEdit}
                     className="flex items-center gap-1 h-10 px-3 text-xs sm:text-sm border border-gray-300 rounded hover:bg-gray-50"
-                    title={selectedProjects.length === 1 ? "Edit selected project" : "Edit selected projects"}
+                    title="Edit selected project"
                   >
                     <Edit className="h-4 w-4" />
                     {selectedProjects.length > 1 && <span>Edit ({selectedProjects.length})</span>}
@@ -1611,7 +1883,7 @@ const ProjectMaster = () => {
                       onClick={() => handlePageChange(pageNum)}
                       className={`px-2 py-1 text-xs rounded ${
                         currentPage === pageNum
-                          ? 'bg-gradient-to-r from-rose-400 to-amber-400 text-white'
+                          ? 'bg-blue-600 text-white'
                           : 'text-gray-700 hover:bg-gray-100'
                       }`}
                     >
@@ -1635,9 +1907,6 @@ const ProjectMaster = () => {
 
               <span className="text-gray-600">
                 Showing {paginatedProjects.length} of {sortedProjects.length} projects
-                {columnFilter &&
-                  ` (Filtered)`
-                }
               </span>
               
               {selectedProjects.length > 0 && (
@@ -1648,11 +1917,11 @@ const ProjectMaster = () => {
               <span className="text-gray-600">
                 ({visibleColumns.length} of {columns.length} columns visible)
               </span>
-              {(frozenRows > 0 || frozenColumns > 0) && (
+              {(frozenRows.length > 0 || frozenColumns.length > 0) && (
                 <span className="px-2 py-1 freeze-indicator rounded text-xs flex items-center gap-1">
                   <Snowflake className="h-3 w-3" />
-                  {frozenRows > 0 && frozenColumns > 0 ? 'Row 1 & Col 1 frozen' : 
-                   frozenRows > 0 ? 'Row 1 frozen' : 'Col 1 frozen'}
+                  {frozenRows.length > 0 && frozenColumns.length > 0 ? `${frozenRows.length} row(s) & ${frozenColumns.length} col(s) frozen` : 
+                   frozenRows.length > 0 ? `${frozenRows.length} row(s) frozen` : `${frozenColumns.length} col(s) frozen`}
                 </span>
               )}
             </div>

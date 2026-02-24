@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import ReactDOM from 'react-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -72,6 +73,7 @@ const sidebarManager = {
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
+  const location = useLocation();
   
   // ==========================================================================
   // DEFAULT STATE - PROJECT DASHBOARD SELECTED, ALL SUBMODULES CLOSED
@@ -92,7 +94,7 @@ const Dashboard = () => {
   // EXPANDED MODULES STATE - ALL CLOSED BY DEFAULT
   // ==========================================================================
   const [expandedModules, setExpandedModules] = useState(() => {
-    // Try to load from sessionStorage first, otherwise use defaults
+    // Try to load from sessionStorage otherwise use defaults
     const saved = sessionStorage.getItem('expanded_modules');
     if (saved) {
       try {
@@ -108,8 +110,20 @@ const Dashboard = () => {
     };
   });
   
-  const [selectedFileId, setSelectedFileId] = useState(() => {
-    const saved = localStorage.getItem('selected_file_id');
+  // ==========================================================================
+  // FIXED: SEPARATE SELECTION STATE FOR EACH CONTEXT
+  // ==========================================================================
+  const [selectedUploadFileId, setSelectedUploadFileId] = useState(() => {
+    const saved = localStorage.getItem('selected_upload_file_id');
+    try {
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return saved;
+    }
+  });
+  
+  const [selectedProjectFileId, setSelectedProjectFileId] = useState(() => {
+    const saved = localStorage.getItem('selected_project_file_id');
     try {
       return saved ? JSON.parse(saved) : null;
     } catch (e) {
@@ -204,19 +218,69 @@ const Dashboard = () => {
     localStorage.setItem('active_module', activeModule);
   }, [activeModule]);
 
-  // Save selected file ID to localStorage
+  // ==========================================================================
+  // FIXED: Save selected file IDs separately
+  // ==========================================================================
   useEffect(() => {
-    if (selectedFileId !== null) {
-      localStorage.setItem('selected_file_id', JSON.stringify(selectedFileId));
+    if (selectedUploadFileId !== null) {
+      localStorage.setItem('selected_upload_file_id', JSON.stringify(selectedUploadFileId));
     } else {
-      localStorage.removeItem('selected_file_id');
+      localStorage.removeItem('selected_upload_file_id');
     }
-  }, [selectedFileId]);
+  }, [selectedUploadFileId]);
+
+  useEffect(() => {
+    if (selectedProjectFileId !== null) {
+      localStorage.setItem('selected_project_file_id', JSON.stringify(selectedProjectFileId));
+    } else {
+      localStorage.removeItem('selected_project_file_id');
+    }
+  }, [selectedProjectFileId]);
 
   // Save sidebar collapsed state
   useEffect(() => {
     localStorage.setItem('sidebar_collapsed', JSON.stringify(sidebarCollapsed));
   }, [sidebarCollapsed]);
+
+  // Listen for back/close events from child modules
+  useEffect(() => {
+    const handleCloseProjectFile = () => {
+      setSelectedProjectFileId(null);
+      setActiveModule('project-dashboard');
+    };
+    const handleReturnToDashboard = (e) => {
+      const from = e?.detail?.from;
+      if (from === 'uploadTrackers') {
+        setSelectedUploadFileId(null);
+        setActiveModule('upload-trackers');
+        setExpandedModules(prev => ({ ...prev, 'upload-trackers': true }));
+      } else if (from === 'projectDashboard') {
+        setSelectedProjectFileId(null);
+        setActiveModule('project-dashboard');
+        setExpandedModules(prev => ({ ...prev, 'project-dashboard': true }));
+      }
+    };
+    window.addEventListener('closeProjectDashboardFile', handleCloseProjectFile);
+    window.addEventListener('returnToDashboard', handleReturnToDashboard);
+    return () => {
+      window.removeEventListener('closeProjectDashboardFile', handleCloseProjectFile);
+      window.removeEventListener('returnToDashboard', handleReturnToDashboard);
+    };
+  }, []);
+
+  // Handle module selection via navigation state
+  useEffect(() => {
+    const targetModule = location.state && location.state.module;
+    if (targetModule && ['project-dashboard', 'upload-trackers', 'masters-main', 'mom-module', 'system-settings'].includes(targetModule)) {
+      setActiveModule(targetModule);
+      if (targetModule === 'project-dashboard') {
+        setExpandedModules(prev => ({ ...prev, 'project-dashboard': true }));
+      }
+      if (targetModule === 'upload-trackers') {
+        setExpandedModules(prev => ({ ...prev, 'upload-trackers': true }));
+      }
+    }
+  }, [location.state]);
 
   // DateTime
   useEffect(() => {
@@ -289,22 +353,68 @@ const Dashboard = () => {
     return () => window.removeEventListener('openMasterSubmodule', handleOpenMasterSubmodule);
   }, []);
 
-  // Handle project dashboard file open events
+  // ==========================================================================
+  // FIXED: Handle project dashboard file open events with better state management
+  // ==========================================================================
   useEffect(() => {
     const handleOpenProjectDashboardFile = (event) => {
-      const { trackerId, fileModule } = event.detail;
-      setSelectedFileId(trackerId);
+      const { trackerId, fileModule, projectName } = event.detail;
       
-      // Ensure project dashboard is active and expanded
+      // Set the selected file ID
+      setSelectedProjectFileId(trackerId);
+      
+      // Ensure project dashboard is active
       if (activeModule !== 'project-dashboard') {
         setActiveModule('project-dashboard');
       }
+      
+      // Ensure project dashboard is expanded
       setExpandedModules(prev => ({ ...prev, 'project-dashboard': true }));
+      
+      // Find and expand the parent project module
+      if (fileModule && fileModule.projectName) {
+        // Find the project in projectDashboardModules
+        const project = projectDashboardModules.find(p => 
+          p.name === fileModule.projectName || 
+          p.projectName === fileModule.projectName
+        );
+        
+        if (project) {
+          const projectKey = project.id || project.projectId || project.name;
+          setExpandedModules(prev => ({ 
+            ...prev, 
+            [`project-dashboard-${projectKey}`]: true 
+          }));
+        }
+      }
     };
 
     window.addEventListener('openProjectDashboardFile', handleOpenProjectDashboardFile);
     return () => window.removeEventListener('openProjectDashboardFile', handleOpenProjectDashboardFile);
-  }, [activeModule]);
+  }, [activeModule, projectDashboardModules]);
+
+  // ==========================================================================
+  // FIXED: Effect to ensure project file selection persists
+  // ==========================================================================
+  useEffect(() => {
+    // If we have a selected project file ID and we're on project dashboard,
+    // ensure the parent module is expanded
+    if (activeModule === 'project-dashboard' && selectedProjectFileId) {
+      // Find which project contains this file
+      for (const project of projectDashboardModules) {
+        const file = project.submodules?.find(s => s.trackerId === selectedProjectFileId);
+        if (file) {
+          const projectKey = project.id || project.projectId || project.name;
+          setExpandedModules(prev => ({
+            ...prev,
+            'project-dashboard': true,
+            [`project-dashboard-${projectKey}`]: true
+          }));
+          break;
+        }
+      }
+    }
+  }, [activeModule, selectedProjectFileId, projectDashboardModules]);
 
   // Masters submodules
   const mastersSubmodules = [
@@ -319,8 +429,19 @@ const Dashboard = () => {
     { id: 'masters-main', name: 'Masters', component: <Masters />, icon: <Database className="h-5 w-5" /> },
   ];
 
+  // ==========================================================================
+  // FIXED: Pass the correct selected file ID to each component
+  // ==========================================================================
   const otherModules = [
-    { id: 'upload-trackers', name: 'Upload Trackers', component: <UploadTrackers selectedFileId={selectedFileId} onClearSelection={() => setSelectedFileId(null)} />, icon: <FileUp className="h-5 w-5" /> },
+    { 
+      id: 'upload-trackers', 
+      name: 'Upload Trackers', 
+      component: <UploadTrackers 
+        selectedFileId={selectedUploadFileId} 
+        onClearSelection={() => setSelectedUploadFileId(null)} 
+      />, 
+      icon: <FileUp className="h-5 w-5" /> 
+    },
     { id: 'system-settings', name: 'Settings', component: <SystemSettings />, icon: <Settings className="h-5 w-5" /> },
   ];
 
@@ -356,8 +477,11 @@ const Dashboard = () => {
     // Check MOM module
     if (activeModule === 'mom-module') return <MOMModule />;
     
-    // Default to Project Dashboard
-    return <ProjectDashboard selectedFileId={selectedFileId} />;
+    // Default to Project Dashboard - pass the project-specific selected file ID
+    return <ProjectDashboard 
+      selectedFileId={selectedProjectFileId} 
+      onClearSelection={() => setSelectedProjectFileId(null)}
+    />;
   };
 
   const getActiveModuleName = () => {
@@ -370,19 +494,22 @@ const Dashboard = () => {
     return module ? module.name : 'Project Dashboard';
   };
 
+  // ==========================================================================
+  // FIXED: Get header title using context-specific selected file IDs
+  // ==========================================================================
   const getHeaderTitle = () => {
-    if (activeModule === 'upload-trackers' && selectedFileId) {
+    if (activeModule === 'upload-trackers' && selectedUploadFileId) {
       for (const proj of uploadTrackerModules) {
-        const file = proj.submodules?.find(s => s.trackerId === selectedFileId);
+        const file = proj.submodules?.find(s => s.trackerId === selectedUploadFileId);
         if (file) {
           return capitalizeFirstLetter((file.displayName || file.name || '').replace(/\.(xlsx|xls|csv|json|txt)$/i, ''));
         }
       }
       return 'File Viewer';
     }
-    if (activeModule === 'project-dashboard' && selectedFileId) {
+    if (activeModule === 'project-dashboard' && selectedProjectFileId) {
       for (const proj of projectDashboardModules) {
-        const file = proj.submodules?.find(s => s.trackerId === selectedFileId);
+        const file = proj.submodules?.find(s => s.trackerId === selectedProjectFileId);
         if (file) {
           return capitalizeFirstLetter((file.displayName || file.name || '').replace(/\.(xlsx|xls|csv|json|txt)$/i, ''));
         }
@@ -392,32 +519,43 @@ const Dashboard = () => {
   };
 
   // ==========================================================================
-  // HANDLE MODULE CLICK
+  // HANDLE MODULE CLICK - UPDATED to match Masters behavior
   // ==========================================================================
   const handleModuleClick = (moduleId) => {
     setActiveModule(moduleId);
     
-    // Clear selected file ID when switching away from project-dashboard or upload-trackers
-    if (moduleId !== 'project-dashboard' && moduleId !== 'upload-trackers') {
-      setSelectedFileId(null);
+    // ==========================================================================
+    // FIXED: Only clear the selected file for the module we're leaving
+    // ==========================================================================
+    if (moduleId !== 'project-dashboard') {
+      // Clear project file selection when leaving project dashboard
+      setSelectedProjectFileId(null);
     }
     
-    // For main modules with submodules, toggle expansion
+    if (moduleId !== 'upload-trackers') {
+      // Clear upload file selection when leaving upload trackers
+      setSelectedUploadFileId(null);
+    }
+    
+    // For main modules with submodules, handle expansion differently
     if (moduleId === 'project-dashboard') {
-      setExpandedModules(prev => ({
-        ...prev,
-        'project-dashboard': !prev['project-dashboard']
-      }));
+      // Only expand if it has content and is currently closed
+      // Don't toggle - just ensure it's expanded when clicked
+      if (projectDashboardModules.length > 0 && !expandedModules['project-dashboard']) {
+        setExpandedModules(prev => ({ ...prev, 'project-dashboard': true }));
+      }
+      // If it's already expanded, keep it expanded (don't collapse)
     } else if (moduleId === 'masters-main') {
+      // Masters - toggle expansion (has submodules) - KEEP ORIGINAL BEHAVIOR
       setExpandedModules(prev => ({
         ...prev,
         'masters': !prev['masters']
       }));
     } else if (moduleId === 'upload-trackers') {
-      setExpandedModules(prev => ({
-        ...prev,
-        'upload-trackers': !prev['upload-trackers']
-      }));
+      // Upload Trackers - match Project Dashboard behavior
+      if (uploadTrackerModules.length > 0 && !expandedModules['upload-trackers']) {
+        setExpandedModules(prev => ({ ...prev, 'upload-trackers': true }));
+      }
     }
   };
 
@@ -434,14 +572,44 @@ const Dashboard = () => {
     }));
   };
 
+  // ==========================================================================
+  // FIXED: Use context-specific file click handlers
+  // ==========================================================================
   const handleFileModuleClick = (fileModule) => {
     setActiveModule('upload-trackers');
-    setSelectedFileId(fileModule.trackerId);
+    setSelectedUploadFileId(fileModule.trackerId);
   };
 
+  // ==========================================================================
+  // FIXED: Enhanced project file click handler
+  // ==========================================================================
   const handleProjectFileClick = (fileModule) => {
-    // Set the selected file ID
-    setSelectedFileId(fileModule.trackerId);
+    // Set the project-specific selected file ID
+    setSelectedProjectFileId(fileModule.trackerId);
+    
+    // Ensure we're on project dashboard
+    if (activeModule !== 'project-dashboard') {
+      setActiveModule('project-dashboard');
+    }
+    
+    // Ensure project dashboard is expanded
+    setExpandedModules(prev => ({ ...prev, 'project-dashboard': true }));
+    
+    // Also expand the parent project module
+    if (fileModule.projectName) {
+      const project = projectDashboardModules.find(p => 
+        p.name === fileModule.projectName || 
+        p.projectName === fileModule.projectName
+      );
+      
+      if (project) {
+        const projectKey = project.id || project.projectId || project.name;
+        setExpandedModules(prev => ({ 
+          ...prev, 
+          [`project-dashboard-${projectKey}`]: true 
+        }));
+      }
+    }
     
     // Dispatch event for ProjectDashboard to handle
     window.dispatchEvent(new CustomEvent('openProjectDashboardFile', { 
@@ -451,12 +619,18 @@ const Dashboard = () => {
         projectName: fileModule.projectName || 'Unknown'
       } 
     }));
-    
-    // Ensure we're on project dashboard and it's expanded
-    if (activeModule !== 'project-dashboard') {
-      setActiveModule('project-dashboard');
+  };
+
+  // ==========================================================================
+  // FIXED: Check selection based on context
+  // ==========================================================================
+  const isFileSelected = (fileModule, context) => {
+    if (context === 'upload-trackers') {
+      return selectedUploadFileId === fileModule.trackerId;
+    } else if (context === 'project-dashboard') {
+      return selectedProjectFileId === fileModule.trackerId;
     }
-    setExpandedModules(prev => ({ ...prev, 'project-dashboard': true }));
+    return false;
   };
 
   // ==========================================================================
@@ -501,7 +675,10 @@ const Dashboard = () => {
           </div>
           {!sidebarCollapsed && hasDynamicModules && (
             <button
-              onClick={(e) => toggleModuleExpansion('project-dashboard', e)}
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent triggering parent click
+                toggleModuleExpansion('project-dashboard', e);
+              }}
               className={`p-1.5 rounded-lg ${
                 isActive ? 'hover:bg-gray-100 text-black' : 
                 isHovered ? 'hover:bg-white text-black' : 
@@ -560,7 +737,10 @@ const Dashboard = () => {
           </div>
           {!sidebarCollapsed && hasDynamicModules && (
             <button
-              onClick={(e) => toggleModuleExpansion('upload-trackers', e)}
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent triggering parent click
+                toggleModuleExpansion('upload-trackers', e);
+              }}
               className={`p-1.5 rounded-lg ${
                 isActive ? 'hover:bg-gray-100 text-black' : 
                 isHovered ? 'hover:bg-white text-black' : 
@@ -654,7 +834,10 @@ const Dashboard = () => {
           </div>
           {!sidebarCollapsed && (
             <button
-              onClick={(e) => toggleModuleExpansion('masters', e)}
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent triggering parent click
+                toggleModuleExpansion('masters', e);
+              }}
               className={`p-1.5 rounded-lg ${
                 isActive ? 'hover:bg-gray-100 text-black' : 
                 isHovered ? 'hover:bg-white text-black' : 
@@ -709,8 +892,12 @@ const Dashboard = () => {
     );
   };
 
+  // ==========================================================================
+  // FIXED: Pass isSelected function to renderProjectModule
+  // ==========================================================================
   const renderProjectModule = (projectModule, context) => {
-    const uniqueId = `${context}-${projectModule.id}`;
+    const projectKey = projectModule.id || projectModule.projectId || projectModule.name;
+    const uniqueId = `${context}-${projectKey}`;
     const isExpanded = expandedModules[uniqueId] || false;
     const hasFiles = projectModule.submodules?.length > 0;
     const isHovered = hoveredModule === uniqueId;
@@ -739,7 +926,10 @@ const Dashboard = () => {
           </div>
           {hasFiles && (
             <button
-              onClick={(e) => toggleModuleExpansion(uniqueId, e)}
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent triggering parent click
+                toggleModuleExpansion(uniqueId, e);
+              }}
               className={`p-1.5 rounded-lg ${
                 isHovered ? 'hover:bg-white/90 text-black' : 'hover:bg-white/70 text-black'
               }`}
@@ -751,17 +941,19 @@ const Dashboard = () => {
         
         {isExpanded && hasFiles && (
           <div className="ml-7 mt-1.5 space-y-1">
-            {projectModule.submodules.map(fileModule => renderFileModule(fileModule, context))}
+            {projectModule.submodules.map(fileModule => renderFileModule(fileModule, context, projectKey))}
           </div>
         )}
       </div>
     );
   };
 
-  const renderFileModule = (fileModule, context) => {
-    const isSelected = (context === 'upload-trackers' || context === 'project-dashboard') && 
-                       selectedFileId === fileModule.trackerId;
-    const fileId = `${context}-${fileModule.id}`;
+  // ==========================================================================
+  // FIXED: Use context-specific selection check with project key
+  // ==========================================================================
+  const renderFileModule = (fileModule, context, projectKey) => {
+    const isSelected = isFileSelected(fileModule, context);
+    const fileId = `${context}-${fileModule.id}-${projectKey}`;
     const isHovered = hoveredModule === fileId;
     
     return (
@@ -773,7 +965,11 @@ const Dashboard = () => {
           if (context === 'upload-trackers') {
             handleFileModuleClick(fileModule);
           } else if (context === 'project-dashboard') {
-            handleProjectFileClick(fileModule);
+            // Pass the project name with the file module
+            handleProjectFileClick({
+              ...fileModule,
+              projectName: fileModule.projectName || projectKey
+            });
           }
         }}
         className={`w-full flex items-center space-x-2.5 rounded-lg px-3 py-2 transition-all duration-300 ${
@@ -974,16 +1170,6 @@ const Dashboard = () => {
                 <h1 className="text-2xl font-bold text-black tracking-tight">
                   {getHeaderTitle()}
                 </h1>
-                
-                {(activeModule === 'upload-trackers' || activeModule === 'project-dashboard') && selectedFileId && (
-                  <button
-                    onClick={() => setSelectedFileId(null)}
-                    className="ml-4 flex items-center space-x-1.5 px-4 py-2 bg-white hover:bg-gradient-to-r hover:from-rose-50 hover:to-sky-50 rounded-lg text-sm font-medium text-black transition-colors border border-indigo-200"
-                  >
-                    <span>Clear Selection</span>
-                    <ChevronRight className="h-4 w-4 text-indigo-400" />
-                  </button>
-                )}
               </div>
 
               {/* Right side - Date/Time and Profile */}
