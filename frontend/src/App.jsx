@@ -27,14 +27,12 @@ function App() {
               }
             />
 
-            {/* Nested routes under Dashboard */}
+            {/* Redirect legacy module routes to dashboard with module state */}
             <Route
               path="/upload-trackers"
               element={
                 <PrivateRoute>
-                  <Dashboard>
-                    <UploadTrackers />
-                  </Dashboard>
+                  <Navigate to="/dashboard" state={{ module: 'upload-trackers' }} replace />
                 </PrivateRoute>
               }
             />
@@ -43,9 +41,7 @@ function App() {
               path="/project-dashboard"
               element={
                 <PrivateRoute>
-                  <Dashboard>
-                    <ProjectDashboard />
-                  </Dashboard>
+                  <Navigate to="/dashboard" state={{ module: 'project-dashboard' }} replace />
                 </PrivateRoute>
               }
             />
@@ -54,9 +50,7 @@ function App() {
               path="/file-viewer/:trackerId"
               element={
                 <PrivateRoute>
-                  <Dashboard>
-                    <FileViewerPage />
-                  </Dashboard>
+                  <Navigate to="/dashboard" state={{ module: 'project-dashboard' }} replace />
                 </PrivateRoute>
               }
             />

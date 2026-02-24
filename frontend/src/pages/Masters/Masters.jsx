@@ -4,7 +4,7 @@ import {
   File, Clock, User, ChevronRight, Database, FileSpreadsheet, 
   Archive, FileText, X, Eye, Edit, Check, 
   Users, Package, Building, Briefcase, 
-  UserCog, GripVertical, FolderOpen
+  UserCog, FolderOpen
 } from 'lucide-react';
 
 // File Content Viewer Component
@@ -231,38 +231,17 @@ const FileContentViewer = ({ fileData, trackerInfo, onClose, onSaveData }) => {
 
 // Helper function to get icon for each master module
 const getMasterIcon = (masterName) => {
-  const iconMap = {
-    'Employee Master': <Users className="h-5 w-5" />,
-    'Employee Access': <UserCog className="h-5 w-5" />,
-    'Project Master': <Briefcase className="h-5 w-5" />,
-    'Part Master': <Package className="h-5 w-5" />,
-    'Department Master': <Building className="h-5 w-5" />
-  };
-  return iconMap[masterName] || <Database className="h-5 w-5" />;
+  return <Database className="h-5 w-5" />;
 };
 
-// Helper function to get gradient colors
-const getMasterGradient = (masterName) => {
-  const gradientMap = {
-    'Employee Master': 'from-blue-500 to-indigo-600',
-    'Employee Access': 'from-purple-500 to-purple-700',
-    'Project Master': 'from-emerald-500 to-teal-600',
-    'Part Master': 'from-amber-500 to-orange-600',
-    'Department Master': 'from-rose-500 to-pink-600'
-  };
-  return gradientMap[masterName] || 'from-gray-600 to-gray-800';
+// Helper function to get gradient colors - all light blue
+const getMasterGradient = () => {
+  return 'from-blue-400 to-blue-600';
 };
 
-// Helper function to get accent color for each master module
-const getMasterAccentColor = (masterName) => {
-  const colorMap = {
-    'Employee Master': 'blue',
-    'Employee Access': 'purple',
-    'Project Master': 'emerald',
-    'Part Master': 'amber',
-    'Department Master': 'rose'
-  };
-  return colorMap[masterName] || 'gray';
+// Helper function to get accent color for each master module - all light blue
+const getMasterAccentColor = () => {
+  return 'blue';
 };
 
 // Main Masters Component
@@ -273,8 +252,6 @@ const Masters = () => {
   const [trackers, setTrackers] = useState([]);
   const [uploadedFilesData, setUploadedFilesData] = useState({});
   const [hoveredModule, setHoveredModule] = useState(null);
-  const [draggedModule, setDraggedModule] = useState(null);
-  const [moduleOrder, setModuleOrder] = useState([]);
   
   // File viewer modal state
   const [fileViewerModal, setFileViewerModal] = useState({
@@ -283,14 +260,14 @@ const Masters = () => {
     trackerInfo: null
   });
 
-  // Master modules data
+  // Master modules data - all with blue color
   const staticMasterModules = [
     {
       id: 1,
       name: 'Employee Master',
       masterModuleId: 'employee-master',
       color: 'bg-blue-600',
-      gradient: 'from-blue-600 to-indigo-700',
+      gradient: 'from-blue-400 to-blue-600',
       accentColor: 'blue',
       type: 'master',
       description: 'Manage employee information and records'
@@ -299,9 +276,9 @@ const Masters = () => {
       id: 2,
       name: 'Employee Access',
       masterModuleId: 'employee-access',
-      color: 'bg-purple-600',
-      gradient: 'from-purple-600 to-purple-800',
-      accentColor: 'purple',
+      color: 'bg-blue-600',
+      gradient: 'from-blue-400 to-blue-600',
+      accentColor: 'blue',
       type: 'master',
       description: 'Configure employee access permissions'
     },
@@ -309,9 +286,9 @@ const Masters = () => {
       id: 3,
       name: 'Project Master',
       masterModuleId: 'project-master',
-      color: 'bg-emerald-600',
-      gradient: 'from-emerald-600 to-teal-700',
-      accentColor: 'emerald',
+      color: 'bg-blue-600',
+      gradient: 'from-blue-400 to-blue-600',
+      accentColor: 'blue',
       type: 'master',
       description: 'Manage project portfolios and timelines'
     },
@@ -319,9 +296,9 @@ const Masters = () => {
       id: 4,
       name: 'Part Master',
       masterModuleId: 'part-master',
-      color: 'bg-amber-600',
-      gradient: 'from-amber-600 to-orange-700',
-      accentColor: 'amber',
+      color: 'bg-blue-600',
+      gradient: 'from-blue-400 to-blue-600',
+      accentColor: 'blue',
       type: 'master',
       description: 'Catalog parts and inventory items'
     },
@@ -329,9 +306,9 @@ const Masters = () => {
       id: 5,
       name: 'Department Master',
       masterModuleId: 'department-master',
-      color: 'bg-rose-600',
-      gradient: 'from-rose-600 to-pink-700',
-      accentColor: 'rose',
+      color: 'bg-blue-600',
+      gradient: 'from-blue-400 to-blue-600',
+      accentColor: 'blue',
       type: 'master',
       description: 'Organize departmental structures'
     }
@@ -343,10 +320,6 @@ const Masters = () => {
       try {
         const savedMasterFiles = localStorage.getItem('master_files');
         const masterFiles = savedMasterFiles ? JSON.parse(savedMasterFiles) : [];
-        
-        // Load saved order or use default
-        const savedOrder = localStorage.getItem('master_module_order');
-        let order = savedOrder ? JSON.parse(savedOrder) : staticMasterModules.map(m => m.id);
         
         const masterModulesWithFiles = staticMasterModules.map(master => {
           const masterFileModules = masterFiles
@@ -366,13 +339,7 @@ const Masters = () => {
           };
         });
         
-        // Sort modules based on saved order
-        const sortedModules = [...masterModulesWithFiles].sort((a, b) => {
-          return order.indexOf(a.id) - order.indexOf(b.id);
-        });
-        
-        setDynamicModules(sortedModules);
-        setModuleOrder(order);
+        setDynamicModules(masterModulesWithFiles);
         
         const savedTrackers = localStorage.getItem('upload_trackers');
         setTrackers(savedTrackers ? JSON.parse(savedTrackers) : []);
@@ -399,53 +366,6 @@ const Masters = () => {
       window.removeEventListener('mastersUpdate', handleMastersUpdate);
     };
   }, []);
-
-  // Drag and drop handlers
-  const handleDragStart = (e, index) => {
-    setDraggedModule(index);
-    e.dataTransfer.effectAllowed = 'move';
-    e.currentTarget.classList.add('opacity-50');
-  };
-
-  const handleDragOver = (e, index) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
-
-  const handleDrop = (e, dropIndex) => {
-    e.preventDefault();
-    
-    if (draggedModule === null) return;
-    
-    const newModules = [...dynamicModules];
-    const draggedModuleContent = newModules[draggedModule];
-    
-    // Remove dragged item
-    newModules.splice(draggedModule, 1);
-    // Insert at drop position
-    newModules.splice(dropIndex, 0, draggedModuleContent);
-    
-    setDynamicModules(newModules);
-    
-    // Save new order
-    const newOrder = newModules.map(m => m.id);
-    setModuleOrder(newOrder);
-    localStorage.setItem('master_module_order', JSON.stringify(newOrder));
-    
-    setDraggedModule(null);
-    
-    // Remove opacity class from all dragged elements
-    document.querySelectorAll('.draggable-module').forEach(el => {
-      el.classList.remove('opacity-50');
-    });
-  };
-
-  const handleDragEnd = (e) => {
-    setDraggedModule(null);
-    document.querySelectorAll('.draggable-module').forEach(el => {
-      el.classList.remove('opacity-50');
-    });
-  };
 
   // Handle module click - Navigate to dashboard with module parameter
   const handleModuleClick = (module) => {
@@ -512,12 +432,12 @@ const Masters = () => {
     const ext = fileName.split('.').pop().toLowerCase();
     switch(ext) {
       case 'csv':
-        return <FileSpreadsheet className="h-4 w-4 text-emerald-600" />;
+        return <FileSpreadsheet className="h-4 w-4 text-blue-600" />;
       case 'xlsx':
       case 'xls':
-        return <FileSpreadsheet className="h-4 w-4 text-green-600" />;
+        return <FileSpreadsheet className="h-4 w-4 text-blue-600" />;
       case 'json':
-        return <Database className="h-4 w-4 text-purple-600" />;
+        return <Database className="h-4 w-4 text-blue-600" />;
       default:
         return <FileText className="h-4 w-4 text-blue-600" />;
     }
@@ -566,37 +486,25 @@ const Masters = () => {
         </div>
       )}
       
-      {/* Masters Grid - Movable Cards */}
+      {/* Masters Grid - Simple Cards without drag and drop */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {dynamicModules.map((master, index) => {
-          const accentColor = master.accentColor;
+        {dynamicModules.map((master) => {
           const fileCount = master.submodules?.length || 0;
           
           return (
             <div
               key={master.id}
               className={`
-                draggable-module group relative bg-white rounded-xl shadow-sm border border-gray-200 
-                overflow-hidden transition-all duration-300 cursor-move
-                ${hoveredModule === master.id ? 'shadow-lg ring-2 ring-gray-200' : ''}
-                ${draggedModule === index ? 'opacity-50 scale-95' : ''}
+                group relative bg-white rounded-xl shadow-sm border border-gray-200 
+                overflow-hidden transition-all duration-300
+                ${hoveredModule === master.id ? 'shadow-lg ring-2 ring-blue-200' : ''}
               `}
-              draggable={true}
-              onDragStart={(e) => handleDragStart(e, index)}
-              onDragOver={(e) => handleDragOver(e, index)}
-              onDrop={(e) => handleDrop(e, index)}
-              onDragEnd={handleDragEnd}
               onMouseEnter={() => setHoveredModule(master.id)}
               onMouseLeave={() => setHoveredModule(null)}
             >
-              {/* Drag Handle */}
-              <div className="absolute top-2 left-2 p-1 bg-gray-100/50 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                <GripVertical className="h-4 w-4 text-gray-500" />
-              </div>
-
               {/* Master Header - Clickable */}
               <div 
-                className={`relative bg-gradient-to-r ${master.gradient} p-4 cursor-pointer hover:opacity-90 transition-opacity overflow-hidden`}
+                className={`relative bg-gradient-to-r from-blue-400 to-blue-600 p-4 cursor-pointer hover:opacity-90 transition-opacity overflow-hidden`}
                 onClick={() => handleModuleClick(master)}
               >
                 {/* Animated background pattern */}
@@ -610,7 +518,7 @@ const Masters = () => {
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-1">
                       <div className="p-1.5 bg-white/20 rounded-lg backdrop-blur-sm">
-                        {getMasterIcon(master.name)}
+                        <Database className="h-5 w-5 text-white" />
                       </div>
                       <h3 className="text-lg font-bold text-white tracking-tight">
                         {master.name}
@@ -633,10 +541,10 @@ const Masters = () => {
                       <div
                         key={file.id}
                         onClick={(e) => handleFileClick(file, e)}
-                        className={`flex items-center justify-between p-2 bg-gray-50 rounded-lg hover:bg-${accentColor}-50 transition-colors cursor-pointer group/file`}
+                        className="flex items-center justify-between p-2 bg-gray-50 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer group/file"
                       >
                         <div className="flex items-center space-x-2 min-w-0">
-                          <div className={`p-1.5 bg-white rounded group-hover/file:bg-${accentColor}-100 transition-colors`}>
+                          <div className="p-1.5 bg-white rounded group-hover/file:bg-blue-100 transition-colors">
                             {getFileIcon(file.name)}
                           </div>
                           <div className="min-w-0">
@@ -645,7 +553,7 @@ const Masters = () => {
                             </p>
                           </div>
                         </div>
-                        <Eye className={`h-4 w-4 text-gray-400 group-hover/file:text-${accentColor}-600 flex-shrink-0`} />
+                        <Eye className="h-4 w-4 text-gray-400 group-hover/file:text-blue-600 flex-shrink-0" />
                       </div>
                     ))}
                     
@@ -664,18 +572,10 @@ const Masters = () => {
                     )}
                   </div>
                 ) : (
-                  <div className="text-center py-6 bg-gray-50 rounded-lg">
-                    {/* Empty state */}
-                  </div>
-                )}
-                
-                {/* Action Button */}
-                <div className="flex items-center justify-between pt-3 mt-2 border-t border-gray-100">
+                  <div className="flex items-center justify-between pt-3 mt-2 border-t border-gray-100">
                   <div className="flex items-center space-x-2">
-                    <div className={`w-1.5 h-1.5 rounded-full bg-${accentColor}-500`}></div>
-                    <span className="text-xs text-gray-500">
-                      Last: {fileCount > 0 ? formatDate(master.submodules[0]?.uploadDate) : 'Never'}
-                    </span>
+                    
+                    
                   </div>
                   
                   <button
@@ -683,20 +583,18 @@ const Masters = () => {
                       e.stopPropagation();
                       handleOpenModule(master.masterModuleId);
                     }}
-                    className={`
-                      inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium 
+                    className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium 
                       transition-all duration-200 hover:scale-105
-                      ${fileCount > 0 
-                        ? `bg-${accentColor}-50 text-${accentColor}-700 hover:bg-${accentColor}-100 border border-${accentColor}-200` 
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
-                      }
-                    `}
+                      bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200"
                   >
                     <FolderOpen className="h-3 w-3 mr-1" />
-                    Open
+                    Open Module
                     <ChevronRight className="h-3 w-3 ml-0.5 opacity-70" />
                   </button>
                 </div>
+                )}
+                
+                
               </div>
             </div>
           );

@@ -34,7 +34,8 @@ const FileViewerPage = () => {
   }, [fileData]);
 
   const handleBack = () => {
-    navigate(returnTo || '/project-dashboard');
+    const targetModule = returnTo === 'upload-trackers' ? 'upload-trackers' : 'project-dashboard';
+    navigate('/dashboard', { state: { module: targetModule } });
   };
 
   const handleSave = () => {

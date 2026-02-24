@@ -4,7 +4,7 @@ import LoginForm from '../components/LoginForm';
 const Login = () => {
   // Array of image URLs that will cycle through
   const images = [
-    '/caldimpic1.png',
+    
     
     '/caldimpic4.png',
     '/caldimpic3.png',
