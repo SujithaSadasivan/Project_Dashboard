@@ -4,7 +4,8 @@ import {
   File, Clock, User, ChevronRight, Database, FileSpreadsheet, 
   Archive, FileText, X, Eye, Edit, Check, 
   Users, Package, Building, Briefcase, 
-  UserCog, FolderOpen
+  UserCog, FolderOpen, Square, Layers, BarChart3, FileUp,
+  Shield, FolderKanban
 } from 'lucide-react';
 
 // File Content Viewer Component
@@ -85,30 +86,30 @@ const FileContentViewer = ({ fileData, trackerInfo, onClose, onSaveData }) => {
     if (!editedData || editedData.length === 0) {
       return (
         <div className="text-center py-8">
-          <Database className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+          <Database className="h-12 w-12 text-[#1e3a5f]/30 mx-auto mb-3" />
           <p className="text-gray-500">No data available in this file</p>
         </div>
       );
     }
 
     return (
-      <div className="overflow-auto border border-gray-200 rounded-xl bg-white">
+      <div className="overflow-auto border border-gray-200 rounded-xl bg-white shadow-sm">
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gradient-to-r from-blue-600 to-indigo-700 sticky top-0">
+          <thead className="bg-[#f0f5fa] sticky top-0">
             <tr>
               <th className="px-3 py-3 w-10">
                 {isEditing && (
-                  <button onClick={handleSelectAll} className="focus:outline-none text-white">
+                  <button onClick={handleSelectAll} className="focus:outline-none">
                     {selectAll ? (
-                      <Check className="h-4 w-4 text-white" />
+                      <Check className="h-4 w-4 text-[#1e3a5f]" />
                     ) : (
-                      <Square className="h-4 w-4 text-white" />
+                      <Square className="h-4 w-4 text-[#1e3a5f]/40" />
                     )}
                   </button>
                 )}
               </th>
               {editedHeaders.map((header, idx) => (
-                <th key={idx} className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                <th key={idx} className="px-4 py-3 text-left text-xs font-medium text-[#1e3a5f] uppercase tracking-wider">
                   {header}
                 </th>
               ))}
@@ -116,12 +117,12 @@ const FileContentViewer = ({ fileData, trackerInfo, onClose, onSaveData }) => {
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {editedData.map((row, rowIndex) => (
-              <tr key={rowIndex} className="hover:bg-gray-50 transition-colors">
+              <tr key={rowIndex} className="hover:bg-[#f0f5fa] transition-colors">
                 <td className="px-3 py-2">
                   {isEditing && (
                     <button onClick={() => handleRowSelect(rowIndex)} className="focus:outline-none">
                       {selectedRows.has(rowIndex) ? (
-                        <Check className="h-4 w-4 text-blue-600" />
+                        <Check className="h-4 w-4 text-[#1e3a5f]" />
                       ) : (
                         <Square className="h-4 w-4 text-gray-400" />
                       )}
@@ -131,7 +132,7 @@ const FileContentViewer = ({ fileData, trackerInfo, onClose, onSaveData }) => {
                 {row.map((cell, colIndex) => (
                   <td 
                     key={colIndex} 
-                    className="px-4 py-2 text-sm text-gray-900"
+                    className="px-4 py-2 text-sm text-gray-700"
                     onClick={() => handleCellClick(rowIndex, colIndex, cell)}
                   >
                     {editingCell?.rowIndex === rowIndex && editingCell?.colIndex === colIndex ? (
@@ -141,7 +142,7 @@ const FileContentViewer = ({ fileData, trackerInfo, onClose, onSaveData }) => {
                         onChange={handleCellChange}
                         onBlur={handleCellBlur}
                         onKeyPress={handleKeyPress}
-                        className="w-full px-2 py-1 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-2 py-1 border border-[#1e3a5f]/30 rounded focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20"
                         autoFocus
                       />
                     ) : (
@@ -162,8 +163,8 @@ const FileContentViewer = ({ fileData, trackerInfo, onClose, onSaveData }) => {
       {/* Header */}
       <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-gray-200">
         <div className="flex items-center space-x-3">
-          <div className="p-2 bg-blue-50 rounded-lg">
-            <FileText className="h-5 w-5 text-blue-600" />
+          <div className="p-2 bg-[#1e3a5f]/10 rounded-lg">
+            <FileText className="h-5 w-5 text-[#1e3a5f]" />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-gray-900">{trackerInfo.fileName}</h2>
@@ -194,7 +195,7 @@ const FileContentViewer = ({ fileData, trackerInfo, onClose, onSaveData }) => {
           {isEditing && (
             <button
               onClick={handleSave}
-              className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center"
+              className="px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#2c4c7c] transition-colors flex items-center shadow-sm"
             >
               <Check className="h-4 w-4 mr-1" />
               Save Changes
@@ -231,17 +232,14 @@ const FileContentViewer = ({ fileData, trackerInfo, onClose, onSaveData }) => {
 
 // Helper function to get icon for each master module
 const getMasterIcon = (masterName) => {
-  return <Database className="h-5 w-5" />;
-};
-
-// Helper function to get gradient colors - all light blue
-const getMasterGradient = () => {
-  return 'from-blue-400 to-blue-600';
-};
-
-// Helper function to get accent color for each master module - all light blue
-const getMasterAccentColor = () => {
-  return 'blue';
+  const icons = {
+    'Employee Master': <Users className="h-5 w-5 text-[#1e3a5f]" />,
+    'Employee Access': <Shield className="h-5 w-5 text-[#1e3a5f]" />,
+    'Project Master': <FolderKanban className="h-5 w-5 text-[#1e3a5f]" />,
+    'Part Master': <Package className="h-5 w-5 text-[#1e3a5f]" />,
+    'Department Master': <Building className="h-5 w-5 text-[#1e3a5f]" />
+  };
+  return icons[masterName] || <Database className="h-5 w-5 text-[#1e3a5f]" />;
 };
 
 // Main Masters Component
@@ -260,57 +258,62 @@ const Masters = () => {
     trackerInfo: null
   });
 
-  // Master modules data - all with blue color
+  // Master modules data - Light theme with dashboard blue accents
   const staticMasterModules = [
     {
       id: 1,
       name: 'Employee Master',
       masterModuleId: 'employee-master',
-      color: 'bg-blue-600',
-      gradient: 'from-blue-400 to-blue-600',
-      accentColor: 'blue',
       type: 'master',
-      description: 'Manage employee information and records'
+      description: 'Manage employee information and records',
+      icon: <Users className="h-5 w-5" />,
+      gradient: 'from-white to-[#f8faff]',
+      borderColor: 'border-[#1e3a5f]/10',
+      iconBg: 'bg-[#1e3a5f]/5'
     },
     {
       id: 2,
       name: 'Employee Access',
       masterModuleId: 'employee-access',
-      color: 'bg-blue-600',
-      gradient: 'from-blue-400 to-blue-600',
-      accentColor: 'blue',
       type: 'master',
-      description: 'Configure employee access permissions'
+      description: 'Configure employee access permissions',
+      icon: <Shield className="h-5 w-5" />,
+      gradient: 'from-white to-[#f8faff]',
+      borderColor: 'border-[#1e3a5f]/10',
+      iconBg: 'bg-[#1e3a5f]/5'
     },
     {
       id: 3,
       name: 'Project Master',
       masterModuleId: 'project-master',
-      color: 'bg-blue-600',
-      gradient: 'from-blue-400 to-blue-600',
-      accentColor: 'blue',
       type: 'master',
-      description: 'Manage project portfolios and timelines'
+      description: 'Manage project portfolios and timelines',
+      icon: <FolderKanban className="h-5 w-5" />,
+      gradient: 'from-white to-[#f8faff]',
+      borderColor: 'border-[#1e3a5f]/10',
+      iconBg: 'bg-[#1e3a5f]/5'
     },
     {
       id: 4,
       name: 'Part Master',
       masterModuleId: 'part-master',
-      color: 'bg-blue-600',
-      gradient: 'from-blue-400 to-blue-600',
-      accentColor: 'blue',
       type: 'master',
-      description: 'Catalog parts and inventory items'
+      description: 'Catalog parts and inventory items',
+      icon: <Package className="h-5 w-5" />,
+      gradient: 'from-white to-[#f8faff]',
+      borderColor: 'border-[#1e3a5f]/10',
+      iconBg: 'bg-[#1e3a5f]/5'
     },
     {
       id: 5,
       name: 'Department Master',
       masterModuleId: 'department-master',
-      color: 'bg-blue-600',
-      gradient: 'from-blue-400 to-blue-600',
-      accentColor: 'blue',
       type: 'master',
-      description: 'Organize departmental structures'
+      description: 'Organize departmental structures',
+      icon: <Building className="h-5 w-5" />,
+      gradient: 'from-white to-[#f8faff]',
+      borderColor: 'border-[#1e3a5f]/10',
+      iconBg: 'bg-[#1e3a5f]/5'
     }
   ];
 
@@ -427,19 +430,19 @@ const Masters = () => {
 
   // Get file icon
   const getFileIcon = (fileName) => {
-    if (!fileName) return <FileText className="h-4 w-4" />;
+    if (!fileName) return <FileText className="h-4 w-4 text-[#1e3a5f]" />;
     
     const ext = fileName.split('.').pop().toLowerCase();
     switch(ext) {
       case 'csv':
-        return <FileSpreadsheet className="h-4 w-4 text-blue-600" />;
+        return <FileSpreadsheet className="h-4 w-4 text-[#1e3a5f]" />;
       case 'xlsx':
       case 'xls':
-        return <FileSpreadsheet className="h-4 w-4 text-blue-600" />;
+        return <FileSpreadsheet className="h-4 w-4 text-[#1e3a5f]" />;
       case 'json':
-        return <Database className="h-4 w-4 text-blue-600" />;
+        return <Database className="h-4 w-4 text-[#1e3a5f]" />;
       default:
-        return <FileText className="h-4 w-4 text-blue-600" />;
+        return <FileText className="h-4 w-4 text-[#1e3a5f]" />;
     }
   };
 
@@ -457,10 +460,10 @@ const Masters = () => {
   // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6 flex items-center justify-center">
+      <div className="min-h-screen bg-white p-6 flex items-center justify-center">
         <div className="text-center">
           <div className="relative">
-            <div className="animate-spin rounded-full h-12 w-12 border-3 border-gray-200 border-t-blue-600 mx-auto mb-4"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-3 border-[#1e3a5f]/10 border-t-[#1e3a5f] mx-auto mb-4"></div>
           </div>
           <p className="text-gray-600">Loading masters...</p>
         </div>
@@ -469,11 +472,11 @@ const Masters = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 sm:p-6">
+    <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
       {/* File Viewer Modal */}
       {fileViewerModal.isOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-6xl max-h-[90vh] overflow-auto">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-6xl max-h-[90vh] overflow-auto shadow-2xl">
             <FileContentViewer 
               fileData={fileViewerModal.fileData}
               trackerInfo={fileViewerModal.trackerInfo}
@@ -486,8 +489,10 @@ const Masters = () => {
         </div>
       )}
       
-      {/* Masters Grid - Simple Cards without drag and drop */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      
+      
+      {/* Masters Grid - Light Theme with Dashboard Blue Accents */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
         {dynamicModules.map((master) => {
           const fileCount = master.submodules?.length || 0;
           
@@ -495,37 +500,45 @@ const Masters = () => {
             <div
               key={master.id}
               className={`
-                group relative bg-white rounded-xl shadow-sm border border-gray-200 
-                overflow-hidden transition-all duration-300
-                ${hoveredModule === master.id ? 'shadow-lg ring-2 ring-blue-200' : ''}
+                group relative bg-white rounded-xl shadow-sm border overflow-hidden 
+                transition-all duration-300
+                ${hoveredModule === master.id ? 'shadow-lg border-[#1e3a5f]/30' : 'border-gray-200 hover:border-[#1e3a5f]/20'}
               `}
               onMouseEnter={() => setHoveredModule(master.id)}
               onMouseLeave={() => setHoveredModule(null)}
             >
-              {/* Master Header - Clickable */}
+              {/* Master Header - Light with Blue Border */}
               <div 
-                className={`relative bg-gradient-to-r from-blue-400 to-blue-600 p-4 cursor-pointer hover:opacity-90 transition-opacity overflow-hidden`}
+                className={`relative bg-gradient-to-r ${master.gradient} p-4 cursor-pointer border-b ${master.borderColor}`}
                 onClick={() => handleModuleClick(master)}
               >
-                {/* Animated background pattern */}
-                <div className="absolute inset-0 opacity-10">
-                  <div className="absolute -right-8 -top-8 w-32 h-32 bg-white rounded-full"></div>
-                  <div className="absolute -right-4 -bottom-8 w-40 h-40 bg-white rounded-full"></div>
-                  <div className="absolute left-4 top-4 w-16 h-16 bg-white rounded-full"></div>
+                {/* Subtle pattern overlay */}
+                <div className="absolute inset-0 pointer-events-none opacity-10"
+                     style={{
+                       backgroundImage: `radial-gradient(circle at 20% 30%, #1e3a5f 0%, transparent 30%),
+                                       radial-gradient(circle at 80% 70%, #1e3a5f 0%, transparent 30%)`
+                     }}>
                 </div>
                 
                 <div className="relative flex items-start justify-between">
                   <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <div className="p-1.5 bg-white/20 rounded-lg backdrop-blur-sm">
-                        <Database className="h-5 w-5 text-white" />
+                    <div className="flex items-center space-x-3">
+                      <div className={`p-2.5 ${master.iconBg} rounded-xl`}>
+                        {React.cloneElement(master.icon, { className: "h-5 w-5 text-[#1e3a5f]" })}
                       </div>
-                      <h3 className="text-lg font-bold text-white tracking-tight">
-                        {master.name}
-                      </h3>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-800 tracking-tight">
+                          {master.name}
+                        </h3>
+                        {fileCount > 0 && (
+                          <span className="text-xs text-[#1e3a5f]/70 font-medium">
+                            {fileCount} {fileCount === 1 ? 'file' : 'files'}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     {master.description && (
-                      <p className="text-white/80 text-xs mt-1 line-clamp-1">
+                      <p className="text-gray-500 text-xs mt-3 line-clamp-1">
                         {master.description}
                       </p>
                     )}
@@ -537,33 +550,40 @@ const Masters = () => {
               <div className="p-4 bg-white">
                 {fileCount > 0 ? (
                   <div className="space-y-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">RECENT FILES</span>
+                    </div>
+                    
                     {master.submodules.slice(0, 3).map((file) => (
                       <div
                         key={file.id}
                         onClick={(e) => handleFileClick(file, e)}
-                        className="flex items-center justify-between p-2 bg-gray-50 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer group/file"
+                        className="flex items-center justify-between p-2.5 bg-gray-50 rounded-lg hover:bg-[#1e3a5f]/5 transition-colors cursor-pointer group/file"
                       >
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <div className="p-1.5 bg-white rounded group-hover/file:bg-blue-100 transition-colors">
+                        <div className="flex items-center space-x-3 min-w-0 flex-1">
+                          <div className="p-1.5 bg-white rounded-lg shadow-sm">
                             {getFileIcon(file.name)}
                           </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-700 truncate">
                               {file.name.replace(/\.[^/.]+$/, '')}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {formatDate(file.uploadDate)}
                             </p>
                           </div>
                         </div>
-                        <Eye className="h-4 w-4 text-gray-400 group-hover/file:text-blue-600 flex-shrink-0" />
+                        <Eye className="h-4 w-4 text-gray-400 group-hover/file:text-[#1e3a5f] flex-shrink-0 ml-2" />
                       </div>
                     ))}
                     
                     {fileCount > 3 && (
                       <div 
-                        className="relative"
+                        className="relative pt-2"
                         onClick={() => handleModuleClick(master)}
                       >
                         <button 
-                          className="w-full mt-1 px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg text-xs font-medium text-gray-700 transition-colors flex items-center justify-center"
+                          className="w-full px-3 py-2 bg-gray-50 hover:bg-[#1e3a5f]/5 rounded-lg text-xs font-medium text-gray-600 hover:text-[#1e3a5f] transition-colors flex items-center justify-center border border-gray-200 hover:border-[#1e3a5f]/20"
                         >
                           View all {fileCount} files
                           <ChevronRight className="h-3 w-3 ml-1" />
@@ -572,29 +592,38 @@ const Masters = () => {
                     )}
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between pt-3 mt-2 border-t border-gray-100">
-                  <div className="flex items-center space-x-2">
+                  <div className="py-6 text-center">
                     
-                    
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenModule(master.masterModuleId);
+                      }}
+                      className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium 
+                        transition-all duration-200
+                        bg-[#1e3a5f] text-white hover:bg-[#2c4c7c] shadow-sm"
+                    >
+                      
+                      Open Module
+                    </button>
                   </div>
-                  
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOpenModule(master.masterModuleId);
-                    }}
-                    className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium 
-                      transition-all duration-200 hover:scale-105
-                      bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200"
-                  >
-                    <FolderOpen className="h-3 w-3 mr-1" />
-                    Open Module
-                    <ChevronRight className="h-3 w-3 ml-0.5 opacity-70" />
-                  </button>
-                </div>
                 )}
                 
-                
+                {/* Quick action for modules with files */}
+                {fileCount > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-100 flex justify-end">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenModule(master.masterModuleId);
+                      }}
+                      className="inline-flex items-center text-xs font-medium text-[#1e3a5f] hover:text-[#2c4c7c] transition-colors"
+                    >
+                      Open Full Module
+                      <ChevronRight className="h-3 w-3 ml-1" />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           );
